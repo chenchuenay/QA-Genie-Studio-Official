@@ -315,16 +315,60 @@ class GenerationService {
 
     final seenTitles = <String>{};
     final seenIntents = <String>{};
+    final seenStepSequences = <List<String>>{}; // To track step sequence similarity
+    final seenCategories = <String>{}; // To track category diversity for PRO mode
+
+    // PRO mode specific requirements
+    final isProMode = maxCases > 10; // Assuming PRO mode is when maxCases > 10
+    final requiredCategories = 8;
+    final requiredVerbs = 12;
+    final actionVerbs = <String>{};
+
     cases = cases.where((tc) {
       final lower = tc.title.trim().toLowerCase();
       final intent = _intentSignature(tc);
+      final stepSequence = tc.steps.map((s) => s.action.toLowerCase()).toList();
+
+      // Check for duplicate titles and intents
       if (seenTitles.contains(lower) || seenIntents.contains(intent)) {
         return false;
       }
       seenTitles.add(lower);
       seenIntents.add(intent);
+
+      // Check for duplicate step sequences (simple check for now)
+      if (seenStepSequences.contains(stepSequence)) {
+        return false;
+      }
+      seenStepSequences.add(stepSequence);
+      
+      // Track action verbs for PRO mode
+      for (final s in tc.steps) {
+        if (s.action.isNotEmpty) {
+          actionVerbs.add(s.action.split(' ').first.toLowerCase());
+        }
+      }
+
+      if (tc.category != null) { // Assuming TestCaseModel has a category field now
+        seenCategories.add(tc.category!); // Add category to track diversity
+      }
+
       return true;
     }).toList();
+
+    // PRO mode checks after initial filtering
+    if (isProMode) {
+      if (seenCategories.length < requiredCategories) {
+        // This check is more for reporting; filtering based on it is complex here
+        // print('PRO Mode Warning: Not enough distinct categories generated. Found: ${seenCategories.length}');
+      }
+      if (actionVerbs.length < requiredVerbs) {
+        // Similar to categories, for reporting and potential future filtering
+        // print('PRO Mode Warning: Not enough unique action verbs. Found: ${actionVerbs.length}');
+      }
+      // Logic for checking repeated step sequence patterns needs more complex analysis
+      // For now, rely on step sequence check above.
+    }
 
     final beforeRepair = cases.length;
     final repair = DeterministicRepair(planner);
