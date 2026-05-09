@@ -63,12 +63,13 @@ class FallbackGenerator {
           module: module,
           feature: feature,
           platform: platform,
-          preconditions: ['Standard environment', 'User not logged in'],
+          preconditions: ['User session is active', 'Platform environment is stable'],
           steps: [
-            TestStep(action: 'Navigate to relevant page', expected: 'Page loaded'),
-            TestStep(action: 'Perform action', data: '', expected: 'Appropriate response'),
+            TestStep(action: 'Navigate to the primary {feature} interface', expected: 'The page/screen renders all required interactive components.'),
+            TestStep(action: 'Perform the action described in the scenario title', data: '', expected: 'The system provides immediate visual or structural feedback.'),
+            TestStep(action: 'Verify the resulting state in the application', data: '', expected: 'The application state is updated and matches the expected business logic.'),
           ],
-          expectedResult: 'System behaves correctly',
+          expectedResult: 'The {feature} operation completes successfully and the system state is updated without errors.',
           priority: 'Medium',
           type: sc['type'] ?? 'GENERAL',
         ));
@@ -79,13 +80,16 @@ class FallbackGenerator {
     int i = cases.length + 1;
     while (cases.length < count) {
       cases.add(TestCaseModel(
-        title: 'Verify $feature - scenario $i',
+        title: 'Verify {feature} stability - variant $i',
         module: module,
         feature: feature,
         platform: platform,
-        preconditions: ['Standard environment'],
-        steps: [TestStep(action: 'Perform action $i', expected: 'Expected outcome')],
-        expectedResult: 'System behaves as expected',
+        preconditions: ['Standard QA environment'],
+        steps: [
+          TestStep(action: 'Trigger the {feature} action variant $i', expected: 'The system accepts the trigger without latency issues.'),
+          TestStep(action: 'Observe the application response', expected: 'Visual feedback is provided to the user within 2 seconds.'),
+        ],
+        expectedResult: 'The {feature} workflow remains stable and consistent with the established platform standards.',
         priority: 'Medium',
         type: 'GENERAL',
       ));

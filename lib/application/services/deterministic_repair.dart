@@ -110,36 +110,36 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Navigate to {feature} page',
+                  'action': 'Navigate to the {feature} URL in a fresh browser session',
                   'data': '',
-                  'expected': 'Page loads successfully',
+                  'expected': 'The page renders with all interactive elements visible and the interface is stable.',
                 },
                 {
-                  'action': 'Enter valid email and password',
+                  'action': 'Input valid credentials into the {feature} form fields',
                   'data': '{validEmail} / {validPassword}',
-                  'expected': 'Fields accept input',
+                  'expected': 'The input fields reflect the entered text and provide immediate feedback.',
                 },
                 {
-                  'action': 'Submit the form',
+                  'action': 'Submit the form and observe the application response',
                   'data': '',
-                  'expected': 'System processes and shows confirmation',
+                  'expected': 'A success notification is displayed and the application routes to the dashboard.',
                 },
               ],
               [
                 {
-                  'action': 'Open {feature} dashboard',
+                  'action': 'Access the {feature} dashboard from the application menu',
                   'data': '',
-                  'expected': 'Dashboard displayed',
+                  'expected': 'The dashboard module loads within 2 seconds with populated data.',
                 },
                 {
-                  'action': 'Fill the form with approved account values',
-                  'data': '{validEmail} / {validPassword}',
-                  'expected': 'Form populated',
+                  'action': 'Update the {feature} configuration with new parameters',
+                  'data': 'Reference: {reference}',
+                  'expected': 'The submission control becomes active and no validation errors are shown.',
                 },
                 {
-                  'action': 'Press Save',
+                  'action': 'Execute the save action and refresh the page',
                   'data': '',
-                  'expected': 'Changes saved with success notification',
+                  'expected': 'The system persists the changes across the page reload.',
                 },
               ],
             ];
@@ -147,19 +147,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Go to {feature} page',
+                  'action': 'Open the {feature} page and simulate a network disruption',
                   'data': '',
-                  'expected': 'Page accessible',
+                  'expected': 'The page remains responsive and displays a connectivity indicator.',
                 },
                 {
-                  'action': 'Enter incorrect email and password',
+                  'action': 'Attempt to submit the {feature} form with invalid data',
                   'data': '{invalidEmail} / {invalidPassword}',
-                  'expected': 'Field accepts input',
+                  'expected': 'The application prevents the submission and highlights the affected fields.',
                 },
                 {
-                  'action': 'Submit the form',
+                  'action': 'Restore connectivity and retry the submission',
                   'data': '',
-                  'expected': 'Error message appears near field',
+                  'expected': 'The system provides a clear error message describing the validation failure.',
                 },
               ],
             ];
@@ -167,19 +167,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Open {feature} form',
+                  'action': 'Navigate to the {feature} entry point',
                   'data': '',
-                  'expected': 'Form displayed',
+                  'expected': 'The page is loaded over a secure connection.',
                 },
                 {
-                  'action': 'Inject XSS payload in input',
+                  'action': 'Attempt to submit a potentially unsafe script payload into the {feature} input',
                   'data': '{xssPayload}',
-                  'expected': 'Script not executed',
+                  'expected': 'The application handles the input securely and renders it as plain text.',
                 },
                 {
-                  'action': 'Submit form',
+                  'action': 'Verify the application state for any unintended execution',
                   'data': '',
-                  'expected': 'System rejects without executing payload',
+                  'expected': 'No unexpected actions are triggered and the interface remains secure.',
                 },
               ],
             ];
@@ -187,19 +187,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Navigate to {feature} page',
+                  'action': 'Navigate to the primary {feature} interface',
                   'data': '',
-                  'expected': 'Page renders the primary controls',
+                  'expected': 'The page renders all primary controls according to established design patterns.',
                 },
                 {
-                  'action': 'Perform {feature} action',
+                  'action': 'Execute the {feature} workflow using standard keyboard navigation',
                   'data': '{validEmail}',
-                  'expected': 'The page displays a confirmation message',
+                  'expected': 'Focus indicators are visible and the workflow completes as intended.',
                 },
                 {
-                  'action': 'Review the confirmation state',
+                  'action': 'Inspect the resulting state in the application interface',
                   'data': '',
-                  'expected': 'The page displays the saved account reference',
+                  'expected': 'The latest state is correctly recorded with reference {reference}.',
                 },
               ],
             ];
@@ -210,19 +210,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Tap {feature} option',
+                  'action': 'Launch the app and select the {feature} module',
                   'data': '',
-                  'expected': 'Screen opens',
+                  'expected': 'The screen transitions smoothly with a standard visual animation.',
                 },
                 {
-                  'action': 'Enter valid credentials',
+                  'action': 'Fill in the {feature} requirements using the on-screen keyboard',
                   'data': '{validEmail} / {validPassword}',
-                  'expected': 'Input accepted',
+                  'expected': 'The app remains responsive and input is captured accurately.',
                 },
                 {
-                  'action': 'Tap Submit',
+                  'action': 'Perform a refresh gesture on the {feature} screen',
                   'data': '',
-                  'expected': 'Processing completes, confirmation shown',
+                  'expected': 'The screen updates with the latest system state for {feature}.',
                 },
               ],
             ];
@@ -230,20 +230,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Tap {feature}',
+                  'action': 'Navigate to the {feature} screen and move the app to the background',
                   'data': '',
-                  'expected': 'Screen loads',
+                  'expected': 'The app state is preserved while in the background.',
                 },
                 {
-                  'action': 'Enter malformed account input and tap submit',
+                  'action': 'Resume the app and enter malformed input for {feature}',
                   'data': '{invalidEmail} / {invalidPassword}',
-                  'expected': 'Inline error appears',
+                  'expected': 'An inline validation error appears with visual or tactile feedback.',
                 },
                 {
-                  'action': 'Correct the field',
-                  'data': 'qa_user_locked@domain.test',
-                  'expected':
-                      'Error remains until every required field passes validation',
+                  'action': 'Attempt to proceed to the next step',
+                  'data': '',
+                  'expected': 'The progression is blocked and the error field is highlighted.',
                 },
               ],
             ];
@@ -251,19 +250,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Tap {feature}',
+                  'action': 'Open the {feature} view from the main navigation',
                   'data': '',
-                  'expected': 'Screen opens',
+                  'expected': 'The screen loads and displays all required interactive components.',
                 },
                 {
-                  'action': 'Perform action',
+                  'action': 'Perform the primary {feature} action on a limited connection',
                   'data': '{validEmail}',
-                  'expected': 'The app displays a confirmation message',
+                  'expected': 'The app displays a loading indicator and remains stable.',
                 },
                 {
-                  'action': 'Review the updated screen state',
+                  'action': 'Review the updated screen once the operation completes',
                   'data': '',
-                  'expected': 'The latest account reference is visible',
+                  'expected': 'The latest transaction reference {reference} is clearly visible.',
                 },
               ],
             ];
@@ -274,20 +273,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'POST {endpoint}',
-                  'data':
-                      '{"email":"{validEmail}","password":"{validPassword}"}',
-                  'expected': 'HTTP 200 with documented response envelope',
+                  'action': 'Send a POST request to {endpoint} with a valid payload',
+                  'data': '{"email":"{validEmail}","password":"{validPassword}"}',
+                  'expected': 'A success status code is returned with the correct response format.',
                 },
                 {
-                  'action': 'Verify response schema',
+                  'action': 'Validate the response metadata for security standards',
                   'data': '',
-                  'expected': 'All required fields present',
+                  'expected': 'Security headers and metadata are present in the response.',
                 },
                 {
-                  'action': 'GET {endpoint}',
+                  'action': 'Execute a retrieval request for the {feature} resource',
                   'data': '',
-                  'expected': 'Data matches created resource',
+                  'expected': 'The response matches the originally submitted data.',
                 },
               ],
             ];
@@ -295,20 +293,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'POST {endpoint}',
-                  'data': '{"email":""}',
-                  'expected': 'HTTP 400 with error description',
+                  'action': 'Send a POST request to {endpoint} with an empty body',
+                  'data': '{}',
+                  'expected': 'A client error status is returned with a descriptive error message.',
                 },
                 {
-                  'action': 'Inspect error payload',
-                  'data': '',
-                  'expected': 'Message indicates missing field',
+                  'action': 'Submit a request with a field exceeding the accepted threshold',
+                  'data': '{"large_field":"' + 'A' * 5000 + '"}',
+                  'expected': 'The server rejects the request with an appropriate error status.',
                 },
                 {
-                  'action': 'Repeat GET {endpoint} for the same resource',
+                  'action': 'Verify that no new records were created in the system',
                   'data': '',
-                  'expected':
-                      'Resource state remains unchanged after rejected request',
+                  'expected': 'The resource state remains unchanged after the failed attempts.',
                 },
               ],
             ];
@@ -316,20 +313,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'POST {endpoint}',
-                  'data': '{"key":"value"}',
-                  'expected': 'HTTP 200 with documented response envelope',
+                  'action': 'Execute a resource check request to {endpoint}',
+                  'data': '',
+                  'expected': 'A success status is returned with appropriate metadata.',
                 },
                 {
-                  'action': 'Inspect response fields',
-                  'data': '',
-                  'expected':
-                      'Response includes resource identifier and timestamp',
+                  'action': 'Send a POST request with a unique transaction identifier {reference}',
+                  'data': '{"action":"{feature}"}',
+                  'expected': 'The request is processed successfully.',
                 },
                 {
-                  'action': 'GET {endpoint}',
+                  'action': 'Retry the same request with the same transaction identifier',
                   'data': '',
-                  'expected': 'Returned resource matches the submitted payload',
+                  'expected': 'The server handles the duplicate request without side effects.',
                 },
               ],
             ];
@@ -338,14 +334,14 @@ class DeterministicRepair {
         return [
           [
             {
-              'action': 'Perform {feature} action',
+              'action': 'Perform the primary {feature} operation',
               'data': '{validEmail}',
-              'expected': 'The feature records the submitted account reference',
+              'expected': 'The system records the submitted account reference {reference}.',
             },
             {
-              'action': 'Review resulting state',
+              'action': 'Validate the resulting state in the system of record',
               'data': '',
-              'expected': 'The latest state is visible to the tester',
+              'expected': 'The persistence layer reflects the updated state for {feature}.',
             },
           ],
         ];

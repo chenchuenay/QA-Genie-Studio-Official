@@ -2,11 +2,13 @@ import 'package:qa_app/core/utils/stable_hash.dart';
 
 class TestDataFactory {
   static const _names = ['locked', 'pending', 'active', 'review', 'audit'];
+  static const _domains = ['example.com', 'example.org', 'example.net', 'example.test'];
 
   // Emails
   static String validEmail([String seed = 'default']) {
-    final idx = StableHash.forText('email-$seed', _names.length);
-    return 'qa_user_${_names[idx]}@domain.test';
+    final nameIdx = StableHash.forText('email-name-$seed', _names.length);
+    final domainIdx = StableHash.forText('email-domain-$seed', _domains.length);
+    return 'qa_user_${_names[nameIdx]}@${_domains[domainIdx]}';
   }
 
   static String invalidEmail([String seed = 'default']) {
@@ -35,7 +37,7 @@ class TestDataFactory {
 
   // Security payloads
   static String sqlInjection() => "' OR '1'='1";
-  static String xssPayload() => '<script>alert(1)</script>';
+  static String xssPayload() => '<script>alert("QA-XSS")</script>';
 
   // Tokens
   static String validToken() => 'session_token_alpha_001';

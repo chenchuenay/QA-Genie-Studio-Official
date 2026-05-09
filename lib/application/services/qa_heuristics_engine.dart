@@ -263,7 +263,7 @@ class QaHeuristicsEngine {
 
   static bool hasWeakExpectedResult(String text) {
     final normalized = text.toLowerCase();
-    if (normalized.trim().length < 35) return true;
+    if (normalized.trim().length < 45) return true;
     return _hasAny(normalized, [
       'works correctly',
       'as expected',
@@ -273,26 +273,32 @@ class QaHeuristicsEngine {
       'action completes',
       'outcome is correct',
       'system responds correctly',
+      'appropriate response',
+      'user can proceed',
+      'everything is fine',
+      'no errors occur',
+      'system is stable',
+      'default behaviour',
     ]);
   }
 
   static String _webExpected(String category, String domain, String subject) {
     if (category == 'security') {
-      return 'The page rejects the unsafe input, displays a controlled validation message, preserves the current user session, and exposes no internal error details.';
+      return 'The page prevents the unsafe operation, displays a secure validation message, preserves the current user session, and does not expose sensitive implementation details to the user.';
     }
     if (category == 'negative' || category == 'validation') {
-      return 'The form blocks submission, highlights the affected field, preserves previously entered values, and displays a specific recovery message.';
+      return 'The UI blocks form submission, applies clear focus or error states to the affected fields, maintains all other user input, and provides a specific, actionable error message for recovery.';
     }
     if (category == 'boundary') {
-      return 'The page enforces the configured limit, keeps the layout stable, and shows a clear message describing the accepted range.';
+      return 'The application enforces the input limit, keeps the layout responsive without overflow, and displays a character counter or validation indicator describing the accepted range.';
     }
     if (category == 'session') {
-      return 'The browser session state is updated consistently, protected pages remain gated, and navigation reflects the authenticated state.';
+      return 'The user session state is correctly maintained according to policy, protected routes remain inaccessible to unauthenticated users, and the UI state reflects the active authentication context.';
     }
     if (domain == 'payment') {
-      return 'The checkout page records the transaction state, displays the payment reference, and prevents duplicate submission after confirmation.';
+      return 'The checkout flow captures the transaction reference, updates the local application state, and ensures the primary payment button is managed to prevent duplicate processing.';
     }
-    return 'The $subject page saves the submitted values, displays confirmation, and shows the updated state without losing user input.';
+    return 'The $subject page successfully commits the changes, displays an on-screen confirmation message, and updates the interface to reflect the new state without unexpected disruptions.';
   }
 
   static String _mobileExpected(
@@ -301,40 +307,40 @@ class QaHeuristicsEngine {
     String subject,
   ) {
     if (category == 'security') {
-      return 'The app blocks the risky action, keeps sensitive values hidden from local views, and presents a controlled recovery message.';
+      return 'The app terminates the risky action, ensures sensitive data is removed from the visible screen, and presents a standard system-level notification or controlled recovery view.';
     }
     if (category == 'negative' || category == 'validation') {
-      return 'The screen prevents progression, marks the invalid input, keeps the entered values available for correction, and remains responsive.';
+      return 'The screen prevents progression, highlights the malformed input with visual or tactile feedback, keeps the input focus on the error field, and provides a clear instruction for correction.';
     }
     if (category == 'boundary') {
-      return 'The app enforces the limit without freezing, truncating important content, or losing the current screen state.';
+      return 'The mobile app enforces the constraint without performance degradation, ensuring that long inputs are properly handled while maintaining standard touch target accessibility.';
     }
     if (category == 'session') {
-      return 'The app restores or expires the user session according to policy and routes the user to the correct next screen.';
+      return 'The application secure storage is updated with the new session status, background and foreground transitions remain stable, and the user is routed to the appropriate feature module.';
     }
     if (domain == 'payment') {
-      return 'The app shows the payment status, stores the transaction reference, and prevents a second charge from the same action.';
+      return 'The app displays the final payment status, provides a transaction reference for record-keeping, and ensures the UI reflects the updated account balance or status immediately.';
     }
-    return 'The $subject screen accepts the user action, displays visible confirmation, and keeps the next available action clear.';
+    return 'The $subject screen accepts the user gesture, triggers the appropriate visual transition, and displays a success state with a unique transaction or reference identifier for the operation.';
   }
 
   static String _apiExpected(String category, String domain, String subject) {
     if (category == 'security') {
-      return 'The service rejects the request with the documented status code, returns a sanitized error payload, and records a traceable security event.';
+      return 'The service rejects the request with an appropriate error status, returns a standard error format without internal implementation details, and generates a verifiable audit record.';
     }
     if (category == 'negative' || category == 'validation') {
-      return 'The response uses the documented error code, identifies the invalid field, and leaves the persisted resource state unchanged.';
+      return 'The response returns an appropriate error status code, includes details identifying the invalid parameters, and ensures the underlying resource state remains unmodified.';
     }
     if (category == 'boundary') {
-      return 'The service enforces request limits, returns a documented error envelope when exceeded, and keeps processing time within the accepted threshold.';
+      return 'The API enforces request limits or payload constraints, returning the documented status as appropriate, with clear indicators if the request was throttled.';
     }
     if (category == 'session') {
-      return 'The token lifecycle follows policy, returns a documented authentication response, and prevents reuse of expired credentials.';
+      return 'The authentication token is validated against the authority, the response includes updated session metadata, and the server rejects subsequent requests using expired credentials.';
     }
     if (domain == 'payment') {
-      return 'The response includes the transaction reference, persists the final payment state, and prevents duplicate processing for the same idempotency key.';
+      return 'The response payload includes a unique transaction identifier, the transaction status is correctly updated in the system of record, and the service returns a success status with the resource reference.';
     }
-    return 'The $subject endpoint returns the documented status code, response schema, and persisted resource state for the submitted request.';
+    return 'The $subject endpoint returns a success status code, matches the documented response format, and persists the resource state as verifiable by a subsequent retrieval request.';
   }
 
   static bool _hasAny(String text, List<String> terms) {
