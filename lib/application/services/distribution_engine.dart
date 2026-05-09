@@ -85,7 +85,7 @@ class DistributionEngine {
     }
     
     // Ensure total count matches target, adjust if necessary (e.g., from promoted categories)
-    return _normalize(dist, target);
+    return _normalize(dist, count);
   }
 
   Map<String, int> _normalize(Map<String, int> dist, int target) {
