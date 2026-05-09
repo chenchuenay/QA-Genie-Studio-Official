@@ -1,0 +1,133 @@
+class TestStep {
+  String action, data, expected;
+  TestStep({this.action = '', this.data = '', this.expected = ''});
+  factory TestStep.fromJson(Map<String, dynamic> j) {
+    return TestStep(
+      action: (j['action'] ?? '').toString(),
+      data: (j['data'] ?? '').toString(),
+      expected: (j['expected'] ?? '').toString(),
+    );
+  }
+  Map<String, dynamic> toJson() => {
+    'action': action,
+    'data': data,
+    'expected': expected,
+  };
+}
+
+class TestCaseModel {
+  final int? dbId; // internal primary key, nullable until saved
+  String id; // business / export ID
+  String title, module, feature, platform, priority, type;
+  List<String> preconditions;
+  List<TestStep> steps;
+  String expectedResult;
+  String actualResult, status;
+
+  TestCaseModel({
+    this.dbId,
+    this.id = '',
+    this.title = '',
+    this.module = '',
+    this.feature = '',
+    this.platform = '',
+    this.priority = 'Medium',
+    this.type = 'Functional',
+    this.preconditions = const [],
+    this.steps = const [],
+    this.expectedResult = '',
+    this.actualResult = '',
+    this.status = 'Not Executed',
+  });
+
+  static bool isValid(TestCaseModel tc) {
+    if (tc.title.trim().length < 5) return false;
+    if (tc.steps.length < 3) return false;
+    if (tc.preconditions.isEmpty) return false;
+    if (tc.expectedResult.trim().isEmpty) return false;
+    if (!["High", "Medium", "Low"].contains(tc.priority)) return false;
+    const bannedDataPhrases = {
+      'test data',
+      'valid data',
+      'invalid data',
+      'dummy data',
+      'sample data',
+      'lorem ipsum',
+    };
+    for (final s in tc.steps) {
+      if (s.action.trim().length < 3) return false;
+      if (s.expected.trim().isEmpty) return false;
+      final dataLower = s.data.trim().toLowerCase();
+      if (bannedDataPhrases.any(dataLower.contains)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  String get stepsDisplayString {
+    return steps
+        .asMap()
+        .entries
+        .map((e) => "${e.key + 1}. ${e.value.action}")
+        .join('\n');
+  }
+
+  TestCaseModel copy() => TestCaseModel(
+    dbId: dbId,
+    id: id,
+    title: title,
+    module: module,
+    feature: feature,
+    platform: platform,
+    priority: priority,
+    type: type,
+    preconditions: List.from(preconditions),
+    steps: steps
+        .map(
+          (s) => TestStep(action: s.action, data: s.data, expected: s.expected),
+        )
+        .toList(),
+    expectedResult: expectedResult,
+    actualResult: actualResult,
+    status: status,
+  );
+
+  factory TestCaseModel.fromJson(Map<String, dynamic> j) {
+    return TestCaseModel(
+      id: (j['id'] ?? '').toString(),
+      title: (j['title'] ?? '').toString(),
+      module: (j['module'] ?? '').toString(),
+      feature: (j['feature'] ?? '').toString(),
+      platform: (j['platform'] ?? '').toString(),
+      priority: (j['priority'] ?? 'Medium').toString(),
+      type: (j['type'] ?? 'Functional').toString(),
+      preconditions: List<String>.from(
+        (j['preconditions'] as List<dynamic>?)?.map((e) => e.toString()) ?? [],
+      ),
+      steps:
+          (j['steps'] as List<dynamic>?)
+              ?.map((s) => TestStep.fromJson(s as Map<String, dynamic>))
+              .toList() ??
+          [],
+      expectedResult: (j['expectedResult'] ?? '').toString(),
+      actualResult: (j['actualResult'] ?? '').toString(),
+      status: (j['status'] ?? 'Not Executed').toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'module': module,
+    'feature': feature,
+    'platform': platform,
+    'priority': priority,
+    'type': type,
+    'preconditions': preconditions,
+    'steps': steps.map((s) => s.toJson()).toList(),
+    'expectedResult': expectedResult,
+    'actualResult': actualResult,
+    'status': status,
+  };
+}
