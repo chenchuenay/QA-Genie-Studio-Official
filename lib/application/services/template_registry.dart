@@ -43,7 +43,6 @@ class TemplateRegistry {
         'scenarios': [
           'Verify required field validation messages are displayed',
           'Verify email format validation rejects invalid addresses',
-          'Verify password strength meter indicates weak passwords',
           'Verify form submission is blocked with missing fields',
         ]
       },
@@ -85,7 +84,6 @@ class TemplateRegistry {
         'scenarios': [
           'Verify app does not store sensitive data in plain text',
           'Verify app does not expose API keys in network requests',
-          'Verify certificate pinning prevents MITM attacks',
           'Verify root detection blocks app on compromised devices',
           'Verify clipboard is cleared after copying sensitive data',
         ]
