@@ -48,9 +48,7 @@ class DistributionEngine {
       'session', 'permissions', 'network_behavior', 'state_persistence',
       'navigation', 'accessibility', 'usability'
     ];
-    final categoriesToLimit = [
-      'negative', 'security', 'validation', 'boundary'
-    ];
+    // Removed unused variable 'categoriesToLimit'
     
     final isProMode = count > 10;
 
@@ -70,7 +68,7 @@ class DistributionEngine {
     }
 
     // 3. Ensure broader usage of promoted categories
-    int availableCapacity = target - dist.values.fold(0, (a, b) => a + b);
+    int availableCapacity = count - dist.values.fold(0, (a, b) => a + b);
     if (availableCapacity > 0) {
       for (final cat in categoriesToPromote) {
         if (availableCapacity <= 0) break;
@@ -93,7 +91,6 @@ class DistributionEngine {
     if (sum == target) return dist;
 
     // List of categories ordered by preference for reduction/addition
-    // Categories to reduce first if sum > target
     List<String> reductionOrder = ['negative', 'security', 'validation', 'boundary', 'usability', 'positive'];
     // Categories to increase if sum < target (beyond promoted ones)
     List<String> additionOrder = ['positive', 'usability', 'boundary', 'validation', 'negative', 'security'];
