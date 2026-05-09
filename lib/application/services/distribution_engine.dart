@@ -91,6 +91,7 @@ class DistributionEngine {
     if (sum == target) return dist;
 
     // List of categories ordered by preference for reduction/addition
+    // Categories to reduce first if sum > target
     List<String> reductionOrder = ['negative', 'security', 'validation', 'boundary', 'usability', 'positive'];
     // Categories to increase if sum < target (beyond promoted ones)
     List<String> additionOrder = ['positive', 'usability', 'boundary', 'validation', 'negative', 'security'];

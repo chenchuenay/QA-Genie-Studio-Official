@@ -76,7 +76,8 @@ class ScenarioPlanner {
             )
             .toList();
         if (scenarios.isEmpty) {
-          scenarios = [_syntheticScenario(category)];
+          // Corrected call to _syntheticScenario using 'cat'
+          scenarios = [_syntheticScenario(cat)]; 
         }
         scenarios.shuffle(_random);
 
