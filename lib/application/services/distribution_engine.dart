@@ -43,30 +43,90 @@ class DistributionEngine {
           : {'positive':4, 'negative':4, 'validation':3, 'boundary':3, 'security':3, 'session':2, 'usability':1};
     }
 
-    if (mode == GenerationMode.positiveOnly) dist.updateAll((k, v) => k == 'positive' ? count : 0);
-    else if (mode == GenerationMode.securityFocused) {
-      dist['security'] = (count * 0.5).ceil(); dist['positive'] = (count * 0.3).ceil(); dist['negative'] = (count * 0.2).ceil();
-      dist.remove('usability'); dist.remove('session');
-    } else if (mode == GenerationMode.boundaryFocused) {
-      dist['boundary'] = (count * 0.5).ceil(); dist['validation'] = (count * 0.3).ceil();
-      dist.remove('usability'); dist.remove('session');
-    } else if (mode == GenerationMode.validationOnly) dist.updateAll((k, v) => k == 'validation' ? count : 0);
+    // --- Category Balancing and Prioritization ---
+    final categoriesToPromote = [
+      'session', 'permissions', 'network_behavior', 'state_persistence',
+      'navigation', 'accessibility', 'usability'
+    ];
+    final categoriesToLimit = [
+      'negative', 'security', 'validation', 'boundary'
+    ];
+    
+    final isProMode = count > 10;
 
-    return _normalize(dist, count);
+    // 1. Prioritize unused categories (if any are available and not already over-represented)
+    // This is a lightweight approach: if we have capacity, try to fill with promoted categories.
+    // A more sophisticated approach would track usage and explicitly fill ununsed ones first.
+
+    // 2. Limit overuse of generic negative/security cases
+    if (isProMode) {
+      final limitedNegativeCount = isApi ? 2 : 3; // Reduce generic negative for API
+      if (dist['negative'] != null && dist['negative']! > limitedNegativeCount) {
+        dist['negative'] = limitedNegativeCount;
+      }
+      if (dist['security'] != null && dist['security']! > limitedNegativeCount) {
+        dist['security'] = limitedNegativeCount;
+      }
+    }
+
+    // 3. Ensure broader usage of promoted categories
+    int availableCapacity = target - dist.values.fold(0, (a, b) => a + b);
+    if (availableCapacity > 0) {
+      for (final cat in categoriesToPromote) {
+        if (availableCapacity <= 0) break;
+        final currentCount = dist[cat] ?? 0;
+        final desiredCount = isProMode ? 2 : 1; // Aim for at least 1-2 for promoted categories
+        final toAdd = min(availableCapacity, desiredCount - currentCount);
+        if (toAdd > 0) {
+          dist[cat] = currentCount + toAdd;
+          availableCapacity -= toAdd;
+        }
+      }
+    }
+    
+    // Ensure total count matches target, adjust if necessary (e.g., from promoted categories)
+    return _normalize(dist, target);
   }
 
   Map<String, int> _normalize(Map<String, int> dist, int target) {
     int sum = dist.values.fold(0, (a, b) => a + b);
     if (sum == target) return dist;
-    List<String> order = ['usability', 'session', 'boundary', 'validation', 'positive', 'negative', 'security'];
-    for (final cat in order) {
-      if (dist.containsKey(cat) && dist[cat]! > 0 && sum > target) {
-        int reduce = min(dist[cat]!, sum - target);
-        dist[cat] = dist[cat]! - reduce; sum -= reduce;
-        if (sum == target) break;
+
+    // List of categories ordered by preference for reduction/addition
+    // Categories to reduce first if sum > target
+    List<String> reductionOrder = ['negative', 'security', 'validation', 'boundary', 'usability', 'positive'];
+    // Categories to increase if sum < target (beyond promoted ones)
+    List<String> additionOrder = ['positive', 'usability', 'boundary', 'validation', 'negative', 'security'];
+
+    // Reduce counts if sum > target
+    if (sum > target) {
+      for (final cat in reductionOrder) {
+        if (dist.containsKey(cat) && dist[cat]! > 0 && sum > target) {
+          int reduce = min(dist[cat]!, sum - target);
+          dist[cat] = dist[cat]! - reduce;
+          sum -= reduce;
+          if (sum == target) break;
+        }
       }
     }
-    while (sum < target) { dist['positive'] = (dist['positive'] ?? 0) + 1; sum++; }
+
+    // Increase counts if sum < target
+    while (sum < target) {
+      // Prioritize adding to 'positive' first, then others
+      if (dist['positive'] != null && dist['positive']! < target * 0.7) { // Ensure positive remains dominant
+          dist['positive'] = (dist['positive'] ?? 0) + 1;
+      } else {
+        for(final cat in additionOrder) {
+          if (dist.containsKey(cat)) { // Add to existing categories if possible
+            dist[cat] = (dist[cat] ?? 0) + 1;
+            break;
+          } else { // Add new category if it doesn't exist
+            dist[cat] = 1;
+          }
+        }
+      }
+      sum++;
+    }
     return dist;
   }
 }
