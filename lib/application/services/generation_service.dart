@@ -349,8 +349,8 @@ class GenerationService {
         }
       }
 
-      if (tc.category != null) { // Assuming TestCaseModel has a category field now
-        seenCategories.add(tc.category!); // Add category to track diversity
+      if (tc.type.isNotEmpty) { // Simplified check as type is non-nullable
+        seenCategories.add(tc.type); // Add category to track diversity
       }
 
       return true;
