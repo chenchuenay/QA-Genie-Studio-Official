@@ -31,17 +31,17 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
 
   // Column widths – generous for IDs and descriptions
   static const List<double> _colWidths = [
-    90, // ID (wider to avoid truncation)
-    80, // Module / TestType
-    80, // Feature / IssueType
-    160, // Title / Summary
-    120, // Preconditions / Description
-    110, // Test Data / Priority
-    130, // Test Steps / Status
-    120, // Expected Result
-    100, // Actual Result
-    90, // Status
-    80, // Priority
+    120, // ID / issueId
+    100, // Module / TestType / summary
+    100, // Feature / IssueType / testType
+    200, // Title / Summary / description
+    150, // Preconditions / Description / precondition
+    130, // Test Data / Priority / priority
+    180, // Test Steps / Status / status
+    160, // Expected Result / steps
+    120, // Actual Result
+    100, // Status
+    100, // Priority
   ];
 
   double _totalWidth(int count) {

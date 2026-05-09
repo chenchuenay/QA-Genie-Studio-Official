@@ -132,36 +132,36 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Navigate to the {feature} URL in a fresh browser session',
+                  'action': 'Navigate to the {feature} URL in a supported web browser (Chrome/Firefox/Safari)',
                   'data': '',
-                  'expected': 'The page renders with all interactive elements visible and the interface is stable.',
+                  'expected': 'The page renders completely, all interactive elements are clickable, and no console errors are present.',
                 },
                 {
-                  'action': 'Input valid credentials into the {feature} form fields',
+                  'action': 'Enter valid credentials into the {feature} form inputs',
                   'data': '{validEmail} / {validPassword}',
-                  'expected': 'The input fields reflect the entered text and provide immediate feedback.',
+                  'expected': 'The inputs accept the data and any associated inline validation indicators show a success state.',
                 },
                 {
-                  'action': 'Submit the form and observe the application response',
+                  'action': 'Click the primary submission button and observe the browser redirect',
                   'data': '',
-                  'expected': 'A success notification is displayed and the application routes to the dashboard.',
+                  'expected': 'The application processes the request, displays a success toast message, and redirects to the dashboard URL.',
                 },
               ],
               [
                 {
-                  'action': 'Access the {feature} dashboard from the application menu',
+                  'action': 'Open the {feature} dashboard via the application sidebar navigation',
                   'data': '',
-                  'expected': 'The dashboard module loads within 2 seconds with populated data.',
+                  'expected': 'The dashboard component mounts correctly and displays the current state for {feature}.',
                 },
                 {
-                  'action': 'Update the {feature} configuration with new parameters',
+                  'action': 'Update the {feature} configuration fields with new valid parameters',
                   'data': 'Reference: {reference}',
-                  'expected': 'The submission control becomes active and no validation errors are shown.',
+                  'expected': 'The "Save Changes" button becomes enabled and the interface remains responsive.',
                 },
                 {
-                  'action': 'Execute the save action and refresh the page',
+                  'action': 'Execute a "Save" action followed by a manual browser refresh (F5)',
                   'data': '',
-                  'expected': 'The system persists the changes across the page reload.',
+                  'expected': 'The system persists the changes across the session and the updated data is visible after the refresh.',
                 },
               ],
             ];
@@ -169,19 +169,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Open the {feature} page and simulate a network disruption',
+                  'action': 'Open the {feature} page and simulate a slow 3G network connection via DevTools',
                   'data': '',
-                  'expected': 'The page remains responsive and displays a connectivity indicator.',
+                  'expected': 'The page displays a loading skeleton or progress indicator while resources are being fetched.',
                 },
                 {
-                  'action': 'Attempt to submit the {feature} form with invalid data',
+                  'action': 'Attempt to submit the {feature} form with malformed data',
                   'data': '{invalidEmail} / {invalidPassword}',
-                  'expected': 'The application prevents the submission and highlights the affected fields.',
+                  'expected': 'The UI prevents submission and applies a red focus ring to the invalid input fields.',
                 },
                 {
-                  'action': 'Restore connectivity and retry the submission',
+                  'action': 'Verify the specific error message text displayed in the UI',
                   'data': '',
-                  'expected': 'The system provides a clear error message describing the validation failure.',
+                  'expected': 'The message "Invalid format" or equivalent is visible and actionable for the user.',
                 },
               ],
             ];
@@ -189,19 +189,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Navigate to the {feature} entry point',
+                  'action': 'Navigate to the {feature} entry point and inspect the "Set-Cookie" headers',
                   'data': '',
-                  'expected': 'The page is loaded over a secure connection.',
+                  'expected': 'Session cookies are marked as HttpOnly and Secure to prevent unauthorized access.',
                 },
                 {
-                  'action': 'Attempt to submit a potentially unsafe script payload into the {feature} input',
+                  'action': 'Inject a malicious script payload into the {feature} text input',
                   'data': '{xssPayload}',
-                  'expected': 'The application handles the input securely and renders it as plain text.',
+                  'expected': 'The application sanitizes the input, rendering the script as a literal string without execution.',
                 },
                 {
-                  'action': 'Verify the application state for any unintended execution',
-                  'data': '',
-                  'expected': 'No unexpected actions are triggered and the interface remains secure.',
+                  'action': 'Attempt to bypass client-side validation using the browser console',
+                  'data': 'document.querySelector("form").submit()',
+                  'expected': 'The server-side validation rejects the request and returns a secure error response.',
                 },
               ],
             ];
@@ -209,19 +209,14 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Navigate to the primary {feature} interface',
+                  'action': 'Navigate to the primary {feature} interface and check for responsiveness',
                   'data': '',
-                  'expected': 'The page renders all primary controls according to established design patterns.',
+                  'expected': 'The page layout adjusts correctly to the browser window size without horizontal scrolling.',
                 },
                 {
-                  'action': 'Execute the {feature} workflow using standard keyboard navigation',
+                  'action': 'Complete the {feature} workflow using only keyboard Tab and Enter keys',
                   'data': '{validEmail}',
-                  'expected': 'Focus indicators are visible and the workflow completes as intended.',
-                },
-                {
-                  'action': 'Inspect the resulting state in the application interface',
-                  'data': '',
-                  'expected': 'The latest state is correctly recorded with reference {reference}.',
+                  'expected': 'The focus order is logical and the user can reach the final "Success" state without a mouse.',
                 },
               ],
             ];
@@ -232,19 +227,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Launch the app and select the {feature} module',
+                  'action': 'Launch the mobile application and tap the {feature} icon on the tab bar',
                   'data': '',
-                  'expected': 'The screen transitions smoothly with a standard visual animation.',
+                  'expected': 'The app performs a smooth transition and the {feature} screen becomes active.',
                 },
                 {
-                  'action': 'Fill in the {feature} requirements using the on-screen keyboard',
+                  'action': 'Fill the {feature} fields using the system on-screen keyboard',
                   'data': '{validEmail} / {validPassword}',
-                  'expected': 'The app remains responsive and input is captured accurately.',
+                  'expected': 'The app remains lag-free and the "Submit" button becomes active after the last field is filled.',
                 },
                 {
-                  'action': 'Perform a refresh gesture on the {feature} screen',
+                  'action': 'Perform a "Pull-to-Refresh" gesture on the {feature} list',
                   'data': '',
-                  'expected': 'The screen updates with the latest system state for {feature}.',
+                  'expected': 'A haptic pulse is felt and the screen data is refreshed from the local cache/remote server.',
                 },
               ],
             ];
@@ -252,19 +247,34 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Navigate to the {feature} screen and move the app to the background',
+                  'action': 'While on the {feature} screen, move the application to the background',
                   'data': '',
-                  'expected': 'The app state is preserved while in the background.',
+                  'expected': 'The application state is suspended correctly without any crashes.',
                 },
                 {
-                  'action': 'Resume the app and enter malformed input for {feature}',
-                  'data': '{invalidEmail} / {invalidPassword}',
-                  'expected': 'An inline validation error appears with visual or tactile feedback.',
+                  'action': 'Resume the application and enter an incorrect password for {feature}',
+                  'data': '{invalidPassword}',
+                  'expected': 'An inline error tooltip appears and the device provides a haptic feedback notification.',
                 },
                 {
-                  'action': 'Attempt to proceed to the next step',
+                  'action': 'Attempt to proceed while the device is in Airplane Mode',
                   'data': '',
-                  'expected': 'The progression is blocked and the error field is highlighted.',
+                  'expected': 'The app displays a "No Internet Connection" alert and prevents the data submission.',
+                },
+              ],
+            ];
+          case 'security':
+            return [
+              [
+                {
+                  'action': 'Attempt to capture a screenshot of the {feature} sensitive data screen',
+                  'data': '',
+                  'expected': 'The app prevents the screenshot or masks sensitive fields (e.g., password/SSN) in the capture.',
+                },
+                {
+                  'action': 'Trigger the {feature} flow and decline the requested device permissions',
+                  'data': '',
+                  'expected': 'The app handles the permission denial gracefully, explaining why the permission is needed.',
                 },
               ],
             ];
@@ -272,19 +282,14 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Open the {feature} view from the main navigation',
+                  'action': 'Open the {feature} view and rotate the device to Landscape mode',
                   'data': '',
-                  'expected': 'The screen loads and displays all required interactive components.',
+                  'expected': 'The UI adapts to the new orientation and all controls remain accessible within the viewport.',
                 },
                 {
-                  'action': 'Perform the primary {feature} action on a limited connection',
+                  'action': 'Execute the primary {feature} action on a high-latency (EDGE) connection',
                   'data': '{validEmail}',
-                  'expected': 'The app displays a loading indicator and remains stable.',
-                },
-                {
-                  'action': 'Review the updated screen once the operation completes',
-                  'data': '',
-                  'expected': 'The latest transaction reference {reference} is clearly visible.',
+                  'expected': 'A loading spinner is shown and the app prevents multiple taps on the submit button.',
                 },
               ],
             ];
@@ -295,19 +300,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Send a POST request to {endpoint} with a valid payload',
+                  'action': 'Send a POST request to {endpoint} with a valid JSON payload',
                   'data': '{"email":"{validEmail}","password":"{validPassword}"}',
-                  'expected': 'A success status code is returned with the correct response format.',
+                  'expected': 'The server returns a 201 Created or 200 OK status with an application/json Content-Type.',
                 },
                 {
-                  'action': 'Validate the response metadata for security standards',
+                  'action': 'Verify the response body schema against the documentation',
                   'data': '',
-                  'expected': 'Security headers and metadata are present in the response.',
+                  'expected': 'All mandatory fields (id, status, timestamp) are present and match the expected data types.',
                 },
                 {
-                  'action': 'Execute a retrieval request for the {feature} resource',
+                  'action': 'Send a GET request to {endpoint}/{{id}} using the ID from the previous step',
                   'data': '',
-                  'expected': 'The response matches the originally submitted data.',
+                  'expected': 'The resource is retrieved successfully and matches the originally submitted data.',
                 },
               ],
             ];
@@ -315,19 +320,39 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Send a POST request to {endpoint} with an empty body',
-                  'data': '{}',
-                  'expected': 'A client error status is returned with a descriptive error message.',
+                  'action': 'Send a POST request to {endpoint} with a malformed JSON string',
+                  'data': '{"email": "{validEmail}", "broken": }',
+                  'expected': 'The server returns a 400 Bad Request status with a "Malformed JSON" error message.',
                 },
                 {
-                  'action': 'Submit a request with a field exceeding the accepted threshold',
-                  'data': '{"large_field":"' + 'A' * 5000 + '"}',
-                  'expected': 'The server rejects the request with an appropriate error status.',
+                  'action': 'Submit a request to {endpoint} with a field exceeding the database limit',
+                  'data': '{"description":"' + 'A' * 4000 + '"}',
+                  'expected': 'The server rejects the request with a 413 Payload Too Large or 400 Bad Request status.',
                 },
                 {
-                  'action': 'Verify that no new records were created in the system',
+                  'action': 'Verify that no side effects or new records were created for {feature}',
                   'data': '',
-                  'expected': 'The resource state remains unchanged after the failed attempts.',
+                  'expected': 'A subsequent LIST request confirms the resource count remains unchanged.',
+                },
+              ],
+            ];
+          case 'security':
+            return [
+              [
+                {
+                  'action': 'Send a POST request to {endpoint} without an Authorization header',
+                  'data': '',
+                  'expected': 'The server returns a 401 Unauthorized status with a WWW-Authenticate header.',
+                },
+                {
+                  'action': 'Attempt a SQL injection attack via the {feature} query parameters',
+                  'data': '{endpoint}?id={sqlPayload}',
+                  'expected': 'The server returns a 400 Bad Request or 200 OK with no results, ensuring no data leak.',
+                },
+                {
+                  'action': 'Send a request using an expired JWT token for {feature}',
+                  'data': 'Authorization: Bearer {expiredToken}',
+                  'expected': 'The server returns a 401 Unauthorized with the message "Token expired".',
                 },
               ],
             ];
@@ -335,19 +360,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Execute a resource check request to {endpoint}',
+                  'action': 'Perform a HEAD request to {endpoint} to check resource availability',
                   'data': '',
-                  'expected': 'A success status is returned with appropriate metadata.',
+                  'expected': 'The server returns a 200 OK status with the correct headers but an empty body.',
                 },
                 {
-                  'action': 'Send a POST request with a unique transaction identifier {reference}',
-                  'data': '{"action":"{feature}"}',
-                  'expected': 'The request is processed successfully.',
+                  'action': 'Execute a request to {endpoint} with an Idempotency-Key: {reference}',
+                  'data': '',
+                  'expected': 'The request is processed and the server returns a success status.',
                 },
                 {
-                  'action': 'Retry the same request with the same transaction identifier',
+                  'action': 'Retry the identical request with the same Idempotency-Key',
                   'data': '',
-                  'expected': 'The server handles the duplicate request without side effects.',
+                  'expected': 'The server returns the cached response from the first request with no new side effects.',
                 },
               ],
             ];
@@ -356,14 +381,14 @@ class DeterministicRepair {
         return [
           [
             {
-              'action': 'Perform the primary {feature} operation',
+              'action': 'Perform the primary {feature} operation using default parameters',
               'data': '{validEmail}',
-              'expected': 'The system records the submitted account reference {reference}.',
+              'expected': 'The system completes the operation and provides a unique reference code {reference}.',
             },
             {
-              'action': 'Validate the resulting state in the system of record',
+              'action': 'Verify the updated state for {feature} in the audit logs',
               'data': '',
-              'expected': 'The persistence layer reflects the updated state for {feature}.',
+              'expected': 'A new entry is recorded with the correct timestamp and user identifier.',
             },
           ],
         ];

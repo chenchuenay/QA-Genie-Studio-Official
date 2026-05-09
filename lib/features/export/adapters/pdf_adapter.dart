@@ -43,8 +43,6 @@ class PdfAdapter {
                 'Steps',
                 'Test Data',
                 'Expected Result',
-                'Actual',
-                'Status',
                 'Priority',
               ],
               data: chunk
@@ -56,21 +54,30 @@ class PdfAdapter {
                       (row['Steps'] ?? '').toString(),
                       (row['Test Data'] ?? '').toString(),
                       (row['Expected Result'] ?? '').toString(),
-                      (row['Actual'] ?? '').toString(),
-                      (row['Status'] ?? '').toString(),
                       (row['Priority'] ?? '').toString(),
                     ],
                   )
                   .toList(),
               headerStyle: pw.TextStyle(
                 fontWeight: pw.FontWeight.bold,
-                fontSize: 9,
+                fontSize: 8,
               ),
-              cellStyle: const pw.TextStyle(fontSize: 7),
+              cellStyle: const pw.TextStyle(fontSize: 6),
+              columnWidths: {
+                0: const pw.FixedColumnWidth(40),  // ID
+                1: const pw.FlexColumnWidth(3),   // Title
+                2: const pw.FlexColumnWidth(2),   // Preconditions
+                3: const pw.FlexColumnWidth(4),   // Steps
+                4: const pw.FlexColumnWidth(2),   // Test Data
+                5: const pw.FlexColumnWidth(3),   // Expected Result
+                6: const pw.FixedColumnWidth(45), // Priority
+              },
               headerDecoration: const pw.BoxDecoration(
                 color: PdfColors.grey200,
               ),
-              border: pw.TableBorder.all(),
+              border: pw.TableBorder.all(width: 0.5),
+              cellAlignment: pw.Alignment.topLeft,
+              headerAlignment: pw.Alignment.center,
             ),
             pw.SizedBox(height: 20),
             if (page == totalPages - 1)

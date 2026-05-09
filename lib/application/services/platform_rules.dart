@@ -19,6 +19,12 @@ class PlatformRules {
       'force-killed',
       'apk',
       'http response body',
+      'request payload',
+      'status code',
+      'endpoint',
+      'json response',
+      'device orientation',
+      'haptic',
     ],
     'Mobile': [
       'cookie',
@@ -30,6 +36,11 @@ class PlatformRules {
       'right click',
       'tab key',
       'browser tab',
+      'url bar',
+      'inspect element',
+      'status code',
+      'endpoint',
+      'http method',
     ],
     'API': [
       'click button',
@@ -45,6 +56,12 @@ class PlatformRules {
       'dashboard',
       'toast',
       'modal',
+      'hover',
+      'scrolling',
+      'gesture',
+      'ui element',
+      'color',
+      'font',
     ],
   };
 
@@ -67,15 +84,15 @@ class PlatformRules {
     switch (platform) {
       case 'Web':
         return RegExp(
-          r'\b(adb|apk|swip\w*|tap\w*|pinch\w*|biometric|fingerprint|face id|push notification|device permission)\b',
+          r'\b(adb|apk|swip\w*|tap\w*|pinch\w*|biometric|fingerprint|face id|push notification|device permission|haptic|gyroscope|orientation|status code|endpoint|payload|json response)\b',
         ).hasMatch(normalized);
       case 'Mobile':
         return RegExp(
-          r'\b(hover\w*|right[- ]click|ctrl\s*\+?\s*f5|browser refresh|browser tab|cookie tamper\w*)\b',
+          r'\b(hover\w*|right[- ]click|ctrl\s*\+?\s*f5|browser refresh|browser tab|cookie tamper\w*|url bar|inspect element|status code|endpoint|http method)\b',
         ).hasMatch(normalized);
       case 'API':
         return RegExp(
-          r'\b(click button|click on|tap screen|tap on|press save|press continue|navigate page|navigate to page|open dashboard|page loads|screen opens|modal appears|toast appears|fill (the )?form)\b',
+          r'\b(click button|click on|tap screen|tap on|press save|press continue|navigate page|navigate to page|open dashboard|page loads|screen opens|modal appears|toast appears|fill (the )?form|scrolling|gesture|ui element|color|font)\b',
         ).hasMatch(normalized);
       default:
         return false;

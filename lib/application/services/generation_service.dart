@@ -145,7 +145,7 @@ class GenerationService {
   bool _passesFinalValidation(TestCaseModel tc, String platform) {
     if (_containsGarbage(tc)) return false;
     if (_violatesPlatform(tc, platform)) return false;
-    if (_qualityScore(tc) < 3) return false;
+    if (_qualityScore(tc) < 5) return false;
     if (tc.steps.length < 3) return false;
     if (tc.expectedResult.trim().isEmpty) return false;
     return true;
@@ -168,16 +168,20 @@ class GenerationService {
           !_bannedPhrases.any((p) => s.data.toLowerCase().contains(p)),
     ))
       score += 2;
-    if (tc.expectedResult.length > 30 &&
+    if (tc.expectedResult.length > 40 &&
         !_bannedPhrases.any((p) => tc.expectedResult.toLowerCase().contains(p)))
       score += 2;
     if (!QaHeuristicsEngine.hasWeakExpectedResult(tc.expectedResult)) {
-      score += 2;
+      score += 3;
     }
     final verbs = tc.steps
         .map((s) => s.action.split(' ').first.toLowerCase())
         .toSet();
-    if (verbs.length >= 3) score += 1;
+    if (verbs.length >= 3) score += 2;
+    
+    // contextual variation bonus
+    if (tc.steps.any((s) => s.action.contains(tc.feature))) score += 1;
+    
     return score;
   }
 
