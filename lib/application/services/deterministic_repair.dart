@@ -27,6 +27,13 @@ class DeterministicRepair {
         .trim();
   }
 
+  String _smooth(String feature) {
+    return feature
+        .replaceAll(RegExp(r' with email and password', caseSensitive: false), '')
+        .replaceAll(RegExp(r' using email and password', caseSensitive: false), '')
+        .trim();
+  }
+
   List<TestCaseModel> repair(List<TestCaseModel> cases, int targetCount) {
     if (cases.length >= targetCount) return cases;
     final existingNormalized = cases
@@ -43,16 +50,7 @@ class DeterministicRepair {
       existingNormalized.add(normalized);
 
       final steps = _buildContextualSteps(sk);
-      if (steps.length < 3) {
-        steps.add(
-          TestStep(
-            action: 'Verify final state',
-            data: '',
-            expected: 'State matches expected outcome',
-          ),
-        );
-      }
-
+      
       repaired.add(
         TestCaseModel(
           title: title,
@@ -72,6 +70,7 @@ class DeterministicRepair {
 
   List<TestStep> _buildContextualSteps(Map<String, dynamic> sk) {
     final feature = sk['feature'] as String;
+    final smoothFeature = _smooth(feature);
     final category = sk['category'] as String;
     final platform = sk['platform'] as String;
     final endpoint = PlatformRules.apiEndpoint(feature);
@@ -79,9 +78,12 @@ class DeterministicRepair {
     final key = '$feature-$category-$platform-${sk['title']}';
     final idx = StableHash.forText(key, variants.length);
     final variant = variants[idx];
-    return variant.map((step) {
+    
+    final res = <TestStep>[];
+    for (int i = 0; i < variant.length; i++) {
+      final step = variant[i];
       final action = step['action']!
-          .replaceAll('{feature}', feature)
+          .replaceAll('{feature}', smoothFeature)
           .replaceAll('{endpoint}', endpoint);
       final data = step['data']!
           .replaceAll('{validEmail}', TestDataFactory.validEmail(key))
@@ -92,10 +94,30 @@ class DeterministicRepair {
           .replaceAll('{sqlPayload}', TestDataFactory.sqlInjection())
           .replaceAll('{xssPayload}', TestDataFactory.xssPayload());
       final expected = step['expected']!
-          .replaceAll('{feature}', feature)
+          .replaceAll('{feature}', smoothFeature)
           .replaceAll('{endpoint}', endpoint);
-      return TestStep(action: action, data: data, expected: expected);
-    }).toList();
+          
+      res.add(TestStep(action: action, data: data, expected: expected));
+      
+      // Deterministic variation: inject a verification step for specific seeds
+      if (i == 1 && StableHash.forText(key, 10) > 7 && category == 'positive' && platform != 'API') {
+        res.add(TestStep(
+          action: 'Verify the interface remains responsive and displays no immediate errors',
+          data: '',
+          expected: 'The UI is stable and the primary action remains available.',
+        ));
+      }
+    }
+    
+    if (res.length < 3 && platform != 'API') {
+      res.add(TestStep(
+        action: 'Observe the final state of the {feature} module'.replaceAll('{feature}', smoothFeature),
+        data: '',
+        expected: 'The system state matches the expected outcome for this scenario.',
+      ));
+    }
+    
+    return res;
   }
 
   // All variant lists use placeholder strings only – no runtime calls.

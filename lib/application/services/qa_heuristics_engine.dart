@@ -298,7 +298,7 @@ class QaHeuristicsEngine {
     if (domain == 'payment') {
       return 'The checkout flow captures the transaction reference, updates the local application state, and ensures the primary payment button is managed to prevent duplicate processing.';
     }
-    return 'The $subject page successfully commits the changes, displays an on-screen confirmation message, and updates the interface to reflect the new state without unexpected disruptions.';
+    return 'The $subject page persists the submitted data, displays an on-screen confirmation message, and the view is updated to the success or dashboard state.';
   }
 
   static String _mobileExpected(
@@ -335,7 +335,7 @@ class QaHeuristicsEngine {
       return 'The API enforces request limits or payload constraints, returning the documented status as appropriate, with clear indicators if the request was throttled.';
     }
     if (category == 'session') {
-      return 'The authentication token is validated against the authority, the response includes updated session metadata, and the server rejects subsequent requests using expired credentials.';
+      return 'The service validates the provided credentials or token, returning a success status with updated session metadata and an active authentication identifier.';
     }
     if (domain == 'payment') {
       return 'The response payload includes a unique transaction identifier, the transaction status is correctly updated in the system of record, and the service returns a success status with the resource reference.';

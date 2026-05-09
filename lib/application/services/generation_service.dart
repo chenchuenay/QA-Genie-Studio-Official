@@ -419,6 +419,13 @@ class GenerationService {
     }
   }
 
+  String _smooth(String feature) {
+    return feature
+        .replaceAll(RegExp(r' with email and password', caseSensitive: false), '')
+        .replaceAll(RegExp(r' using email and password', caseSensitive: false), '')
+        .trim();
+  }
+
   TestCaseModel _emergencyCase(
     String module,
     String feature,
@@ -427,72 +434,77 @@ class GenerationService {
     int index,
   ) {
     final templates = <String, Map<String, dynamic>>{};
+    final smoothFeature = _smooth(feature);
 
     if (platform == 'Web') {
       templates.addAll({
         'web_negative': {
-          'title': 'Verify {feature} rejects invalid credentials with specific on-screen error states',
+          'title': 'Verify $smoothFeature rejects invalid credentials with specific on-screen error states',
           'category': 'negative',
           'data': '{invalidEmail} / {invalidPassword}',
           'expected': 'A clear validation message appears below the affected fields, the submission control is disabled, and the application remains in the current state.',
-          'preconditions': ['The {feature} page is open in a fresh browser session.'],
+          'preconditions': ['The $smoothFeature page is open in a fresh browser session.'],
         },
         'web_boundary': {
-          'title': 'Verify {feature} input fields enforce character limits without layout disruptions',
+          'title': 'Verify $smoothFeature input fields enforce character limits without layout disruptions',
           'category': 'boundary',
           'data': 'A string exceeding the 255-character threshold',
           'expected': 'The input field prevents additional characters and displays a validation indicator without breaking the page layout.',
-          'preconditions': ['The {feature} page is viewed on a standard desktop resolution.'],
+          'preconditions': ['The $smoothFeature page is viewed on a standard desktop resolution.'],
         },
         'web_xss': {
-          'title': 'Verify {feature} form handles potentially unsafe script payloads securely',
+          'title': 'Verify $smoothFeature form handles potentially unsafe script payloads securely',
           'category': 'security',
           'data': '{xssPayload}',
           'expected': 'The application handles the input safely by rendering it as plain text and preventing any unintended script execution.',
-          'preconditions': ['The {feature} page is in its default state.'],
+          'preconditions': ['The $smoothFeature page is in its default state.'],
         },
         'web_session': {
-          'title': 'Verify {feature} session persistence across navigation events',
+          'title': 'Verify $smoothFeature session persistence across navigation events',
           'category': 'session',
           'data': '',
-          'expected': 'The application maintains the user authentication state and restores the {feature} view correctly after a page refresh.',
+          'expected': 'The application maintains the user authentication state and restores the $smoothFeature view correctly after a page refresh.',
           'preconditions': ['The user has an active session with the application.'],
         },
         'web_usability': {
-          'title': 'Verify {feature} accessibility via keyboard navigation',
+          'title': 'Verify $smoothFeature accessibility via keyboard navigation',
           'category': 'usability',
           'data': '',
-          'expected': 'Interactive elements receive visible focus indicators and the {feature} workflow can be completed using only the keyboard.',
+          'expected': 'Interactive elements receive visible focus indicators and the $smoothFeature workflow can be completed using only the keyboard.',
           'preconditions': ['The page is in its default state and no pointer device is used.'],
         },
       });
     }
 
     if (platform == 'API') {
+      final authPrecondition = domain == 'auth'
+          ? 'The API endpoint is reachable and the environment is stable.'
+          : 'A valid authentication token is included in the request headers.';
+      
       templates.addAll({
         'api_positive': {
-          'title': 'Verify {feature} endpoint returns a success status with the correct response format',
+          'title': 'Verify $smoothFeature endpoint returns a success status with the correct response format',
           'category': 'positive',
           'data': '{"email":"{validEmail}","token":"{validToken}"}',
           'expected': 'A success status code is returned, the response body matches the documented format, and the resource is correctly referenced.',
-          'preconditions': ['A valid authentication token is included in the request headers.'],
+          'preconditions': [authPrecondition],
         },
         'api_negative': {
-          'title': 'Verify {feature} rejects malformed payloads with an appropriate error status',
+          'title': 'Verify $smoothFeature rejects malformed payloads with an appropriate error status',
           'category': 'negative',
           'data': '{"email":"invalid-format","unexpected_key":true}',
           'expected': 'An appropriate error status code is returned, with a structured response identifying the specific failures.',
-          'preconditions': ['The API client is authenticated and reaching the test environment.'],
+          'preconditions': [authPrecondition],
         },
         'api_security': {
-          'title': 'Verify {feature} blocks requests with expired or invalid credentials',
+          'title': 'Verify $smoothFeature blocks requests with expired or invalid credentials',
           'category': 'security',
           'data': '{expiredToken}',
           'expected': 'An unauthorized status code is returned and the response body contains a specific error code indicating the credential issue.',
           'preconditions': ['The request is sent with an expired session identifier.'],
         },
         'api_rate_limit': {
-          'title': 'Verify {feature} enforces Rate Limiting via documented status codes',
+          'title': 'Verify $smoothFeature enforces Rate Limiting via documented status codes',
           'category': 'security',
           'data': '',
           'expected': 'After exceeding the allowed request rate, the API returns a throttled status code and provides retry information.',
@@ -504,25 +516,25 @@ class GenerationService {
     if (platform == 'Mobile') {
       templates.addAll({
         'mobile_positive': {
-          'title': 'Verify {feature} workflow completion with appropriate visual feedback',
+          'title': 'Verify $smoothFeature workflow completion with appropriate visual feedback',
           'category': 'positive',
           'data': '{validEmail} / {validPassword}',
           'expected': 'The flow completes with a success indicator, appropriate visual feedback is provided, and the navigation state is updated.',
           'preconditions': ['The app is running on a standard mobile device.'],
         },
         'mobile_negative': {
-          'title': 'Verify {feature} handles connectivity issues during data submission',
+          'title': 'Verify $smoothFeature handles connectivity issues during data submission',
           'category': 'negative',
           'data': '{validEmail}',
           'expected': 'The app detects the operation timeout, displays an actionable retry notification, and preserves the user input.',
           'preconditions': ['The device is configured with a limited or unstable connection.'],
         },
         'mobile_session': {
-          'title': 'Verify {feature} state restoration after app backgrounding',
+          'title': 'Verify $smoothFeature state restoration after app backgrounding',
           'category': 'session',
           'data': '',
-          'expected': 'Upon resuming from the background, the {feature} screen remains accessible without an unintended application restart.',
-          'preconditions': ['The app is moved to the background while on the {feature} screen.'],
+          'expected': 'Upon resuming from the background, the $smoothFeature screen remains accessible without an unintended application restart.',
+          'preconditions': ['The app is moved to the background while on the $smoothFeature screen.'],
         },
       });
     }
@@ -530,11 +542,11 @@ class GenerationService {
     if (templates.isEmpty) {
       templates.addAll({
         'default': {
-          'title': 'Verify $feature default workflow stability',
+          'title': 'Verify $smoothFeature default workflow stability',
           'category': 'positive',
           'data': '{validEmail}',
           'expected': 'The flow completes and the user is presented with the next logical step.',
-          'preconditions': ['The $feature interface is accessible.'],
+          'preconditions': ['The $smoothFeature interface is accessible.'],
         },
       });
     }
@@ -543,7 +555,7 @@ class GenerationService {
     final key = keys[index % keys.length];
     final tpl = templates[key]!;
 
-    final title = (tpl['title'] as String).replaceAll('{feature}', feature);
+    final title = (tpl['title'] as String);
     final category = tpl['category'] as String;
     final rawData = (tpl['data'] as String);
     final data = rawData.isNotEmpty
@@ -556,12 +568,10 @@ class GenerationService {
             .replaceAll('{validToken}', TestDataFactory.validToken())
             .replaceAll('{expiredToken}', TestDataFactory.expiredToken())
         : '';
-    final expected = (tpl['expected'] as String).replaceAll('{feature}', feature);
-    final preconditions = (tpl['preconditions'] as List)
-        .map((p) => p.toString().replaceAll('{feature}', feature))
-        .toList();
+    final expected = (tpl['expected'] as String);
+    final preconditions = (tpl['preconditions'] as List).cast<String>();
 
-    final steps = _buildEmergencySteps(platform, feature, data, index);
+    final steps = _buildEmergencySteps(platform, smoothFeature, data, index);
 
     return TestCaseModel(
       title: title,
@@ -596,7 +606,7 @@ class GenerationService {
         return [
           TestStep(action: 'Send POST request to $endpoint', data: data, expected: 'Response is received within 2 seconds'),
           TestStep(action: 'Verify HTTP status code', data: '', expected: 'Status code matches the documented response for this scenario'),
-          TestStep(action: 'Examine response payload', data: '', expected: 'Response contains a correlation ID and no server stack trace'),
+          TestStep(action: 'Examine response payload', data: '', expected: 'Response contains a correlation ID and no sensitive implementation details'),
         ];
       case 'Mobile':
         final openActions = ['Open the $feature screen from the app menu', 'Tap the $feature icon in the navigation bar', 'Launch the $feature view from the home screen'];
@@ -607,7 +617,7 @@ class GenerationService {
           TestStep(action: triggerActions[idx], data: '', expected: 'The app responds with visual feedback and remains responsive'),
         ];
       default:
-        final openActions = ['Open the $feature page in Chrome (latest stable)', 'Navigate to the $feature URL in a fresh browser tab', 'Load the $feature page from the application menu'];
+        final openActions = ['Open the $feature page in a supported browser', 'Navigate to the $feature URL in a fresh browser tab', 'Load the $feature page from the application menu'];
         final submitActions = ['Submit the $feature form', 'Click the primary action button', 'Press Enter to trigger the main flow'];
         return [
           TestStep(action: openActions[idx], data: '', expected: 'The page renders all required controls'),
