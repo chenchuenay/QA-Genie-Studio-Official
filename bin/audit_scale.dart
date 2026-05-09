@@ -31,8 +31,7 @@ void _auditSuite(String platform, String scope, List<TestCaseModel> cases) {
   
   // Issues tracking
   final titles = <String>{};
-  final steps = <String>{};
-  
+  // Removed unused steps variable  
   for (var i = 0; i < cases.length; i++) {
     final tc = cases[i];
     

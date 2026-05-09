@@ -48,7 +48,7 @@ class GenerationService {
       "Add dedicated scenario categories with specific grammar:"
       "- Validation: Focus on data formats, required fields, and business rules."
       "- Session: Cover login/logout, expiry, persistence, and state restoration."
-      "- Security: Address authentication, authorization, and basic vulnerabilities. RESTRICT advanced security topics (e.g., certificate pinning, API key exposure, MITM, clipboard attacks) unless explicitly requested."
+      "- Security: Address authentication, authorization, and basic vulnerabilities. RESTRICT advanced security topics (e.g., certificate pinning, API key exposure, MITM, clipboard attacks) unless explicitly requested by the user."
       "- Usability: Test ease of use, clarity, and interactive elements."
       "- State Persistence: Verify data integrity and state across sessions or reloads."
       "- Network Behavior: Test responses to connectivity changes, latency, and timeouts."
