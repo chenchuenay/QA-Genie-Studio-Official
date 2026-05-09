@@ -109,55 +109,52 @@ class QaHeuristicsEngine {
     final category = rawCategory.toLowerCase();
     final text = '$category $title'.toLowerCase();
     if (_hasAny(text, [
-      'security',
-      'xss',
-      'sql',
-      'csrf',
-      'token',
-      'unauthorized',
-      'tamper',
-      'replay',
-      'mitm',
+      'security', 'xss', 'sql', 'csrf', 'token', 'unauthorized', 'tamper', 'replay', 'mitm', 'pinning', 'api key', 'clipboard', 'session', 'timeout', 'logout', 'expiry', 'expired'
     ])) {
       return 'security';
     }
-    if (_hasAny(text, ['session', 'timeout', 'logout', 'expiry', 'expired'])) {
-      return 'session';
-    }
     if (_hasAny(text, [
-      'boundary',
-      'limit',
-      'maximum',
-      'minimum',
-      'oversized',
-      'out-of-range',
+      'boundary', 'limit', 'maximum', 'minimum', 'oversized', 'out-of-range',
     ])) {
       return 'boundary';
     }
     if (_hasAny(text, [
-      'validation',
-      'required',
-      'format',
-      'missing',
-      'malformed',
-      'invalid',
+      'validation', 'required', 'format', 'missing', 'malformed', 'invalid',
     ])) {
       return 'validation';
     }
     if (_hasAny(text, [
-      'failure',
-      'reject',
-      'blocked',
-      'incorrect',
-      'negative',
+      'network', 'connectivity', 'latency', 'timeout', 'offline', 'online', 'slow connection',
+    ])) {
+      return 'network_behavior';
+    }
+    if (_hasAny(text, [
+      'navigation', 'transition', 'route', 'page', 'screen', 'link',
+    ])) {
+      return 'navigation';
+    }
+    if (_hasAny(text, [
+      'permission', 'access', 'grant', 'deny', 'allow', 'ask for permission',
+    ])) {
+      return 'permissions';
+    }
+    if (_hasAny(text, [
+      'accessibility', 'screen reader', 'keyboard navigation', 'focus indicator', 'tab key', 'alt text', 'color contrast',
+    ])) {
+      return 'accessibility';
+    }
+    if (_hasAny(text, [
+      'state persistence', 'save state', 'restore state', 'local storage', 'session storage', 'cache',
+    ])) {
+      return 'state_persistence';
+    }
+    if (_hasAny(text, [
+      'failure', 'reject', 'blocked', 'incorrect', 'negative',
     ])) {
       return 'negative';
     }
     if (_hasAny(text, [
-      'usability',
-      'accessibility',
-      'screen reader',
-      'touch target',
+      'usability', 'clarity', 'interactive elements', 'ease of use',
     ])) {
       return 'usability';
     }
