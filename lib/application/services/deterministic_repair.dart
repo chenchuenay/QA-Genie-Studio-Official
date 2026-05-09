@@ -77,7 +77,7 @@ class DeterministicRepair {
     final variants = _getVariantList(platform, category);
     final key = '$feature-$category-$platform-${sk['title']}';
     final idx = StableHash.forText(key, variants.length);
-    final variant = variants[idx];
+    final variant = variants.isNotEmpty ? variants[idx] : [];
     
     final res = <TestStep>[];
     for (int i = 0; i < variant.length; i++) {
@@ -132,36 +132,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Navigate to the {feature} URL in a supported web browser (Chrome/Firefox/Safari)',
+                  'action': 'Navigate to the {feature} URL in a browser',
                   'data': '',
-                  'expected': 'The page renders completely, all interactive elements are clickable, and no console errors are present.',
+                  'expected': 'The page displays all expected interactive elements and the user interface remains stable.',
                 },
                 {
                   'action': 'Enter valid credentials into the {feature} form inputs',
                   'data': '{validEmail} / {validPassword}',
-                  'expected': 'The inputs accept the data and any associated inline validation indicators show a success state.',
+                  'expected': 'The inputs accept the data and provide clear indicators of valid entry.',
                 },
                 {
-                  'action': 'Click the primary submission button and observe the browser redirect',
+                  'action': 'Complete the {feature} submission',
                   'data': '',
-                  'expected': 'The application processes the request, displays a success toast message, and redirects to the dashboard URL.',
-                },
-              ],
-              [
-                {
-                  'action': 'Open the {feature} dashboard via the application sidebar navigation',
-                  'data': '',
-                  'expected': 'The dashboard component mounts correctly and displays the current state for {feature}.',
-                },
-                {
-                  'action': 'Update the {feature} configuration fields with new valid parameters',
-                  'data': 'Reference: {reference}',
-                  'expected': 'The "Save Changes" button becomes enabled and the interface remains responsive.',
-                },
-                {
-                  'action': 'Execute a "Save" action followed by a manual browser refresh (F5)',
-                  'data': '',
-                  'expected': 'The system persists the changes across the session and the updated data is visible after the refresh.',
+                  'expected': 'The application processes the submission and redirects to the expected success or dashboard view.',
                 },
               ],
             ];
@@ -169,19 +152,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Open the {feature} page and simulate a slow 3G network connection via DevTools',
+                  'action': 'Open the {feature} page and simulate a slow network connection',
                   'data': '',
-                  'expected': 'The page displays a loading skeleton or progress indicator while resources are being fetched.',
+                  'expected': 'The interface displays a status indicator informing the user of the connectivity issues.',
                 },
                 {
-                  'action': 'Attempt to submit the {feature} form with malformed data',
+                  'action': 'Attempt to submit the {feature} form with incorrect data',
                   'data': '{invalidEmail} / {invalidPassword}',
-                  'expected': 'The UI prevents submission and applies a red focus ring to the invalid input fields.',
+                  'expected': 'The interface prevents submission and highlights the fields that require correction.',
                 },
                 {
-                  'action': 'Verify the specific error message text displayed in the UI',
+                  'action': 'Verify the specific error message text',
                   'data': '',
-                  'expected': 'The message "Invalid format" or equivalent is visible and actionable for the user.',
+                  'expected': 'An actionable error message is displayed to the user.',
                 },
               ],
             ];
@@ -189,19 +172,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Navigate to the {feature} entry point and inspect the "Set-Cookie" headers',
+                  'action': 'Navigate to the {feature} entry point and verify session security',
                   'data': '',
-                  'expected': 'Session cookies are marked as HttpOnly and Secure to prevent unauthorized access.',
+                  'expected': 'The session is secure, sensitive information is not exposed, and no system debug details are visible.',
                 },
                 {
-                  'action': 'Inject a malicious script payload into the {feature} text input',
+                  'action': 'Attempt to submit a malicious text payload into the {feature} input',
                   'data': '{xssPayload}',
-                  'expected': 'The application sanitizes the input, rendering the script as a literal string without execution.',
+                  'expected': 'The application handles the input securely and does not execute the payload.',
                 },
                 {
-                  'action': 'Attempt to bypass client-side validation using the browser console',
-                  'data': 'document.querySelector("form").submit()',
-                  'expected': 'The server-side validation rejects the request and returns a secure error response.',
+                  'action': 'Attempt to bypass authentication by navigating to a restricted page',
+                  'data': '',
+                  'expected': 'The system prevents access and redirects to the login page.',
                 },
               ],
             ];
@@ -227,19 +210,19 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Launch the mobile application and tap the {feature} icon on the tab bar',
+                  'action': 'Launch the mobile application and select the {feature} option',
                   'data': '',
-                  'expected': 'The app performs a smooth transition and the {feature} screen becomes active.',
+                  'expected': 'The screen transitions to the {feature} interface as expected.',
                 },
                 {
-                  'action': 'Fill the {feature} fields using the system on-screen keyboard',
+                  'action': 'Provide the necessary {feature} details through the input fields',
                   'data': '{validEmail} / {validPassword}',
-                  'expected': 'The app remains lag-free and the "Submit" button becomes active after the last field is filled.',
+                  'expected': 'The input fields capture the data and the primary action control becomes interactable.',
                 },
                 {
-                  'action': 'Perform a "Pull-to-Refresh" gesture on the {feature} list',
+                  'action': 'Perform a list refresh action',
                   'data': '',
-                  'expected': 'A haptic pulse is felt and the screen data is refreshed from the local cache/remote server.',
+                  'expected': 'The screen updates to reflect the most current state from the system.',
                 },
               ],
             ];
@@ -247,19 +230,14 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'While on the {feature} screen, move the application to the background',
+                  'action': 'Move the application to the background while on the {feature} screen',
                   'data': '',
-                  'expected': 'The application state is suspended correctly without any crashes.',
+                  'expected': 'The application preserves the current workflow state without interruption.',
                 },
                 {
-                  'action': 'Resume the application and enter an incorrect password for {feature}',
+                  'action': 'Attempt to proceed with an incorrect authentication entry',
                   'data': '{invalidPassword}',
-                  'expected': 'An inline error tooltip appears and the device provides a haptic feedback notification.',
-                },
-                {
-                  'action': 'Attempt to proceed while the device is in Airplane Mode',
-                  'data': '',
-                  'expected': 'The app displays a "No Internet Connection" alert and prevents the data submission.',
+                  'expected': 'An error notification appears and the input highlights the failure.',
                 },
               ],
             ];
@@ -267,14 +245,14 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Attempt to capture a screenshot of the {feature} sensitive data screen',
+                  'action': 'Verify privacy settings while on the {feature} screen',
                   'data': '',
-                  'expected': 'The app prevents the screenshot or masks sensitive fields (e.g., password/SSN) in the capture.',
+                  'expected': 'Sensitive data is masked from view during screen interactions.',
                 },
                 {
-                  'action': 'Trigger the {feature} flow and decline the requested device permissions',
+                  'action': 'Trigger the {feature} flow while declining required device permissions',
                   'data': '',
-                  'expected': 'The app handles the permission denial gracefully, explaining why the permission is needed.',
+                  'expected': 'The app explains why the permission is required and handles the denial without failure.',
                 },
               ],
             ];
@@ -300,19 +278,14 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Send a POST request to {endpoint} with a valid JSON payload',
-                  'data': '{"email":"{validEmail}","password":"{validPassword}"}',
-                  'expected': 'The server returns a 201 Created or 200 OK status with an application/json Content-Type.',
+                  'action': 'Send a request to the {endpoint} with valid authentication details',
+                  'data': '{validEmail} / {validPassword}',
+                  'expected': 'The service confirms successful authentication and returns the expected result structure.',
                 },
                 {
-                  'action': 'Verify the response body schema against the documentation',
+                  'action': 'Verify the returned data against expected outcomes',
                   'data': '',
-                  'expected': 'All mandatory fields (id, status, timestamp) are present and match the expected data types.',
-                },
-                {
-                  'action': 'Send a GET request to {endpoint}/{{id}} using the ID from the previous step',
-                  'data': '',
-                  'expected': 'The resource is retrieved successfully and matches the originally submitted data.',
+                  'expected': 'All required fields are present and accurate.',
                 },
               ],
             ];
@@ -320,19 +293,14 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Send a POST request to {endpoint} with a malformed JSON string',
-                  'data': '{"email": "{validEmail}", "broken": }',
-                  'expected': 'The server returns a 400 Bad Request status with a "Malformed JSON" error message.',
+                  'action': 'Send a request to the {endpoint} with invalid data',
+                  'data': 'Invalid payload',
+                  'expected': 'The service returns a clear notification identifying the input error.',
                 },
                 {
-                  'action': 'Submit a request to {endpoint} with a field exceeding the database limit',
-                  'data': '{"description":"' + 'A' * 4000 + '"}',
-                  'expected': 'The server rejects the request with a 413 Payload Too Large or 400 Bad Request status.',
-                },
-                {
-                  'action': 'Verify that no side effects or new records were created for {feature}',
-                  'data': '',
-                  'expected': 'A subsequent LIST request confirms the resource count remains unchanged.',
+                  'action': 'Send a request with a payload that exceeds system limitations',
+                  'data': 'Over-sized payload',
+                  'expected': 'The service rejects the submission and notifies of the limitation.',
                 },
               ],
             ];
@@ -340,39 +308,14 @@ class DeterministicRepair {
             return [
               [
                 {
-                  'action': 'Send a POST request to {endpoint} without an Authorization header',
+                  'action': 'Attempt access to {endpoint} without proper credentials',
                   'data': '',
-                  'expected': 'The server returns a 401 Unauthorized status with a WWW-Authenticate header.',
+                  'expected': 'The service denies the request and ensures security policies are maintained.',
                 },
                 {
-                  'action': 'Attempt a SQL injection attack via the {feature} query parameters',
-                  'data': '{endpoint}?id={sqlPayload}',
-                  'expected': 'The server returns a 400 Bad Request or 200 OK with no results, ensuring no data leak.',
-                },
-                {
-                  'action': 'Send a request using an expired JWT token for {feature}',
-                  'data': 'Authorization: Bearer {expiredToken}',
-                  'expected': 'The server returns a 401 Unauthorized with the message "Token expired".',
-                },
-              ],
-            ];
-          default:
-            return [
-              [
-                {
-                  'action': 'Perform a HEAD request to {endpoint} to check resource availability',
-                  'data': '',
-                  'expected': 'The server returns a 200 OK status with the correct headers but an empty body.',
-                },
-                {
-                  'action': 'Execute a request to {endpoint} with an Idempotency-Key: {reference}',
-                  'data': '',
-                  'expected': 'The request is processed and the server returns a success status.',
-                },
-                {
-                  'action': 'Retry the identical request with the same Idempotency-Key',
-                  'data': '',
-                  'expected': 'The server returns the cached response from the first request with no new side effects.',
+                  'action': 'Attempt to send an expired authentication request',
+                  'data': 'Expired credentials',
+                  'expected': 'The service rejects the request and prompts for valid authentication.',
                 },
               ],
             ];
@@ -381,18 +324,14 @@ class DeterministicRepair {
         return [
           [
             {
-              'action': 'Perform the primary {feature} operation using default parameters',
+              'action': 'Perform the primary {feature} operation',
               'data': '{validEmail}',
-              'expected': 'The system completes the operation and provides a unique reference code {reference}.',
-            },
-            {
-              'action': 'Verify the updated state for {feature} in the audit logs',
-              'data': '',
-              'expected': 'A new entry is recorded with the correct timestamp and user identifier.',
+              'expected': 'The system processes the operation and updates the state as expected.',
             },
           ],
         ];
     }
+    return [];
   }
 
   String _buildExpectedResult(Map<String, dynamic> sk) {

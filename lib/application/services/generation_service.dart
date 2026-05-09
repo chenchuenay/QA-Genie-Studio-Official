@@ -490,28 +490,28 @@ class GenerationService {
           'title': 'Verify $smoothFeature endpoint returns a success status with the correct response format',
           'category': 'positive',
           'data': '{"email":"{validEmail}","token":"{validToken}"}',
-          'expected': 'A success status code is returned, the response body matches the documented format, and the resource is correctly referenced.',
+          'expected': 'The service returns a successful confirmation and the resource is correctly updated.',
           'preconditions': [authPrecondition],
         },
         'api_negative': {
-          'title': 'Verify $smoothFeature rejects malformed payloads with an appropriate error status',
+          'title': 'Verify $smoothFeature handling of invalid inputs',
           'category': 'negative',
           'data': '{"email":"invalid-format","unexpected_key":true}',
-          'expected': 'An appropriate error status code is returned, with a structured response identifying the specific failures.',
+          'expected': 'The service returns a clear error notification identifying the input failure, and the system remains in the original state.',
           'preconditions': [authPrecondition],
         },
         'api_security': {
-          'title': 'Verify $smoothFeature blocks requests with expired or invalid credentials',
+          'title': 'Verify $smoothFeature blocks requests with invalid credentials',
           'category': 'security',
           'data': '{expiredToken}',
-          'expected': 'An unauthorized status code is returned and the response body contains a specific error code indicating the credential issue.',
-          'preconditions': ['The request is sent with an expired session identifier.'],
+          'expected': 'The service denies access and ensures the security of the resource.',
+          'preconditions': ['The request is sent with an invalid or unauthorized session identifier.'],
         },
         'api_rate_limit': {
-          'title': 'Verify $smoothFeature enforces Rate Limiting via documented status codes',
+          'title': 'Verify $smoothFeature manages request frequency',
           'category': 'security',
           'data': '',
-          'expected': 'After exceeding the allowed request rate, the API returns a throttled status code and provides retry information.',
+          'expected': 'The service prevents excessive requests and provides feedback about the limitation.',
           'preconditions': ['The client sends requests exceeding the allowed threshold.'],
         },
       });
@@ -608,9 +608,9 @@ class GenerationService {
       case 'API':
         final endpoint = PlatformRules.apiEndpoint(feature);
         return [
-          TestStep(action: 'Send POST request to $endpoint', data: data, expected: 'Response is received within 2 seconds'),
-          TestStep(action: 'Verify HTTP status code', data: '', expected: 'Status code matches the documented response for this scenario'),
-          TestStep(action: 'Examine response payload', data: '', expected: 'Response contains a correlation ID and no sensitive implementation details'),
+          TestStep(action: 'Send request to $endpoint', data: data, expected: 'Response is received'),
+          TestStep(action: 'Verify operation success', data: '', expected: 'The result matches the expected resource update.'),
+          TestStep(action: 'Examine response contents', data: '', expected: 'Response contains the appropriate confirmation.'),
         ];
       case 'Mobile':
         final openActions = ['Open the $feature screen from the app menu', 'Tap the $feature icon in the navigation bar', 'Launch the $feature view from the home screen'];

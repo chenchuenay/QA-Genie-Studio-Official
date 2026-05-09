@@ -284,21 +284,21 @@ class QaHeuristicsEngine {
 
   static String _webExpected(String category, String domain, String subject) {
     if (category == 'security') {
-      return 'The browser prevents the unsafe operation, displays a secure validation message in the DOM, preserves the current user session cookie, and ensures no sensitive implementation details or stack traces are visible in the UI or console.';
+      return 'The browser prevents the unsafe operation, displays a secure validation message, maintains the current session security, and ensures no sensitive system details or debug information are visible to the user.';
     }
     if (category == 'negative' || category == 'validation') {
-      return 'The application blocks the form submission, applies the "error" CSS class to the invalid fields, maintains all other user-entered data, and displays a specific, actionable error message (e.g., "Invalid email format") near the affected input.';
+      return 'The application blocks the form submission, highlights the invalid fields with an error state, maintains all other user-entered data, and displays a specific, actionable error message (e.g., "Invalid email format") near the affected input.';
     }
     if (category == 'boundary') {
-      return 'The input field enforces the character limit at the DOM level, prevents further typing, and displays a "limit reached" indicator or character counter that matches the defined boundary requirements.';
+      return 'The input field enforces the character limit, prevents further typing once the limit is reached, and displays a "limit reached" indicator or character counter that matches the requirement.';
     }
     if (category == 'session') {
-      return 'The application redirects the user to the login page upon session expiry, clears local storage/session storage as per policy, and ensures that restricted routes return a 401/403 equivalent UI state.';
+      return 'The application redirects the user to the login page upon session expiry, ensures all local session data is cleared, and verifies that restricted pages are no longer accessible without re-authentication.';
     }
     if (domain == 'payment') {
-      return 'The checkout page displays a unique transaction reference ID, updates the "Order History" view with a "Pending" or "Success" status, and disables the payment button to prevent race conditions or duplicate charges.';
+      return 'The checkout page displays a unique transaction reference, updates the history view with the appropriate status, and ensures the payment action is disabled to prevent duplicate processing.';
     }
-    return 'The $subject page persists the submitted data, displays a green success toast or banner with a unique ID, and the browser URL updates to reflect the new resource or dashboard state.';
+    return 'The $subject page persists the submitted data, displays a success notification or banner, and the application view updates to reflect the new resource or dashboard state.';
   }
 
   static String _mobileExpected(
@@ -307,40 +307,40 @@ class QaHeuristicsEngine {
     String subject,
   ) {
     if (category == 'security') {
-      return 'The app terminates the risky action, clears sensitive data from the view hierarchy (preventing screen scraping), and displays a system-level alert or standard security notification.';
+      return 'The app terminates the risky action, ensures sensitive data is not visible on the screen, and displays a standard security notification or alert.';
     }
     if (category == 'negative' || category == 'validation') {
-      return 'The screen prevents progression, triggers a haptic feedback pulse, highlights the invalid field with a red border, and ensures the on-screen keyboard remains active for immediate correction.';
+      return 'The screen prevents progression, provides visual or tactile feedback for the error, highlights the invalid field, and ensures the input method remains available for immediate correction.';
     }
     if (category == 'boundary') {
-      return 'The mobile app enforces the input constraint without UI lag, ensuring that long strings are truncated with ellipses "..." or wrapped correctly within the viewport without breaking the layout.';
+      return 'The app enforces the input constraint without performance lag, ensuring that long inputs are handled gracefully (e.g., truncated or wrapped) within the mobile screen boundaries.';
     }
     if (category == 'session') {
-      return 'The application secure storage (Keychain/Keystore) is updated, the app transitions smoothly between foreground/background without session loss, and the user is routed to the "Get Started" screen if the session is invalid.';
+      return 'The application session is updated in secure storage, the app transitions smoothly between foreground and background without data loss, and the user is routed to the appropriate start screen if the session is invalid.';
     }
     if (domain == 'payment') {
-      return 'The app displays the final "Payment Successful" screen, provides a shareable transaction receipt, and the local database is updated to reflect the new account balance or subscription tier.';
+      return 'The app displays the final payment status screen, provides a shareable transaction reference, and updates the local view to reflect the new account or subscription status.';
     }
-    return 'The $subject screen accepts the user gesture (tap/swipe), triggers a smooth Hero transition to the success state, and displays a unique reference number (e.g., APP-REF-XXXX) for the completed operation.';
+    return 'The $subject screen accepts the user gesture, performs a smooth visual transition to the success state, and displays a unique reference number for the completed operation.';
   }
 
   static String _apiExpected(String category, String domain, String subject) {
     if (category == 'security') {
-      return 'The service rejects the request with a 401 Unauthorized or 403 Forbidden status code, returns a standard RFC-compliant error body, and logs the attempt with a unique request-id for security auditing.';
+      return 'The service rejects the request with an unauthorized or forbidden outcome, returns a standard error message without internal system details, and ensures the attempt is recorded for security monitoring.';
     }
     if (category == 'negative' || category == 'validation') {
-      return 'The server returns a 400 Bad Request or 422 Unprocessable Entity status, includes a JSON body with a "validation_errors" array, and ensures the database state remains unmodified.';
+      return 'The service returns a client error response, provides clear information identifying the invalid inputs, and confirms that the system state was not altered.';
     }
     if (category == 'boundary') {
-      return 'The API returns a 413 Payload Too Large or 429 Too Many Requests status, including appropriate "Retry-After" headers and a message indicating the specific quota or limit breached.';
+      return 'The service returns a request limit error, indicates that the request was too large or frequent, and ensures the system remains protected.';
     }
     if (category == 'session') {
-      return 'The response returns a 200 OK or 201 Created with a valid "access_token" (JWT) and "refresh_token" in the JSON payload, matching the documented authentication schema.';
+      return 'The service returns a successful authentication result with a secure session identifier, matching the required security structure.';
     }
     if (domain == 'payment') {
-      return 'The response returns a 201 Created status, includes a "transaction_id" (UUID v4), and the "status" field in the response body is set to "captured" or "processed".';
+      return 'The service returns a successful confirmation, includes a unique transaction record, and validates that the requested payment was processed.';
     }
-    return 'The $subject endpoint returns a 200 OK status code, the response body contains the requested resource with all mandatory fields populated, and the "Cache-Control" headers are correctly set.';
+    return 'The $subject endpoint returns a success response, the returned data contains the requested information, and all expected resource fields are present.';
   }
 
   static bool _hasAny(String text, List<String> terms) {
