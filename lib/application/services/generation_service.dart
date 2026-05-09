@@ -359,12 +359,12 @@ class GenerationService {
     // PRO mode checks after initial filtering
     if (isProMode) {
       if (seenCategories.length < requiredCategories) {
-        // This check is more for reporting; filtering based on it is complex here
-        // print('PRO Mode Warning: Not enough distinct categories generated. Found: ${seenCategories.length}');
+        // Log warning if category diversity is not met
+        print('PRO Mode Warning: Not enough distinct categories generated. Found: ${seenCategories.length}/${requiredCategories}.');
       }
       if (actionVerbs.length < requiredVerbs) {
-        // Similar to categories, for reporting and potential future filtering
-        // print('PRO Mode Warning: Not enough unique action verbs. Found: ${actionVerbs.length}');
+        // Log warning if verb uniqueness is not met
+        print('PRO Mode Warning: Not enough unique action verbs. Found: ${actionVerbs.length}/${requiredVerbs}.');
       }
       // Logic for checking repeated step sequence patterns needs more complex analysis
       // For now, rely on step sequence check above.
