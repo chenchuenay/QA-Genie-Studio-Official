@@ -1,3 +1,4 @@
+import 'package:qa_app/application/services/generation_result.dart';
 import 'package:qa_app/application/services/generation_service.dart';
 import 'package:qa_app/features/monetization/logic/usage_manager.dart';
 import 'package:qa_app/data/sources/local/database_service.dart';
@@ -6,7 +7,7 @@ import 'package:qa_app/data/models/test_case_model.dart';
 class GenerateTestCasesUseCase {
   final GenerationService _service = GenerationService();
 
-  Future<List<TestCaseModel>> execute({
+  Future<GenerationResult> execute({
     required String module,
     required String feature,
     required String platform,
@@ -27,7 +28,7 @@ class GenerateTestCasesUseCase {
       startIndex = (maxIdx != null ? (maxIdx as int) : 0) + 1;
     });
 
-    final cases = await _service.execute(
+    final result = await _service.execute(
       module: module,
       feature: feature,
       platform: platform,
@@ -36,6 +37,6 @@ class GenerateTestCasesUseCase {
       startIndex: startIndex,
     );
 
-    return cases;
+    return result;
   }
 }

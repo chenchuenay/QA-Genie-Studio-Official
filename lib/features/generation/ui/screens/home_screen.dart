@@ -426,7 +426,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           f = fCtrl.text.trim(),
           p = platform,
           n = cCtrl.text.trim();
-      final cases = await gen.execute(
+      final result = await gen.execute(
         module: m,
         feature: f,
         platform: p,
@@ -442,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       await BetaManager.touch();
       await AdService().showInterstitialIfAppropriate();
       await _refreshStatus();
-      final generationWarning = GenerationService.lastWarning;
+      final generationWarning = result.warning;
       if (mounted && generationWarning != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

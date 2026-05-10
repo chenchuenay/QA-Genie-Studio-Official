@@ -1,3 +1,4 @@
+import 'package:qa_app/application/services/generation_result.dart';
 import 'package:qa_app/core/utils/priority_utils.dart';
 import 'package:qa_app/core/utils/id_generator.dart';
 import 'package:qa_app/data/datasources/remote/generation_api.dart';
@@ -15,10 +16,8 @@ class GenerationService {
   final GenerationApi _api = GenerationApi();
   bool _isGenerating = false;
   static GenerationMetrics _lastMetrics = const GenerationMetrics();
-  static String? _lastWarning;
 
   static GenerationMetrics get lastMetrics => _lastMetrics;
-  static String? get lastWarning => _lastWarning;
 
   static const String PROMPT_VERSION = "v1.4";
 
@@ -182,7 +181,7 @@ class GenerationService {
     return score;
   }
 
-  Future<List<TestCaseModel>> execute({
+  Future<GenerationResult> execute({
     required String module,
     required String feature,
     required String platform,
@@ -194,7 +193,7 @@ class GenerationService {
     if (_isGenerating) return [];
     _isGenerating = true;
     try {
-      return await _performGeneration(
+      final List<TestCaseModel> generatedCases = await _performGeneration(
         module: module,
         feature: feature,
         platform: platform,
