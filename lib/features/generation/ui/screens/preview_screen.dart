@@ -18,7 +18,8 @@ class PreviewScreen extends StatefulWidget {
   const PreviewScreen({super.key, required this.testCases, required this.moduleName, required this.feature, required this.platform, required this.suiteId});
   @override State<PreviewScreen> createState() => _PreviewScreenState();
 }
-class _PreviewScreenState extends State<PreviewScreen> {
+class _PreviewScreenState extends State<PreviewScreen>
+    with WidgetsBindingObserver {
   bool isEditable = false;
   late List<TestCaseModel> originalData, workingData;
   final _exportUseCase = ExportTestCasesUseCase();
