@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/core/config/app_config.dart';
 import 'package:qa_app/core/theme/constants.dart';
+import 'package:qa_app/core/config/app_config.dart';
 import 'package:qa_app/core/utils/dialog_utils.dart';
-import 'package:qa_app/application/services/generation_service.dart';
-import 'package:qa_app/domain/usecases/generate_test_cases_use_case.dart';
-import 'package:qa_app/domain/usecases/save_test_suite_use_case.dart';
-import 'package:qa_app/features/beta/logic/beta_manager.dart';
-import 'package:qa_app/features/generation/ui/screens/preview_screen.dart';
-import 'package:qa_app/features/monetization/logic/usage_manager.dart';
-import 'package:qa_app/features/monetization/ads/ad_service.dart';
 import 'package:qa_app/presentation/widgets/ad_dialog.dart';
+import 'package:qa_app/features/beta/logic/beta_manager.dart';
+import 'package:qa_app/features/monetization/ads/ad_service.dart';
+import 'package:qa_app/domain/usecases/save_test_suite_use_case.dart';
+import 'package:qa_app/features/monetization/logic/usage_manager.dart';
+import 'package:qa_app/domain/usecases/generate_test_cases_use_case.dart';
+import 'package:qa_app/features/generation/ui/screens/preview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   static final constraintsKey = GlobalKey();
@@ -432,7 +431,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         platform: p,
         notes: n,
       );
-    final cases = result.cases;
+      final cases = result.cases;
       final suiteId = await save.execute(
         module: m,
         feature: f,

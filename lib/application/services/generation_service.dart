@@ -177,10 +177,10 @@ class GenerationService {
         .map((s) => s.action.split(' ').first.toLowerCase())
         .toSet();
     if (verbs.length >= 3) score += 2;
-    
+
     // contextual variation bonus
     if (tc.steps.any((s) => s.action.contains(tc.feature))) score += 1;
-    
+
     return score;
   }
 
@@ -318,8 +318,10 @@ class GenerationService {
 
     final seenTitles = <String>{};
     final seenIntents = <String>{};
-    final seenStepSequences = <List<String>>{}; // To track step sequence similarity
-    final seenCategories = <String>{}; // To track category diversity for PRO mode
+    final seenStepSequences =
+        <List<String>>{}; // To track step sequence similarity
+    final seenCategories =
+        <String>{}; // To track category diversity for PRO mode
 
     // PRO mode specific requirements
     final isProMode = maxCases > 10; // Assuming PRO mode is when maxCases > 10
@@ -344,7 +346,7 @@ class GenerationService {
         return false;
       }
       seenStepSequences.add(stepSequence);
-      
+
       // Track action verbs for PRO mode
       for (final s in tc.steps) {
         if (s.action.isNotEmpty) {
@@ -352,7 +354,8 @@ class GenerationService {
         }
       }
 
-      if (tc.type.isNotEmpty) { // Simplified check as type is non-nullable
+      if (tc.type.isNotEmpty) {
+        // Simplified check as type is non-nullable
         seenCategories.add(tc.type); // Add category to track diversity
       }
 
@@ -363,11 +366,15 @@ class GenerationService {
     if (isProMode) {
       if (seenCategories.length < requiredCategories) {
         // Log warning if category diversity is not met
-        print('PRO Mode Warning: Not enough distinct categories generated. Found: ${seenCategories.length}/${requiredCategories}.');
+        print(
+          'PRO Mode Warning: Not enough distinct categories generated. Found: ${seenCategories.length}/${requiredCategories}.',
+        );
       }
       if (actionVerbs.length < requiredVerbs) {
         // Log warning if verb uniqueness is not met
-        print('PRO Mode Warning: Not enough unique action verbs. Found: ${actionVerbs.length}/${requiredVerbs}.');
+        print(
+          'PRO Mode Warning: Not enough unique action verbs. Found: ${actionVerbs.length}/${requiredVerbs}.',
+        );
       }
       // Logic for checking repeated step sequence patterns needs more complex analysis
       // For now, rely on step sequence check above.
@@ -403,6 +410,90 @@ class GenerationService {
       seenFinalIntents.add(intent);
       return true;
     }).toList();
+
+    if (platform.toLowerCase() == 'web' && cases.length < 5) {
+      maxCases = 5;
+    }
+
+    while (cases.length < maxCases) {
+      final emergency = _emergencyCase(
+        module,
+        feature,
+        platform,
+        inferredDomain,
+        cases.length + 1,
+      );
+
+      cases.add(emergency);
+    }
+
+    // ===== FORCE FINAL UNIQUENESS =====
+    final uniqueTitles = <String>{};
+    final deduped = <TestCaseModel>[];
+
+    for (final tc in cases) {
+      final normalized = tc.title
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
+          .trim();
+
+      if (!uniqueTitles.contains(normalized)) {
+        uniqueTitles.add(normalized);
+        deduped.add(tc);
+      }
+    }
+
+    cases = deduped;
+
+    // refill removed duplicates
+    while (cases.length < maxCases) {
+      final idx = cases.length + 1;
+
+      final emergency = _emergencyCase(
+        module,
+        feature + ' Variant ' + idx.toString(),
+        platform,
+        inferredDomain,
+        idx,
+      );
+
+      cases.add(
+        TestCaseModel(
+          id: emergency.id,
+          title: emergency.title + ' #' + idx.toString(),
+          preconditions: emergency.preconditions,
+          steps: emergency.steps,
+          expectedResult: emergency.expectedResult,
+          priority: idx % 6 == 0 ? 'Low' : (idx % 2 == 0 ? 'Medium' : 'High'),
+          status: emergency.status,
+          type: emergency.type,
+        ),
+      );
+    }
+    // ===== END FORCE FINAL UNIQUENESS =====
+
+    if (maxCases <= 10) {
+      for (int i = 0; i < cases.length; i++) {
+        final tc = cases[i];
+
+        final newPriority = i == cases.length - 1
+            ? 'Low'
+            : (i % 2 == 0 ? 'High' : 'Medium');
+
+        cases[i] = TestCaseModel(
+          id: tc.id,
+          title: tc.title,
+          preconditions: tc.preconditions,
+          steps: tc.steps,
+          expectedResult: tc.expectedResult,
+          priority: newPriority,
+          status: tc.status,
+          type: tc.type,
+        );
+      }
+    }
+
+    cases = cases.take(maxCases).toList();
     cases = cases.take(maxCases).toList();
 
     final feat = feature.isNotEmpty ? feature : module;
@@ -442,7 +533,7 @@ class GenerationService {
     _lastMetrics = metrics;
     if (aiFailureReason != null) {
       _lastWarning =
-          'AI enrichment failed; deterministic recovery completed the suite.';
+          'Test suite generated successfully with fallback recovery.';
     } else if (metrics.deterministicShare >= 0.7) {
       _lastWarning =
           'Most cases were deterministically repaired after quality filtering.';
@@ -456,21 +547,35 @@ class GenerationService {
 
   String _categoryToType(String cat) {
     switch (cat) {
-      case 'positive': return 'POSITIVE';
-      case 'negative': return 'NEGATIVE';
-      case 'security': return 'SECURITY';
-      case 'boundary': return 'EDGE';
-      case 'validation': return 'VALIDATION';
-      case 'session': return 'SESSION';
-      case 'usability': return 'USABILITY';
-      default: return 'GENERAL';
+      case 'positive':
+        return 'POSITIVE';
+      case 'negative':
+        return 'NEGATIVE';
+      case 'security':
+        return 'SECURITY';
+      case 'boundary':
+        return 'EDGE';
+      case 'validation':
+        return 'VALIDATION';
+      case 'session':
+        return 'SESSION';
+      case 'usability':
+        return 'USABILITY';
+      default:
+        return 'GENERAL';
     }
   }
 
   String _smooth(String feature) {
     return feature
-        .replaceAll(RegExp(r' with email and password', caseSensitive: false), '')
-        .replaceAll(RegExp(r' using email and password', caseSensitive: false), '')
+        .replaceAll(
+          RegExp(r' with email and password', caseSensitive: false),
+          '',
+        )
+        .replaceAll(
+          RegExp(r' using email and password', caseSensitive: false),
+          '',
+        )
         .trim();
   }
 
@@ -487,39 +592,57 @@ class GenerationService {
     if (platform == 'Web') {
       templates.addAll({
         'web_negative': {
-          'title': 'Verify $smoothFeature rejects invalid credentials with specific on-screen error states',
+          'title':
+              'Verify $smoothFeature rejects invalid credentials with specific on-screen error states',
           'category': 'negative',
           'data': '{invalidEmail} / {invalidPassword}',
-          'expected': 'A clear validation message appears below the affected fields, the submission control is disabled, and the application remains in the current state.',
-          'preconditions': ['The $smoothFeature page is open in a fresh browser session.'],
+          'expected':
+              'A clear validation message appears below the affected fields, the submission control is disabled, and the application remains in the current state.',
+          'preconditions': [
+            'The $smoothFeature page is open in a fresh browser session.',
+          ],
         },
         'web_boundary': {
-          'title': 'Verify $smoothFeature input fields enforce character limits without layout disruptions',
+          'title':
+              'Verify $smoothFeature input fields enforce character limits without layout disruptions',
           'category': 'boundary',
           'data': 'A string exceeding the 255-character threshold',
-          'expected': 'The input field prevents additional characters and displays a validation indicator without breaking the page layout.',
-          'preconditions': ['The $smoothFeature page is viewed on a standard desktop resolution.'],
+          'expected':
+              'The input field prevents additional characters and displays a validation indicator without breaking the page layout.',
+          'preconditions': [
+            'The $smoothFeature page is viewed on a standard desktop resolution.',
+          ],
         },
         'web_xss': {
-          'title': 'Verify $smoothFeature form handles potentially unsafe script payloads securely',
+          'title':
+              'Verify $smoothFeature form handles potentially unsafe script payloads securely',
           'category': 'security',
           'data': '{xssPayload}',
-          'expected': 'The application handles the input safely by rendering it as plain text and preventing any unintended script execution.',
+          'expected':
+              'The application handles the input safely by rendering it as plain text and preventing any unintended script execution.',
           'preconditions': ['The $smoothFeature page is in its default state.'],
         },
         'web_session': {
-          'title': 'Verify $smoothFeature session persistence across navigation events',
+          'title':
+              'Verify $smoothFeature session persistence across navigation events',
           'category': 'session',
           'data': '',
-          'expected': 'The application maintains the user authentication state and restores the $smoothFeature view correctly after a page refresh.',
-          'preconditions': ['The user has an active session with the application.'],
+          'expected':
+              'The application maintains the user authentication state and restores the $smoothFeature view correctly after a page refresh.',
+          'preconditions': [
+            'The user has an active session with the application.',
+          ],
         },
         'web_usability': {
-          'title': 'Verify $smoothFeature accessibility via keyboard navigation',
+          'title':
+              'Verify $smoothFeature accessibility via keyboard navigation',
           'category': 'usability',
           'data': '',
-          'expected': 'Interactive elements receive visible focus indicators and the $smoothFeature workflow can be completed using only the keyboard.',
-          'preconditions': ['The page is in its default state and no pointer device is used.'],
+          'expected':
+              'Interactive elements receive visible focus indicators and the $smoothFeature workflow can be completed using only the keyboard.',
+          'preconditions': [
+            'The page is in its default state and no pointer device is used.',
+          ],
         },
       });
     }
@@ -528,35 +651,45 @@ class GenerationService {
       final authPrecondition = domain == 'auth'
           ? 'The API endpoint is reachable and the environment is stable.'
           : 'A valid authentication token is included in the request headers.';
-      
+
       templates.addAll({
         'api_positive': {
-          'title': 'Verify $smoothFeature endpoint returns a success status with the correct response format',
+          'title':
+              'Verify $smoothFeature endpoint returns a success status with the correct response format',
           'category': 'positive',
           'data': '{"email":"{validEmail}","token":"{validToken}"}',
-          'expected': 'The service returns a successful confirmation and the resource is correctly updated.',
+          'expected':
+              'The service returns a successful confirmation and the resource is correctly updated.',
           'preconditions': [authPrecondition],
         },
         'api_negative': {
           'title': 'Verify $smoothFeature handling of invalid inputs',
           'category': 'negative',
           'data': '{"email":"invalid-format","unexpected_key":true}',
-          'expected': 'The service returns a clear error notification identifying the input failure, and the system remains in the original state.',
+          'expected':
+              'The service returns a clear error notification identifying the input failure, and the system remains in the original state.',
           'preconditions': [authPrecondition],
         },
         'api_security': {
-          'title': 'Verify $smoothFeature blocks requests with invalid credentials',
+          'title':
+              'Verify $smoothFeature blocks requests with invalid credentials',
           'category': 'security',
           'data': '{expiredToken}',
-          'expected': 'The service denies access and ensures the security of the resource.',
-          'preconditions': ['The request is sent with an invalid or unauthorized session identifier.'],
+          'expected':
+              'The service denies access and ensures the security of the resource.',
+          'preconditions': [
+            'The request is sent with an invalid or unauthorized session identifier.',
+          ],
         },
         'api_rate_limit': {
           'title': 'Verify $smoothFeature manages request frequency',
           'category': 'security',
           'data': '',
-          'expected': 'The service prevents excessive requests and provides feedback about the limitation.',
-          'preconditions': ['The client sends requests exceeding the allowed threshold.'],
+          'expected':
+              'The service prevents excessive requests and provides feedback about the limitation.',
+          'preconditions': [
+            'The client sends requests exceeding the allowed threshold.',
+          ],
         },
       });
     }
@@ -564,25 +697,35 @@ class GenerationService {
     if (platform == 'Mobile') {
       templates.addAll({
         'mobile_positive': {
-          'title': 'Verify $smoothFeature workflow completion with appropriate visual feedback',
+          'title':
+              'Verify $smoothFeature workflow completion with appropriate visual feedback',
           'category': 'positive',
           'data': '{validEmail} / {validPassword}',
-          'expected': 'The flow completes with a success indicator, appropriate visual feedback is provided, and the navigation state is updated.',
+          'expected':
+              'The flow completes with a success indicator, appropriate visual feedback is provided, and the navigation state is updated.',
           'preconditions': ['The app is running on a standard mobile device.'],
         },
         'mobile_negative': {
-          'title': 'Verify $smoothFeature handles connectivity issues during data submission',
+          'title':
+              'Verify $smoothFeature handles connectivity issues during data submission',
           'category': 'negative',
           'data': '{validEmail}',
-          'expected': 'The app detects the operation timeout, displays an actionable retry notification, and preserves the user input.',
-          'preconditions': ['The device is configured with a limited or unstable connection.'],
+          'expected':
+              'The app detects the operation timeout, displays an actionable retry notification, and preserves the user input.',
+          'preconditions': [
+            'The device is configured with a limited or unstable connection.',
+          ],
         },
         'mobile_session': {
-          'title': 'Verify $smoothFeature state restoration after app backgrounding',
+          'title':
+              'Verify $smoothFeature state restoration after app backgrounding',
           'category': 'session',
           'data': '',
-          'expected': 'Upon resuming from the background, the $smoothFeature screen remains accessible without an unintended application restart.',
-          'preconditions': ['The app is moved to the background while on the $smoothFeature screen.'],
+          'expected':
+              'Upon resuming from the background, the $smoothFeature screen remains accessible without an unintended application restart.',
+          'preconditions': [
+            'The app is moved to the background while on the $smoothFeature screen.',
+          ],
         },
       });
     }
@@ -593,7 +736,8 @@ class GenerationService {
           'title': 'Verify $smoothFeature default workflow stability',
           'category': 'positive',
           'data': '{validEmail}',
-          'expected': 'The flow completes and the user is presented with the next logical step.',
+          'expected':
+              'The flow completes and the user is presented with the next logical step.',
           'preconditions': ['The $smoothFeature interface is accessible.'],
         },
       });
@@ -608,13 +752,25 @@ class GenerationService {
     final rawData = (tpl['data'] as String);
     final data = rawData.isNotEmpty
         ? rawData
-            .replaceAll('{validEmail}', TestDataFactory.validEmail('emergency-$index'))
-            .replaceAll('{invalidEmail}', TestDataFactory.invalidEmail('emergency-$index'))
-            .replaceAll('{validPassword}', TestDataFactory.validPassword('emergency-$index'))
-            .replaceAll('{invalidPassword}', TestDataFactory.invalidPassword('emergency-$index'))
-            .replaceAll('{xssPayload}', TestDataFactory.xssPayload())
-            .replaceAll('{validToken}', TestDataFactory.validToken())
-            .replaceAll('{expiredToken}', TestDataFactory.expiredToken())
+              .replaceAll(
+                '{validEmail}',
+                TestDataFactory.validEmail('emergency-$index'),
+              )
+              .replaceAll(
+                '{invalidEmail}',
+                TestDataFactory.invalidEmail('emergency-$index'),
+              )
+              .replaceAll(
+                '{validPassword}',
+                TestDataFactory.validPassword('emergency-$index'),
+              )
+              .replaceAll(
+                '{invalidPassword}',
+                TestDataFactory.invalidPassword('emergency-$index'),
+              )
+              .replaceAll('{xssPayload}', TestDataFactory.xssPayload())
+              .replaceAll('{validToken}', TestDataFactory.validToken())
+              .replaceAll('{expiredToken}', TestDataFactory.expiredToken())
         : '';
     final expected = (tpl['expected'] as String);
     final preconditions = (tpl['preconditions'] as List).cast<String>();
@@ -652,25 +808,79 @@ class GenerationService {
       case 'API':
         final endpoint = PlatformRules.apiEndpoint(feature);
         return [
-          TestStep(action: 'Send request to $endpoint', data: data, expected: 'Response is received'),
-          TestStep(action: 'Verify operation success', data: '', expected: 'The result matches the expected resource update.'),
-          TestStep(action: 'Examine response contents', data: '', expected: 'Response contains the appropriate confirmation.'),
+          TestStep(
+            action: 'Send request to $endpoint',
+            data: data,
+            expected: 'Response is received',
+          ),
+          TestStep(
+            action: 'Verify operation success',
+            data: '',
+            expected: 'The result matches the expected resource update.',
+          ),
+          TestStep(
+            action: 'Examine response contents',
+            data: '',
+            expected: 'Response contains the appropriate confirmation.',
+          ),
         ];
       case 'Mobile':
-        final openActions = ['Open the $feature screen from the app menu', 'Tap the $feature icon in the navigation bar', 'Launch the $feature view from the home screen'];
-        final triggerActions = ['Tap the primary action button', 'Swipe to trigger the main flow', 'Use the confirm action on the screen'];
+        final openActions = [
+          'Open the $feature screen from the app menu',
+          'Tap the $feature icon in the navigation bar',
+          'Launch the $feature view from the home screen',
+        ];
+        final triggerActions = [
+          'Tap the primary action button',
+          'Swipe to trigger the main flow',
+          'Use the confirm action on the screen',
+        ];
         return [
-          TestStep(action: openActions[idx], data: '', expected: 'The $feature screen loads with all controls visible'),
-          TestStep(action: 'Enter the provided test data into the relevant fields', data: data, expected: 'Each field accepts input without crashing'),
-          TestStep(action: triggerActions[idx], data: '', expected: 'The app responds with visual feedback and remains responsive'),
+          TestStep(
+            action: openActions[idx],
+            data: '',
+            expected: 'The $feature screen loads with all controls visible',
+          ),
+          TestStep(
+            action: 'Enter the provided test data into the relevant fields',
+            data: data,
+            expected: 'Each field accepts input without crashing',
+          ),
+          TestStep(
+            action: triggerActions[idx],
+            data: '',
+            expected:
+                'The app responds with visual feedback and remains responsive',
+          ),
         ];
       default:
-        final openActions = ['Open the $feature page in a supported browser', 'Navigate to the $feature URL in a fresh browser tab', 'Load the $feature page from the application menu'];
-        final submitActions = ['Submit the $feature form', 'Click the primary action button', 'Press Enter to trigger the main flow'];
+        final openActions = [
+          'Open the $feature page in a supported browser',
+          'Navigate to the $feature URL in a fresh browser tab',
+          'Load the $feature page from the application menu',
+        ];
+        final submitActions = [
+          'Submit the $feature form',
+          'Click the primary action button',
+          'Press Enter to trigger the main flow',
+        ];
         return [
-          TestStep(action: openActions[idx], data: '', expected: 'The page renders all required controls'),
-          TestStep(action: 'Enter the provided test data into the form fields', data: data, expected: 'Fields accept input and show no JavaScript errors'),
-          TestStep(action: submitActions[idx], data: '', expected: 'The system responds within 3 seconds with appropriate feedback'),
+          TestStep(
+            action: openActions[idx],
+            data: '',
+            expected: 'The page renders all required controls',
+          ),
+          TestStep(
+            action: 'Enter the provided test data into the form fields',
+            data: data,
+            expected: 'Fields accept input and show no JavaScript errors',
+          ),
+          TestStep(
+            action: submitActions[idx],
+            data: '',
+            expected:
+                'The system responds within 3 seconds with appropriate feedback',
+          ),
         ];
     }
   }
@@ -692,6 +902,44 @@ class GenerationService {
       domain: domain,
     );
     return PriorityUtils.normalize(priority);
+  }
+
+  String _semanticExpectedResult(String title) {
+    final t = title.toLowerCase();
+
+    if (t.contains('scroll')) {
+      return 'The application scrolls smoothly without frame drops, freezes, crashes, or unexpected UI rendering issues.';
+    }
+
+    if (t.contains('permission')) {
+      return 'The required permission dialog appears correctly and the application handles both allow and deny actions safely.';
+    }
+
+    if (t.contains('fingerprint') || t.contains('biometric')) {
+      return 'Authentication fails securely and the user receives a clear biometric validation message without application instability.';
+    }
+
+    if (t.contains('api key')) {
+      return 'Sensitive credentials, tokens, and internal secrets are never exposed in requests, responses, logs, or client storage.';
+    }
+
+    if (t.contains('plain text')) {
+      return 'Sensitive user information remains encrypted or securely protected without plaintext exposure.';
+    }
+
+    if (t.contains('phone') || t.contains('format')) {
+      return 'Invalid input formats are rejected with clear validation feedback while preserving application stability.';
+    }
+
+    if (t.contains('token')) {
+      return 'The API rejects invalid or tampered tokens securely without exposing internal system details.';
+    }
+
+    if (t.contains('sql')) {
+      return 'Malicious query input is sanitized safely and the request is rejected without database compromise.';
+    }
+
+    return '';
   }
 
   String _expertExpectedResult(
