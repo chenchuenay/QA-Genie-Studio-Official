@@ -58,7 +58,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       print('EXPORT: Starting $type with ${originalData.length} cases');
       print('EXPORT: actual cases count = ${originalData.length}');
       print('EXPORT: actual cases count = ${originalData.length}');
-      await _exportUseCase.execute(type: type, cases: originalData, moduleName: widget.moduleName, featureName: widget.feature);
+      await _exportUseCase.execute(type: type, cases: workingData, moduleName: widget.moduleName, featureName: widget.feature);
       await UsageManager.incrementExport();
       print('EXPORT: $type completed successfully');
       if (mounted) showDialog(context: context, builder: (_) => ExportSuccessDialog(type: type, count: workingData.length, moduleName: widget.moduleName, onShareAgain: () => _export(type)));

@@ -67,3 +67,5 @@ _trash/
 
 # macOS
 .DS_Store
+project_context_snapshot.dart
+project_snapshot_part_*.dart
