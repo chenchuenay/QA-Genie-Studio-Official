@@ -432,6 +432,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         platform: p,
         notes: n,
       );
+      final cases = result.cases;
       final suiteId = await save.execute(
         module: m,
         feature: f,

@@ -9,33 +9,33 @@ void main() async {
 
   // 1. Web Login Suite
   print('\n[1] Generating Web Login Suite...');
-  final webCases = await service.execute(
+  final resultWeb = await service.execute(
     module: 'Authentication',
     feature: 'Login',
     platform: 'Web',
     maxCases: 3,
   );
-  _auditSuite('Web', webCases);
+  _auditSuite('Web', resultWeb.cases);
 
   // 2. Mobile Login Suite
   print('\n[2] Generating Mobile Login Suite...');
-  final mobileCases = await service.execute(
+  final resultMobile = await service.execute(
     module: 'Authentication',
     feature: 'Login',
     platform: 'Mobile',
     maxCases: 3,
   );
-  _auditSuite('Mobile', mobileCases);
+  _auditSuite('Mobile', resultMobile.cases);
 
   // 3. API Login Suite
   print('\n[3] Generating API Login Suite...');
-  final apiCases = await service.execute(
+  final resultApi = await service.execute(
     module: 'Authentication',
     feature: 'Login',
     platform: 'API',
     maxCases: 3,
   );
-  _auditSuite('API', apiCases);
+  _auditSuite('API', resultApi.cases);
 
   print('\n--- AUDIT COMPLETE ---');
 }

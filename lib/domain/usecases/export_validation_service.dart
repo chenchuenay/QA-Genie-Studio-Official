@@ -17,51 +17,24 @@ class ExportValidationService {
     }
 
     final seenIds = <String>{};
-    final seenTitles = <String>{};
 
     for (int i = 0; i < suite.length; i++) {
       final tc = suite[i];
       final idx = i + 1;
 
-      if (tc.id.trim().isEmpty) {
-        errors.add('Case #$idx: ID is empty.');
-      }
-      if (seenIds.contains(tc.id.trim())) {
-        errors.add('Case #$idx: Duplicate ID "${tc.id}".');
-      }
+      if (tc.id.trim().isEmpty) errors.add('Case #$idx: ID is empty.');
+      if (seenIds.contains(tc.id.trim())) errors.add('Case #$idx: Duplicate ID "${tc.id}".');
       seenIds.add(tc.id.trim());
-
-      if (tc.title.trim().isEmpty) {
-        errors.add('Case #$idx: Title is empty.');
-      }
-      final titleLower = tc.title.trim().toLowerCase();
-      if (seenTitles.contains(titleLower)) {
-        errors.add('Case #$idx: Duplicate title "${tc.title}".');
-      }
-      seenTitles.add(titleLower);
-
-      if (tc.expectedResult.trim().isEmpty) {
-        errors.add('Case #$idx ("${tc.title}"): Expected result is empty.');
-      }
-
-      if (tc.steps.length < 3) {
-        errors.add('Case #$idx ("${tc.title}"): Fewer than 3 steps (found ${tc.steps.length}).');
-      }
-
+      if (tc.title.trim().isEmpty) errors.add('Case #$idx: Title is empty.');
+      if (tc.steps.isEmpty) errors.add('Case #$idx ("${tc.title}"): No steps defined.');
       for (int j = 0; j < tc.steps.length; j++) {
-        if (tc.steps[j].action.trim().isEmpty) {
-          errors.add('Case #$idx ("${tc.title}"), Step ${j + 1}: Action is empty.');
-        }
+        if (tc.steps[j].action.trim().isEmpty) errors.add('Case #$idx ("${tc.title}"), Step ${j + 1}: Action is empty.');
       }
-
+      if (tc.expectedResult.trim().isEmpty) errors.add('Case #$idx ("${tc.title}"): Expected result is empty.');
       if (!['High', 'Medium', 'Low'].contains(tc.priority)) {
         errors.add('Case #$idx ("${tc.title}"): Invalid priority "${tc.priority}".');
       }
     }
-
-    return ExportValidationResult(
-      isValid: errors.isEmpty,
-      errors: errors,
-    );
+    return ExportValidationResult(isValid: errors.isEmpty, errors: errors);
   }
 }

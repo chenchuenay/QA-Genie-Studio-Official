@@ -19,6 +19,9 @@ class GenerationService {
 
   static GenerationMetrics get lastMetrics => _lastMetrics;
 
+  String? _lastWarning;
+  String? get lastWarning => _lastWarning;
+
   static const String PROMPT_VERSION = "v1.4";
 
   static const String _systemInstruction =
@@ -190,7 +193,7 @@ class GenerationService {
     int startIndex = 1,
     String domain = 'general',
   }) async {
-    if (_isGenerating) return [];
+    if (_isGenerating) return const GenerationResult(cases: []);
     _isGenerating = true;
     try {
       final List<TestCaseModel> generatedCases = await _performGeneration(
@@ -202,6 +205,7 @@ class GenerationService {
         startIndex: startIndex,
         domain: domain,
       );
+      return GenerationResult(cases: generatedCases, warning: _lastWarning);
     } finally {
       _isGenerating = false;
     }

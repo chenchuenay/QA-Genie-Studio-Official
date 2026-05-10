@@ -13,13 +13,13 @@ void main() async {
     print('\n[Scope: ${scope.key} - ${scope.value} cases per platform]');
     for (var platform in platforms) {
       print('\nGenerating $platform suite...');
-      final cases = await service.execute(
+      final result = await service.execute(
         module: 'Authentication',
         feature: 'Login',
         platform: platform,
         maxCases: scope.value,
       );
-      _auditSuite(platform, scope.key, cases);
+      _auditSuite(platform, scope.key, result.cases);
     }
   }
 

@@ -28,6 +28,7 @@ class _PreviewScreenState extends State<PreviewScreen>
 
   @override void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     originalData = widget.testCases.map((e) => e.copy()).toList();
     workingData = widget.testCases.map((e) => e.copy()).toList();
   }
@@ -38,6 +39,15 @@ class _PreviewScreenState extends State<PreviewScreen>
     setState(() { originalData = workingData.map((e) => e.copy()).toList(); _hasUnsaved = false; });
   }
   Future<bool> _onWillPop() async { await _autoSave(); return true; }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (_hasUnsaved) {
+        _autoSave();
+      }
+    }
+  }
+
   void _toggleEdit() => setState(() => isEditable = !isEditable);
   void _undo() { setState(() { workingData = originalData.map((e) => e.copy()).toList(); _hasUnsaved = false; }); }
   Future<void> _saveAndExitEdit() async {

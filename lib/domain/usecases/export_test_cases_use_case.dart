@@ -34,12 +34,20 @@ class ExportTestCasesUseCase {
     return fallback.length > 20 ? fallback.substring(0, 20) : fallback;
   }
 
+  void _validateOrThrow(List<TestCaseModel> cases) {
+    final validation = ExportValidationService.validate(cases);
+    if (!validation.isValid) {
+      throw Exception('Export validation failed:\n${validation.errors.map((e) => '  - $e').join('\n')}');
+    }
+  }
+
   Future<void> execute({
     required String type,
     required List<TestCaseModel> cases,
     required String moduleName,
     String? featureName,
   }) async {
+    _validateOrThrow(cases);
     await ExportFolderService.getTestCaseDirectory(
       _formatNames[type] ?? type.toUpperCase(),
     );
