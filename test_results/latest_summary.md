@@ -1,6 +1,6 @@
 # QA GENIE HEADLESS AUDIT
 
-Timestamp: 2026-05-10T12:52:30.073780Z
+Timestamp: 2026-05-10T15:11:21.680508Z
 
 ## CORE — Web
 
@@ -9,9 +9,9 @@ Timestamp: 2026-05-10T12:52:30.073780Z
 | Generated Cases | 10 |
 | Unique Titles | 10 |
 | Duplicate Titles | 0 |
-| High | 5 |
+| High | 4 |
 | Medium | 4 |
-| Low | 1 |
+| Low | 2 |
 | Filler Hits | 0 |
 | Realism Score | 10.0/10 |
 | Status | PASS |
@@ -23,9 +23,9 @@ Timestamp: 2026-05-10T12:52:30.073780Z
 | Generated Cases | 10 |
 | Unique Titles | 10 |
 | Duplicate Titles | 0 |
-| High | 5 |
+| High | 4 |
 | Medium | 4 |
-| Low | 1 |
+| Low | 2 |
 | Filler Hits | 0 |
 | Realism Score | 10.0/10 |
 | Status | PASS |
@@ -37,9 +37,9 @@ Timestamp: 2026-05-10T12:52:30.073780Z
 | Generated Cases | 10 |
 | Unique Titles | 10 |
 | Duplicate Titles | 0 |
-| High | 5 |
+| High | 4 |
 | Medium | 4 |
-| Low | 1 |
+| Low | 2 |
 | Filler Hits | 0 |
 | Realism Score | 10.0/10 |
 | Status | PASS |
@@ -51,9 +51,9 @@ Timestamp: 2026-05-10T12:52:30.073780Z
 | Generated Cases | 20 |
 | Unique Titles | 20 |
 | Duplicate Titles | 0 |
-| High | 17 |
-| Medium | 2 |
-| Low | 1 |
+| High | 8 |
+| Medium | 8 |
+| Low | 4 |
 | Filler Hits | 0 |
 | Realism Score | 10.0/10 |
 | Status | PASS |
@@ -65,9 +65,9 @@ Timestamp: 2026-05-10T12:52:30.073780Z
 | Generated Cases | 20 |
 | Unique Titles | 20 |
 | Duplicate Titles | 0 |
-| High | 16 |
-| Medium | 3 |
-| Low | 1 |
+| High | 8 |
+| Medium | 8 |
+| Low | 4 |
 | Filler Hits | 0 |
 | Realism Score | 10.0/10 |
 | Status | PASS |
@@ -80,8 +80,8 @@ Timestamp: 2026-05-10T12:52:30.073780Z
 | Unique Titles | 20 |
 | Duplicate Titles | 0 |
 | High | 8 |
-| Medium | 11 |
-| Low | 1 |
+| Medium | 8 |
+| Low | 4 |
 | Filler Hits | 0 |
 | Realism Score | 10.0/10 |
 | Status | PASS |
