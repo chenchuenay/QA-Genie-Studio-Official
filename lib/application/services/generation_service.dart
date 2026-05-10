@@ -311,7 +311,7 @@ class GenerationService {
     }
 
     final beforeFilter = cases.length;
-    cases = cases.where((tc) => _qualityScore(tc) >= 3).toList();
+    cases = cases.where((tc) => _qualityScore(tc) >= 4).toList();
     cases = cases.where((tc) => !_violatesPlatform(tc, platform)).toList();
     filteredCount = beforeFilter - cases.length;
     aiAccepted = cases.length;
@@ -407,7 +407,7 @@ class GenerationService {
 
     final feat = feature.isNotEmpty ? feature : module;
     int fillNum = cases.length + 1;
-    cases = cases.where((tc) => _passesFinalValidation(tc, platform)).toList();
+    // removed aggressive final re-filter causing suite collapse
     fillNum = cases.length + 1;
     int guard = 0;
     while (cases.length < maxCases && guard < maxCases * 5) {
