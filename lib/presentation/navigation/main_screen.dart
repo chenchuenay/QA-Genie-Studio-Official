@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:qa_app/core/theme/constants.dart';
+import 'package:qa_app/app/theme/constants.dart';
 import 'package:qa_app/core/utils/dialog_utils.dart';
 import 'package:qa_app/features/generation/ui/screens/home_screen.dart';
 import 'package:qa_app/features/suites/ui/screens/suites_screen.dart';
 import 'package:qa_app/presentation/screens/pro_benefits_screen.dart';
 import 'package:qa_app/presentation/widgets/bug_report_button.dart';
 import 'package:qa_app/presentation/widgets/guidelines_dialog.dart';
-import 'package:qa_app/features/monetization/logic/usage_manager.dart';
 import 'package:qa_app/main.dart';
 
 class MainScreen extends StatefulWidget {
@@ -19,21 +18,15 @@ class MainScreen extends StatefulWidget {
 class MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final _suitesKey = GlobalKey<SuitesScreenState>();
-  bool _isPro = false;
   final _starKey = GlobalKey();
 
   @override void initState() {
     super.initState();
-    _checkPro();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showGuidelinesAutomatically();
     });
   }
 
-  Future<void> _checkPro() async {
-    final pro = await UsageManager.isPro();
-    if (mounted) setState(() => _isPro = pro);
-  }
 
   Future<void> _showGuidelinesAutomatically() async {
     final prefs = await SharedPreferences.getInstance();

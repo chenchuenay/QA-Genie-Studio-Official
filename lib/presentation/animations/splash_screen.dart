@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/core/theme/constants.dart';
+import 'package:qa_app/app/theme/constants.dart';
 import 'package:qa_app/features/beta/logic/beta_manager.dart';
 import 'package:qa_app/features/beta/ui/beta_expired_screen.dart';
-import 'package:qa_app/presentation/main_screen.dart';
+import 'package:qa_app/presentation/navigation/main_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:qa_app/application/services/generation_service.dart';
+import 'package:qa_app/engine/generation_service.dart';
 
 Future<void> main() async {
   final started = DateTime.now().toUtc();

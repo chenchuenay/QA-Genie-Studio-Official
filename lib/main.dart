@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:qa_app/core/config/app_config.dart';
+import 'package:qa_app/app/config/app_config.dart';
 import 'package:qa_app/presentation/animations/splash_screen.dart';
 
 void main() async {

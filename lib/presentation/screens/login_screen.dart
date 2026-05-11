@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:qa_app/core/theme/constants.dart';
-import 'package:qa_app/core/config/app_config.dart';
+import 'package:qa_app/app/theme/constants.dart';
+import 'package:qa_app/app/config/app_config.dart';
 
 class LoginScreen extends StatefulWidget {
   final bool firebaseReady;

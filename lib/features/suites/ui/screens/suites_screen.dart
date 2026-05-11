@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/core/theme/constants.dart';
+import 'package:qa_app/app/theme/constants.dart';
 import 'package:qa_app/domain/usecases/get_history_use_case.dart';
-import 'package:qa_app/data/sources/local/database_service.dart';
+import 'package:qa_app/core/database/database_service.dart';
 import 'package:qa_app/features/generation/ui/screens/preview_screen.dart';
 import 'package:qa_app/presentation/screens/upgrade_coming_soon_screen.dart';
 import 'package:qa_app/features/monetization/logic/usage_manager.dart';

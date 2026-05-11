@@ -1,71 +1,17 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# Firebase emulators & debug logs
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
+.cache/
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
+# VS Code (if you ever switch from your current editor)
+.vscode/
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
+# Project-specific temporary folders you accumulated
+project_snapshot/
+backups/
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Flutter / Dart
-.packages
-*.lock
-pubspec.lock
-
-# Android
-android/app/google-services.json
-android/key.properties
-android/*.jks
-android/local.properties
-
-# iOS
-ios/GoogleService-Info.plist
-ios/Pods/
-ios/.symlinks/
-
-# Firebase & Secrets
-*.env
-
-# Node.js
-node_modules/
-functions/node_modules/
-
-# Temporary / Trash
-_trash/
-
-# macOS
-.DS_Store
-project_context_snapshot.dart
-project_snapshot_part_*.dart
+# Generated code & test artifacts
+*.g.dart
+*.freezed.dart
+test_results/

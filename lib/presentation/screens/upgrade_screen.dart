@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/core/theme/constants.dart';
+import 'package:qa_app/app/theme/constants.dart';
 import 'package:qa_app/features/monetization/logic/usage_manager.dart';
 
 class UpgradeScreen extends StatelessWidget {

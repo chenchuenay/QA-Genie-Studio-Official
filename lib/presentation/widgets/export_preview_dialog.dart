@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qa_app/features/export/common/export_mapper.dart';
-import 'package:qa_app/core/theme/constants.dart';
+import 'package:qa_app/app/theme/constants.dart';
 import 'package:qa_app/data/models/test_case_model.dart';
 
 class ExportPreviewDialog extends StatefulWidget {

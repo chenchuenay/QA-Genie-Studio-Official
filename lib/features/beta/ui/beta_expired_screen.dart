@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/core/theme/constants.dart';
+import 'package:qa_app/app/theme/constants.dart';
 
 class BetaExpiredScreen extends StatelessWidget {
   final bool isUpdateRequired;

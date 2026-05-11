@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/core/theme/constants.dart';
-import 'package:qa_app/core/config/app_config.dart';
+import 'package:qa_app/app/theme/constants.dart';
+import 'package:qa_app/app/config/app_config.dart';
 import 'package:qa_app/features/monetization/logic/usage_manager.dart';
 import 'package:qa_app/presentation/screens/upgrade_coming_soon_screen.dart';
 

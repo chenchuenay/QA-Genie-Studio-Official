@@ -4,7 +4,7 @@ import 'platform_rules.dart';
 import 'qa_heuristics_engine.dart';
 import 'package:qa_app/core/utils/test_data_factory.dart';
 import 'package:qa_app/core/utils/stable_hash.dart';
-import 'package:qa_app/core/utils/preconditions_builder.dart';
+import 'package:qa_app/engine/builders/preconditions_builder.dart';
 
 class DeterministicRepair {
   final ScenarioPlanner planner;

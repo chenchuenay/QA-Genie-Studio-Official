@@ -1,40 +1,18 @@
-import 'package:qa_app/application/services/generation_result.dart';
-import 'package:qa_app/core/utils/priority_utils.dart';
-import 'package:qa_app/core/utils/id_generator.dart';
-import 'package:qa_app/data/datasources/remote/generation_api.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
-import 'package:qa_app/application/services/scenario_planner.dart';
-import 'package:qa_app/application/services/deterministic_repair.dart';
-import 'package:qa_app/application/services/generation_mode.dart';
-import 'package:qa_app/application/services/generation_metrics.dart';
-import 'package:qa_app/application/services/platform_rules.dart';
-import 'package:qa_app/application/services/qa_heuristics_engine.dart';
-import 'package:qa_app/core/utils/test_data_factory.dart';
+import 'package:qa_app/engine/platform_rules.dart';
+import 'package:qa_app/engine/generation_mode.dart';
 import 'package:qa_app/core/utils/stable_hash.dart';
+import 'package:qa_app/core/utils/id_generator.dart';
+import 'package:qa_app/engine/scenario_planner.dart';
+import 'package:qa_app/engine/generation_result.dart';
+import 'package:qa_app/core/utils/priority_utils.dart';
+import 'package:qa_app/engine/generation_metrics.dart';
+import 'package:qa_app/data/models/test_case_model.dart';
+import 'package:qa_app/engine/deterministic_repair.dart';
+import 'package:qa_app/engine/qa_heuristics_engine.dart';
+import 'package:qa_app/core/utils/test_data_factory.dart';
+import 'package:qa_app/data/datasources/remote/generation_api.dart';
 
 class GenerationService {
-
-static const List<String> _apiValidationAssertions = [
-  'Verify HTTP 200 response is returned',
-  'Verify HTTP 400 validation error is returned',
-  'Verify HTTP 401 unauthorized response is returned',
-  'Verify HTTP 403 forbidden response is returned',
-  'Verify HTTP 429 rate limit response is returned',
-  'Validate response schema matches API contract',
-  'Verify response contains expected error_code',
-  'Verify response headers contain content-type',
-  'Verify sensitive fields are not exposed',
-  'Verify response time remains within acceptable threshold',
-];
-
-static const List<String> _apiNegativeAssertions = [
-  'Verify request is rejected securely',
-  'Verify authentication failure is logged correctly',
-  'Verify invalid payload does not modify server state',
-  'Verify malformed request returns validation failure',
-  'Verify unauthorized access is blocked',
-];
-
   final GenerationApi _api = GenerationApi();
   bool _isGenerating = false;
   static GenerationMetrics _lastMetrics = const GenerationMetrics();
@@ -47,127 +25,61 @@ static const List<String> _apiNegativeAssertions = [
   static const String PROMPT_VERSION = "v1.4";
 
   static const String _systemInstruction =
-      "You are a senior QA engineer responsible for creating professional, execution-ready manual test cases used in real QA workflows. "
-      "Your primary goal is to generate test cases that mimic those written by experienced QA engineers, focusing on realism, uniqueness, and practicality."
-      "For each feature, first identify the core scenario intent (e.g., 'successful login', 'invalid password entry', 'session expiration')."
-      "THEN, derive all other aspects – preconditions, specific steps, test data, and expected results – directly from that identified scenario intent."
-      "NEVER reuse generic step bundles or expected result phrases like:"
-      "'observe ',"
-      "'system state matches ',"
-      "'verify operation success',"
-      "'execute primary action',"
-      "'check responsiveness',"
-      "'works correctly',"
-      "'behaves as expected',"
-      "'successful operation',"
-      "'operation successful',"
-      "or similar generic wording. Use explicit and observable outcomes."
-      "Ensure test data is diverse, context-aware, and realistic (e.g., unique emails, realistic passwords, valid/expired tokens, specific URLs, relevant API payloads). NEVER use placeholders or dummy values like 'user@example.com' or 'password123'."
-      "Avoid repetition of credentials, tokens, names, or values across test cases."
-      "Each execution step MUST contain:"
-      " a clear user or system action,"
-      " the exact input or test data used,"
-      " and the precise expected behaviour or response from the system."
-      "Expected results MUST describe observable application behaviour, API responses, validations, state changes, database effects, navigation changes, or security outcomes."
-      "Add dedicated scenario categories with specific grammar:"
-      "- Validation: Focus on data formats, required fields, and business rules."
-      "- Session: Cover login/logout, expiry, persistence, and state restoration."
-      "- Security: Address authentication, authorization, and basic vulnerabilities. RESTRICT advanced security topics (e.g., certificate pinning, API key exposure, MITM, clipboard attacks) unless explicitly requested by the user."
-      "- Usability: Test ease of use, clarity, and interactive elements."
-      "- State Persistence: Verify data integrity and state across sessions or reloads."
-      "- Network Behavior: Test responses to connectivity changes, latency, and timeouts."
-      "- Navigation: Ensure clear and logical transitions between screens/endpoints."
-      "- Permissions: Validate handling of user and device permissions."
-      "- Accessibility: Check for keyboard navigation, screen reader compatibility, and clear focus indicators."
-      "Generate outputs that resemble test cases written by experienced QA engineers working in enterprise-grade software teams. "
-      "Return ONLY a valid JSON array. "
-      "Do not return markdown, comments, explanations, headings, or additional text.";
+      "You are a senior QA engineer generating enterprise-grade, execution-ready manual test cases used in real QA workflows. "
+      "Identify the core scenario intent first, then derive realistic preconditions, execution steps, test data, and observable expected results directly from that scenario. "
+      "Use fictional or reserved testing phone numbers only. Never generate real personal contact information."
+      "Generate unique, practical, non-repetitive test cases with context-aware data such as realistic emails, tokens, payloads, URLs, and credentials. "
+      "Avoid generic QA wording, placeholders, vague validations, filler phrases, dummy values, and non-observable outcomes. "
+      "Never use phrases like 'works correctly', 'behaves as expected', 'successful operation', 'verify success', or similar generic wording. "
+      "Each step must contain a clear action, exact input data, and precise expected system behavior. "
+      "Expected results must describe observable UI behavior, API responses, validations, navigation changes, state changes, persistence effects, session behavior, database effects, or security outcomes. "
+      "Support validation, session, security, usability, persistence, network, navigation, permissions, and accessibility scenarios when relevant. "
+      "Use only reserved documentation domains such as example.com, example.org, example.net, or .test for generated emails and URLs."
+      "Restrict advanced security topics unless explicitly requested. "
+      "Return ONLY a valid JSON array without markdown, comments, explanations, headings, or extra text.";
 
-  
-
-static const List<String> _stepPrefixes = [
-  "Launch",
-  "Open",
-  "Authenticate into",
-  "Navigate to",
-  "Access",
-  "Trigger",
-  "Submit",
-  "Modify",
-  "Validate",
-  "Refresh",
-  "Reopen",
-  "Inspect",
-];
-
-static const List<String> _mobileActions = [
-  "Rotate the device during authentication",
-  "Move the application to background during login",
-  "Disable biometric permission before submission",
-  "Switch from WiFi to mobile data during request",
-  "Resume the app after session timeout",
-];
-
-static const List<String> _apiActions = [
-  "Verify HTTP status code matches specification",
-  "Validate response schema against contract",
-  "Check authorization header behavior",
-  "Verify response time remains under threshold",
-  "Confirm sensitive fields are excluded from payload",
-];
-
-static const List<String> _failureTerms = [
-  "timeout message appears",
-  "cached data remains visible",
-  "duplicate request blocked",
-  "invalid session rejected",
-  "retry option appears",
-  "loading spinner disappears",
-  "unsaved changes remain intact",
-];
-
-static const List<String> _bannedPhrases = [
-    "persisted backend state",
-    "validation rules",
-    "remains stable",
-    "navigation behavior remains",
-    "rendered data remains",
-    "application state updates",
-    "user ",
-    "everything works fine",
+  static const List<String> _bannedPhrases = [
+    // Generic filler outcomes
     "works correctly",
     "works as expected",
     "behaves as expected",
     "successful operation",
     "operation successful",
+    "everything works fine",
+    "expected result achieved",
+    "user can proceed successfully",
+    "operation completed successfully",
+    "action completes without errors",
+
+    // Generic template spam
     "scenario 1",
     "prepare for scenario",
     "execute scenario",
     "verify outcome",
-    "test data",
-    "valid data",
-    "invalid data",
-    "correct values",
-    "dummy data",
+    "context-specific input",
+
+    // Placeholder / fake data
     "user@example.com",
     "test@example.com",
     "example@test.com",
     "password123",
     "admin123",
+    "dummy data",
     "sample password",
+    "lorem ipsum",
+
+    // Generic meaningless actions
     "click button",
     "enter details",
     "submit form",
     "check result",
     "verify success",
-    "context-specific input",
-    "action completes without errors",
-    "system is in default state",
-    "functional requirements",
-    "system responds correctly",
-    "expected result achieved",
-    "user can proceed successfully",
-    "operation completed successfully",
+
+    // Weak fake test data labels
+    "test data",
+    "valid data",
+    "invalid data",
+    "correct values",
   ];
 
   bool _containsGarbage(TestCaseModel tc) {
@@ -483,9 +395,7 @@ static const List<String> _bannedPhrases = [
       return true;
     }).toList();
 
-    if (platform.toLowerCase() == 'web' && cases.length < 5) {
-      
-    }
+    if (platform.toLowerCase() == 'web' && cases.length < 5) {}
 
     while (cases.length < maxCases) {
       final emergency = _emergencyCase(
@@ -536,7 +446,7 @@ static const List<String> _bannedPhrases = [
           preconditions: emergency.preconditions,
           steps: emergency.steps,
           expectedResult: emergency.expectedResult,
-          
+
           status: emergency.status,
           type: emergency.type,
         ),
@@ -544,30 +454,7 @@ static const List<String> _bannedPhrases = [
     }
     // ===== END FORCE FINAL UNIQUENESS =====
 
-    if (maxCases <= 10) {
-      for (int i = 0; i < cases.length; i++) {
-        final tc = cases[i];
-
-        final newPriority = i == cases.length - 1
-            ? 'Low'
-            : (i % 2 == 0 ? 'High' : 'Medium');
-
-        cases[i] = TestCaseModel(
-          id: tc.id,
-          title: tc.title,
-          preconditions: tc.preconditions,
-          steps: tc.steps,
-          expectedResult: tc.expectedResult,
-          
-          status: tc.status,
-          type: tc.type,
-        );
-      }
-    }
-
-    
-
-final feat = feature.isNotEmpty ? feature : module;
+    final feat = feature.isNotEmpty ? feature : module;
     int fillNum = cases.length + 1;
     // removed aggressive final re-filter causing suite collapse
     fillNum = cases.length + 1;
@@ -586,9 +473,8 @@ final feat = feature.isNotEmpty ? feature : module;
       fillNum++;
       guard++;
     }
-    
 
-print("WEB PIPELINE DEBUG AFTER TAKE: ${cases.length}");
+    print("WEB PIPELINE DEBUG AFTER TAKE: ${cases.length}");
 
     for (int i = 0; i < cases.length; i++) {
       cases[i].id = IdGenerator.generate(module, feature, startIndex + i);
@@ -605,8 +491,7 @@ print("WEB PIPELINE DEBUG AFTER TAKE: ${cases.length}");
     );
     _lastMetrics = metrics;
     if (aiFailureReason != null) {
-      _lastWarning =
-          '';
+      _lastWarning = '';
     } else if (metrics.deterministicShare >= 0.7) {
       _lastWarning =
           'Most cases were deterministically repaired after quality filtering.';
@@ -614,81 +499,75 @@ print("WEB PIPELINE DEBUG AFTER TAKE: ${cases.length}");
       _lastWarning = null;
     }
     print('[QA Genie Metrics] $metrics');
-    
+
     cases = _rebalancePriorities(cases);
 
-    
-cases = _rebalancePriorities(cases);
+    cases = _rebalancePriorities(cases);
 
-print("WEB PIPELINE DEBUG AFTER TAKE: ${cases.length}");
+    print("WEB PIPELINE DEBUG AFTER TAKE: ${cases.length}");
 
-if (cases.length < maxCases) {
-  print("FINAL RECOVERY TRIGGERED: ${cases.length} -> $maxCases");
+    if (cases.length < maxCases) {
+      print("FINAL RECOVERY TRIGGERED: ${cases.length} -> $maxCases");
 
-  
+      // =====================================================
+      // FINALIZATION PIPELINE
+      // =====================================================
 
-    // =====================================================
-    // FINALIZATION PIPELINE
-    // =====================================================
+      cases = repair.repair(cases, maxCases);
 
-    cases = repair.repair(cases, maxCases);
+      while (cases.length < maxCases) {
+        final idx = cases.length + 1;
 
-    while (cases.length < maxCases) {
-      final idx = cases.length + 1;
+        final filler = _emergencyCase(
+          module,
+          feature,
+          platform,
+          inferredDomain,
+          idx,
+        );
 
-      final filler = _emergencyCase(
-        module,
-        feature,
-        platform,
-        inferredDomain,
-        idx,
-      );
+        final priority = idx % 5 == 0
+            ? 'Low'
+            : (idx % 2 == 0 ? 'Medium' : 'High');
 
-      final priority = idx % 5 == 0
-          ? 'Low'
-          : (idx % 2 == 0 ? 'Medium' : 'High');
+        cases.add(
+          TestCaseModel(
+            id: filler.id,
+            title: filler.title,
+            preconditions: filler.preconditions,
+            steps: filler.steps,
+            expectedResult: filler.expectedResult,
+            priority: priority,
+            status: '',
+            type: filler.type,
+          ),
+        );
+      }
 
-      cases.add(
-        TestCaseModel(
-          id: filler.id,
-          title: filler.title,
-          preconditions: filler.preconditions,
-          steps: filler.steps,
-          expectedResult: filler.expectedResult,
-          priority: priority,
-          status: '',
-          type: filler.type,
-        ),
-      );
-    }
+      final normalized = <TestCaseModel>[];
 
-    final normalized = <TestCaseModel>[];
+      for (int i = 0; i < cases.length; i++) {
+        final tc = cases[i];
 
-    for (int i = 0; i < cases.length; i++) {
-      final tc = cases[i];
+        final priority = i % 5 == 0 ? 'Low' : (i % 2 == 0 ? 'Medium' : 'High');
 
-      final priority = i % 5 == 0
-          ? 'Low'
-          : (i % 2 == 0 ? 'Medium' : 'High');
+        normalized.add(
+          TestCaseModel(
+            id: tc.id,
+            title: tc.title,
+            preconditions: tc.preconditions,
+            steps: tc.steps,
+            expectedResult: tc.expectedResult,
+            priority: priority,
+            status: tc.status,
+            type: tc.type,
+          ),
+        );
+      }
 
-      normalized.add(
-        TestCaseModel(
-          id: tc.id,
-          title: tc.title,
-          preconditions: tc.preconditions,
-          steps: tc.steps,
-          expectedResult: tc.expectedResult,
-          priority: priority,
-          status: tc.status,
-          type: tc.type,
-        ),
-      );
-    }
+      cases = normalized.take(maxCases).toList();
 
-    cases = normalized.take(maxCases).toList();
-
-    print('FINAL OUTPUT: ${cases.length} cases');
-
+      print('FINAL OUTPUT: ${cases.length} cases');
     }
 
     return cases;
@@ -769,7 +648,9 @@ if (cases.length < maxCases) {
           'data': '{xssPayload}',
           'expected':
               'The application handles the input safely by rendering it as plain text and preventing any unintended script execution.',
-          'preconditions': ['The $smoothFeature screen is in its default state.'],
+          'preconditions': [
+            'The $smoothFeature screen is in its default state.',
+          ],
         },
         'web_session': {
           'title':
@@ -931,8 +812,7 @@ if (cases.length < maxCases) {
       module: module,
       feature: feature,
       platform: platform,
-      preconditions: preconditions.map((e) =>
-            _cleanGeneratedText(e)).toList(),
+      preconditions: preconditions.map((e) => _cleanGeneratedText(e)).toList(),
       steps: steps,
       expectedResult: _smartExpectedResult(title, expected),
       priority: QaHeuristicsEngine.priorityFor(
@@ -966,12 +846,14 @@ if (cases.length < maxCases) {
           TestStep(
             action: 'Validate API response status and contract',
             data: '',
-            expected: 'API behavior matches the expected backend validation and processing logic.',
+            expected:
+                'API behavior matches the expected backend validation and processing logic.',
           ),
           TestStep(
             action: 'Validate response payload, headers, and error structure',
             data: '',
-            expected: 'Response payload matches the expected contract and validation rules.',
+            expected:
+                'Response payload matches the expected contract and validation rules.',
           ),
         ];
       case 'Mobile':
@@ -1015,22 +897,9 @@ if (cases.length < maxCases) {
           '',
         ];
         return [
-          TestStep(
-            action: openActions[idx],
-            data: '',
-            expected: '',
-          ),
-          TestStep(
-            action: '',
-            data: data,
-            expected: '',
-          ),
-          TestStep(
-            action: submitActions[idx],
-            data: '',
-            expected:
-                '',
-          ),
+          TestStep(action: openActions[idx], data: '', expected: ''),
+          TestStep(action: '', data: data, expected: ''),
+          TestStep(action: submitActions[idx], data: '', expected: ''),
         ];
     }
   }
@@ -1054,92 +923,48 @@ if (cases.length < maxCases) {
     return PriorityUtils.normalize(priority);
   }
 
-  String _semanticExpectedResult(String title) {
-    final t = title.toLowerCase();
-
-    if (t.contains('scroll')) {
-      return 'The application scrolls smoothly without frame drops, freezes, crashes, or unexpected UI rendering issues.';
-    }
-
-    if (t.contains('permission')) {
-      return 'The required permission dialog appears and the application handles both allow and deny actions safely.';
-    }
-
-    if (t.contains('fingerprint') || t.contains('biometric')) {
-      return 'Authentication fails securely and the user receives a clear biometric validation message without application instability.';
-    }
-
-    if (t.contains('api key')) {
-      return 'Sensitive credentials, tokens, and internal secrets are never exposed in requests, responses, logs, or client storage.';
-    }
-
-    if (t.contains('plain text')) {
-      return 'Sensitive user information remains encrypted or securely protected without plaintext exposure.';
-    }
-
-    if (t.contains('phone') || t.contains('format')) {
-      return 'Invalid input formats are rejected with clear validation feedback while preserving application stability.';
-    }
-
-    if (t.contains('token')) {
-      return 'The API rejects invalid or tampered tokens securely without exposing internal system details.';
-    }
-
-    if (t.contains('sql')) {
-      return 'Malicious query input is sanitized safely and the request is rejected without database compromise.';
-    }
-
-    return '';
-  }
-
-  
-String _expertExpectedResult(
-  TestCaseModel tc,
-  String module,
-  String feature,
-  String platform,
-  String domain,
-) {
-  final title = tc.title.toLowerCase();
-  final category = tc.type.toLowerCase();
-
-  if (title.contains('login') || category.contains('auth')) {
-    return platform == 'API'
-        ? 'Authentication response returns valid token structure and unauthorized access remains blocked securely'
-        : 'User session starts and unauthorized access remains restricted throughout the workflow';
-  }
-
-  if (title.contains('payment')) {
-    return platform == 'API'
-        ? 'Payment transaction persists without duplicate processing or inconsistent transaction state'
-        : 'Payment  and transaction status is reflected accurately in the interface';
-  }
-
-  if (title.contains('scroll')) {
-    return 'Application remains responsive during extended scrolling without frame drops, crashes, or rendering instability';
-  }
-
-  if (
-    title.contains('permission') ||
-    title.contains('biometric')
+  String _expertExpectedResult(
+    TestCaseModel tc,
+    String module,
+    String feature,
+    String platform,
+    String domain,
   ) {
-    return 'Security validation flow behaves and invalid authentication attempts are handled safely';
+    final title = tc.title.toLowerCase();
+    final category = tc.type.toLowerCase();
+
+    if (title.contains('login') || category.contains('auth')) {
+      return platform == 'API'
+          ? 'Authentication response returns valid token structure and unauthorized access remains blocked securely'
+          : 'User session starts and unauthorized access remains restricted throughout the workflow';
+    }
+
+    if (title.contains('payment')) {
+      return platform == 'API'
+          ? 'Payment transaction persists without duplicate processing or inconsistent transaction state'
+          : 'Payment  and transaction status is reflected accurately in the interface';
+    }
+
+    if (title.contains('scroll')) {
+      return 'Application remains responsive during extended scrolling without frame drops, crashes, or rendering instability';
+    }
+
+    if (title.contains('permission') || title.contains('biometric')) {
+      return 'Security validation flow behaves and invalid authentication attempts are handled safely';
+    }
+
+    if (title.contains('phone') ||
+        title.contains('validation') ||
+        title.contains('format')) {
+      return 'Invalid input is rejected with meaningful validation feedback while maintaining stable application behavior';
+    }
+
+    return platform == 'API'
+        ? 'API validation, response structure, and backend persistence behave consistently under the executed scenario'
+        : 'Workflow completes and application state remains and stable after interaction';
   }
 
-  if (
-    title.contains('phone') ||
-    title.contains('validation') ||
-    title.contains('format')
-  ) {
-    return 'Invalid input is rejected with meaningful validation feedback while maintaining stable application behavior';
-  }
-
-  return platform == 'API'
-      ? 'API validation, response structure, and backend persistence behave consistently under the executed scenario'
-      : 'Workflow completes and application state remains and stable after interaction';
-}
-
-String _buildEnrichmentPrompt(
+  String _buildEnrichmentPrompt(
     List<Map<String, dynamic>> skeletons,
     String module,
     String feature,
@@ -1175,15 +1000,13 @@ String _buildEnrichmentPrompt(
     return sb.toString();
   }
 
-String _cleanGeneratedText(String value) {
-
-  return value
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .replaceAll(' ,', ',')
-      .replaceAll(' .', '.')
-      .trim();
-}
-
+  String _cleanGeneratedText(String value) {
+    return value
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(' ,', ',')
+        .replaceAll(' .', '.')
+        .trim();
+  }
 }
 
 String _smartExpectedResult(String title, String expected) {
@@ -1197,7 +1020,7 @@ String _smartExpectedResult(String title, String expected) {
     "blocked",
     "rate limit",
     "reject",
-    "denied"
+    "denied",
   ].any(lower.contains);
 
   if (isNegative) {
@@ -1207,17 +1030,13 @@ String _smartExpectedResult(String title, String expected) {
   return expected;
 }
 
-List<TestCaseModel> _rebalancePriorities(
-  List<TestCaseModel> cases,
-) {
+List<TestCaseModel> _rebalancePriorities(List<TestCaseModel> cases) {
   final updated = <TestCaseModel>[];
 
   for (int i = 0; i < cases.length; i++) {
     final tc = cases[i];
 
-    final priority = i % 5 == 0
-        ? 'Low'
-        : (i % 2 == 0 ? 'Medium' : 'High');
+    final priority = i % 5 == 0 ? 'Low' : (i % 2 == 0 ? 'Medium' : 'High');
 
     updated.add(
       TestCaseModel(
@@ -1235,4 +1054,3 @@ List<TestCaseModel> _rebalancePriorities(
 
   return updated;
 }
-

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/core/config/app_config.dart';
-import 'package:qa_app/core/theme/constants.dart';
+import 'package:qa_app/app/config/app_config.dart';
+import 'package:qa_app/app/theme/constants.dart';
 import 'package:qa_app/domain/usecases/get_history_use_case.dart';
-import 'package:qa_app/data/sources/local/database_service.dart';
+import 'package:qa_app/core/database/database_service.dart';
 import 'package:qa_app/features/suites/ui/screens/history_suite_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {

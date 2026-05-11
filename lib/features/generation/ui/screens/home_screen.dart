@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/core/theme/constants.dart';
-import 'package:qa_app/core/config/app_config.dart';
+import 'package:qa_app/app/theme/constants.dart';
+import 'package:qa_app/app/config/app_config.dart';
 import 'package:qa_app/core/utils/dialog_utils.dart';
 import 'package:qa_app/presentation/widgets/ad_dialog.dart';
 import 'package:qa_app/features/beta/logic/beta_manager.dart';
@@ -236,6 +236,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
+        border: Border.all(color: AppColors.accent.withOpacity(0.3), width: 1),
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
