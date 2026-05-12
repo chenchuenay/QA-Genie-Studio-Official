@@ -1,14 +1,15 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants.dart';
 import 'package:qa_app/app/config/app_config.dart';
+import 'package:qa_app/app/theme/constants.dart';
 import 'package:qa_app/core/utils/dialog_utils.dart';
-import 'package:qa_app/presentation/widgets/ad_dialog.dart';
-import 'package:qa_app/features/beta/logic/beta_manager.dart';
-import 'package:qa_app/features/monetization/ads/ad_service.dart';
-import 'package:qa_app/domain/usecases/save_test_suite_use_case.dart';
-import 'package:qa_app/features/monetization/logic/usage_manager.dart';
 import 'package:qa_app/domain/usecases/generate_test_cases_use_case.dart';
+import 'package:qa_app/domain/usecases/save_test_suite_use_case.dart';
+import 'package:qa_app/features/beta/logic/beta_manager.dart';
 import 'package:qa_app/features/generation/ui/screens/preview_screen.dart';
+import 'package:qa_app/features/monetization/logic/usage_manager.dart';
+import 'package:qa_app/features/monetization/ads/ad_service.dart';
+import 'package:qa_app/presentation/widgets/ad_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   static final constraintsKey = GlobalKey();
@@ -105,92 +106,158 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: AppColors.background,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF080808), Color(0xFF16161A)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // RED BANNER – proves the new file is active
-              Expanded(
-                child: AbsorbPointer(
-                  absorbing: loading,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    child: Form(
-                      key: formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "SPECIFICATION",
-                            style: TextStyle(
-                              color: AppColors.accentLight,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          Container(
-                            key: HomeScreen.moduleKey,
-                            child: _input(
-                              "Module Name *",
-                              "e.g. User Authentication",
-                              mCtrl,
-                              (v) => v!.trim().isEmpty ? "Required" : null,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          Container(
-                            key: HomeScreen.featureKey,
-                            child: _input(
-                              "Feature *",
-                              "e.g. Login with Google OAuth",
-                              fCtrl,
-                              (v) => v!.trim().isEmpty ? "Required" : null,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          const Text(
-                            "Platform",
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Container(
-                            key: HomeScreen.platformKey,
-                            child: _platformSelector(),
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          _constraints(),
-                          const SizedBox(height: AppSpacing.md),
-                          Center(child: Text(genHint, style: AppText.hint)),
-                          const SizedBox(height: AppSpacing.md),
-                        ],
-                      ),
-                    ),
+      backgroundColor: const Color(0xFF050505),
+      body: Stack(
+        children: [
+          // Micro-texture noise overlay
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.012,
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF46DFFF),
+                      Color(0xFF050505),
+                      Color(0xFF46DFFF),
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-                child: Container(
-                  key: HomeScreen.generateKey,
-                  child: _generateBtn(),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF050505),
+                  Color(0xFF0A0A0A),
+                  Color(0xFF0D0D0D),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: AbsorbPointer(
+                      absorbing: loading,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              const Text(
+                                "SPECIFICATION",
+                                style: TextStyle(
+                                  color: Color(0xFF46DFFF),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 6,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              Container(
+                                key: HomeScreen.moduleKey,
+                                decoration: const BoxDecoration(
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Color(0x1A22D3EE),
+                                      blurRadius: 22,
+                                      spreadRadius: 0.5,
+                                      offset: Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: _input(
+                                  "Module Name *",
+                                  "e.g. User Authentication",
+                                  mCtrl,
+                                  maxLength: 40,
+                                  validator: (v) =>
+                                      v!.trim().isEmpty ? "Required" : null,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                key: HomeScreen.featureKey,
+                                decoration: const BoxDecoration(
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black38,
+                                      blurRadius: 24,
+                                      offset: Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
+                                child: _input(
+                                  "Feature *",
+                                  "e.g. Login with Google OAuth",
+                                  fCtrl,
+                                  maxLength: 70,
+                                  validator: (v) =>
+                                      v!.trim().isEmpty ? "Required" : null,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              const Padding(
+                                padding: EdgeInsets.only(left: 22),
+                                child: Text(
+                                  "Platform *",
+                                  style: TextStyle(
+                                    color: Color(0xFFA7AFBF),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                key: HomeScreen.platformKey,
+                                child: _platformSelector(),
+                              ),
+                              const SizedBox(height: 20),
+                              const Padding(
+                                padding: EdgeInsets.only(left: 22),
+                                child: Text(
+                                  "Constraints (optional)",
+                                  style: TextStyle(
+                                    color: Color(0xFFA7AFBF),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              _constraints(),
+                              const SizedBox(height: 12),
+                              Center(child: Text(genHint, style: AppText.hint)),
+                              const SizedBox(height: 12),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                    child: Container(
+                      key: HomeScreen.generateKey,
+                      child: _generateBtn(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -198,47 +265,74 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _input(
     String label,
     String hint,
-    TextEditingController ctrl,
+    TextEditingController ctrl, {
+    int? maxLength,
     String? Function(String?)? validator,
-  ) {
+  }) {
     return TextFormField(
       controller: ctrl,
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 17,
+        fontWeight: FontWeight.w500,
+      ),
       validator: validator,
+      maxLength: maxLength,
+      maxLengthEnforcement: maxLength != null
+          ? MaxLengthEnforcement.enforced
+          : MaxLengthEnforcement.none,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textSecondary),
+        labelStyle: const TextStyle(
+          color: Color(0xFFA7AFBF),
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
         hintText: hint,
-        hintStyle: AppText.hint,
+        hintStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w400,
+          color: Color(0xFF8A90A2),
+        ),
         filled: true,
-        fillColor: AppColors.card,
+        fillColor: const Color(0xFF0D0F14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: Color(0xFF46DFFF), width: 1.3),
         ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+          horizontal: 22,
+          vertical: 20,
         ),
+        counterStyle: AppText.hint,
       ),
     );
   }
 
   Widget _platformSelector() {
     return Container(
+      height: 68,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.accent.withOpacity(0.3), width: 1),
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        color: const Color(0xFF0D0F14),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0x14FFFFFF), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.14),
+            blurRadius: 18,
+            spreadRadius: -6,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: ["Mobile", "Web", "API"].map((p) {
@@ -248,24 +342,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onTap: () => setState(() => platform = p),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
                   gradient: sel
                       ? const LinearGradient(
-                          colors: [AppColors.accent, AppColors.accentLight],
+                          colors: [Color(0xFF46DFFF), Color(0xFF7CEBFF)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         )
                       : null,
-                  color: sel ? null : Colors.transparent,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  color: sel ? null : const Color(0xFF12141A),
+                  borderRadius: BorderRadius.circular(22),
                 ),
                 child: Center(
                   child: Text(
                     p,
                     style: TextStyle(
-                      color: sel ? Colors.black : AppColors.textSecondary,
+                      color: sel
+                          ? const Color(0xFF07131A)
+                          : const Color(0xFF8A90A2),
                       fontWeight: FontWeight.w600,
+                      fontSize: 15,
                     ),
                   ),
                 ),
@@ -282,25 +379,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       controller: cCtrl,
       maxLines: 3,
       maxLength: AppConfig.maxConstraintsLength,
+      maxLengthEnforcement: MaxLengthEnforcement.enforced,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: "e.g. Must support WCAG 2.1 AA, test on Chrome & Safari...",
-        hintStyle: AppText.hint,
+        hintStyle: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w400,
+          color: Color(0xFF8A90A2),
+        ),
         filled: true,
-        fillColor: AppColors.card,
+        fillColor: const Color(0xFF0D0F14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: Color(0xFF46DFFF), width: 1.3),
         ),
-        contentPadding: const EdgeInsets.all(16),
+        contentPadding: const EdgeInsets.all(20),
         counterStyle: AppText.hint,
       ),
     );
@@ -309,23 +411,53 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _generateBtn() {
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: 58,
       child: ElevatedButton(
         onPressed: loading ? null : _generate,
         style: ElevatedButton.styleFrom(
-          backgroundColor: loading ? AppColors.card : AppColors.accent,
-          foregroundColor: loading ? AppColors.textHint : Colors.black,
           elevation: 0,
+          padding: EdgeInsets.zero,
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.black,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          overlayColor: Colors.transparent,
+          splashFactory: NoSplash.splashFactory,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: loading
+                ? null
+                : const LinearGradient(
+                    colors: [Color(0xFF46DFFF), Color(0xFF7CEBFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF46DFFF).withOpacity(0.16),
+                blurRadius: 22,
+                spreadRadius: -10,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Center(
+            child: loading
+                ? _smoothDots()
+                : const Text(
+                    "Generate Batch →",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                      color: Colors.black,
+                    ),
+                  ),
           ),
         ),
-        child: loading
-            ? _smoothDots()
-            : const Text(
-                "Generate Batch →",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
       ),
     );
   }

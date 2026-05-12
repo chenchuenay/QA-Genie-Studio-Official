@@ -10,6 +10,7 @@ import 'package:qa_app/data/models/test_case_model.dart';
 import 'package:qa_app/engine/deterministic_repair.dart';
 import 'package:qa_app/engine/qa_heuristics_engine.dart';
 import 'package:qa_app/core/utils/test_data_factory.dart';
+import 'package:qa_app/engine/fallback/fallback_generator.dart';
 import 'package:qa_app/data/datasources/remote/generation_api.dart';
 
 class GenerationService {
@@ -226,6 +227,7 @@ class GenerationService {
         repairedCount = 0,
         aiCalls = 0;
     String? aiFailureReason;
+    bool fallbackUsed = false;
     List<TestCaseModel> cases = [];
 
     try {
@@ -243,6 +245,17 @@ class GenerationService {
     }
 
     cases = cases.where((tc) => !_containsGarbage(tc)).toList();
+
+    if (aiFailureReason != null || cases.isEmpty) {
+      cases = FallbackGenerator.generate(
+        count: maxCases,
+        module: module,
+        feature: feature,
+        platform: platform,
+      );
+      fallbackUsed = true;
+      aiFailureReason ??= 'AI produced no usable test cases after filtering.';
+    }
 
     for (final tc in cases) {
       if (tc.expectedResult.trim().isEmpty) {
@@ -299,6 +312,23 @@ class GenerationService {
     cases = cases.where((tc) => !_violatesPlatform(tc, platform)).toList();
     filteredCount = beforeFilter - cases.length;
     aiAccepted = cases.length;
+
+    if (cases.length < maxCases) {
+      final filler =
+          FallbackGenerator.generate(
+                count: maxCases - cases.length,
+                module: module,
+                feature: feature,
+                platform: platform,
+              )
+              .where((tc) => !_containsGarbage(tc))
+              .where((tc) => !_violatesPlatform(tc, platform))
+              .toList();
+      if (filler.isNotEmpty) {
+        fallbackUsed = true;
+        cases.addAll(filler);
+      }
+    }
 
     final seenTitles = <String>{};
     final seenIntents = <String>{};
@@ -491,7 +521,12 @@ class GenerationService {
     );
     _lastMetrics = metrics;
     if (aiFailureReason != null) {
-      _lastWarning = '';
+      _lastWarning = fallbackUsed
+          ? 'AI generation failed or produced unusable output; fallback test cases were used.'
+          : 'AI generation failed during parsing or network call.';
+    } else if (fallbackUsed) {
+      _lastWarning =
+          'AI output was partially insufficient; deterministic fallback cases were added.';
     } else if (metrics.deterministicShare >= 0.7) {
       _lastWarning =
           'Most cases were deterministically repaired after quality filtering.';

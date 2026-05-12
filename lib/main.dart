@@ -45,15 +45,29 @@ class _MyAppState extends State<MyApp> {
         debugShowCheckedModeBanner: false,
         title: 'QA Genie Studio',
         theme: ThemeData(
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(0xFF080808),
-          colorScheme: const ColorScheme.dark(
-            primary: Color(0xFF00F0FF),
-            secondary: Color(0xFF00F0FF),
-            surface: Color(0xFF111115),
+          bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+            selectedItemColor: Color(0xFF46DFFF),
+            unselectedItemColor: Color(0xFF8D93A3),
+            showUnselectedLabels: true,
+            backgroundColor: Color(0xFF07090D),
+            elevation: 0,
+            type: BottomNavigationBarType.fixed,
           ),
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: const Color(0xFF020409),
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFF46DFFF),
+            secondary: Color(0xFF46DFFF),
+            surface: Color(0xFF12141A),
+          ),
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
         ),
         home: const SplashScreen(),
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        overscroll: false,
+      ),
       ),
     );
   }
