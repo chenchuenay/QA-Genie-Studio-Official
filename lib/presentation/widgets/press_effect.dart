@@ -3,20 +3,13 @@ import 'package:flutter/material.dart';
 class PressEffect extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
-
-  const PressEffect({
-    super.key,
-    required this.child,
-    required this.onTap,
-  });
-
+  const PressEffect({super.key, required this.child, required this.onTap});
   @override
   State<PressEffect> createState() => _PressEffectState();
 }
 
 class _PressEffectState extends State<PressEffect> {
   bool _pressed = false;
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
