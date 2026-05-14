@@ -1,4 +1,4 @@
-import 'package:qa_app/data/models/test_case_model.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
 
 class FallbackGenerator {
   static const Map<String, List<Map<String, String>>> _scenarioMap = {
@@ -35,7 +35,7 @@ class FallbackGenerator {
     'password': [
       {'title': 'Verify password reset with valid email', 'type': 'POSITIVE'},
       {
-        'title': 'Verify password reset with non‑existent email',
+        'title': 'Verify password reset with non-existent email',
         'type': 'NEGATIVE',
       },
     ],
@@ -99,30 +99,21 @@ class FallbackGenerator {
             feature: feature,
             platform: platform,
             preconditions: [
-              'User session is active',
-              'Platform environment is stable',
+              'A clean QA account exists for $resolvedFeature execution.',
+              'The $platform test environment is reachable and seeded with known user records.',
             ],
-            steps: [
-              TestStep(
-                action: 'Navigate to the primary ${resolvedFeature} interface',
-                expected:
-                    'The page/screen renders all required interactive components.',
-              ),
-              TestStep(
-                action: 'Perform the action described in the scenario title',
-                data: '',
-                expected:
-                    'The system provides immediate visual or structural feedback.',
-              ),
-              TestStep(
-                action: 'Verify the resulting state in the application',
-                data: '',
-                expected:
-                    'The application state is updated and matches the expected business logic.',
-              ),
-            ],
-            expectedResult:
-                'The $resolvedFeature operation completes successfully and the system state is updated without errors.',
+            steps: _buildSteps(
+              title: title,
+              type: sc['type'] ?? 'GENERAL',
+              feature: resolvedFeature,
+              platform: platform,
+            ),
+            expectedResult: _expectedResult(
+              title: title,
+              type: sc['type'] ?? 'GENERAL',
+              feature: resolvedFeature,
+              platform: platform,
+            ),
             priority: 'Medium',
             type: sc['type'] ?? 'GENERAL',
           ),
@@ -140,20 +131,14 @@ class FallbackGenerator {
           feature: feature,
           platform: platform,
           preconditions: ['Standard QA environment'],
-          steps: [
-            TestStep(
-              action: 'Trigger the $resolvedFeature action variant $i',
-              expected:
-                  'The system accepts the trigger without latency issues.',
-            ),
-            TestStep(
-              action: 'Observe the application response',
-              expected:
-                  'Visual feedback is provided to the user within 2 seconds.',
-            ),
-          ],
+          steps: _buildSteps(
+            title: 'Verify $resolvedFeature stability - variant $i',
+            type: 'GENERAL',
+            feature: resolvedFeature,
+            platform: platform,
+          ),
           expectedResult:
-              'The $resolvedFeature workflow remains stable and consistent with the established platform standards.',
+              'The $resolvedFeature workflow stays responsive, preserves entered data, and displays a visible completion or validation state.',
           priority: 'Medium',
           type: 'GENERAL',
         ),
@@ -161,5 +146,94 @@ class FallbackGenerator {
       i++;
     }
     return cases.take(count).toList();
+  }
+
+  static List<TestStep> _buildSteps({
+    required String title,
+    required String type,
+    required String feature,
+    required String platform,
+  }) {
+    final lower = title.toLowerCase();
+    final isSecurity = type == 'SECURITY' || lower.contains('injection');
+    final isNegative = type == 'NEGATIVE' || lower.contains('failure');
+    final data = isSecurity
+        ? "' OR '1'='1"
+        : isNegative
+        ? 'qa.locked@example.net / Invalid-Pass-9041'
+        : 'qa.primary@example.net / Secure-Pass-4821';
+
+    if (platform == 'API') {
+      return [
+        TestStep(
+          action:
+              'Send a POST request to the ${feature.toLowerCase().replaceAll(' ', '-')} endpoint',
+          data: data,
+          expected:
+              'The service returns a documented status code and response body.',
+        ),
+        TestStep(
+          action: isSecurity
+              ? 'Inspect the response for rejected authentication state'
+              : 'Validate the response schema and required fields',
+          data: '',
+          expected: isSecurity
+              ? 'The response denies access and omits stack traces or sensitive fields.'
+              : 'The payload contains the required contract fields with stable value types.',
+        ),
+        TestStep(
+          action: 'Query the persisted record state for the submitted account',
+          data: 'qa.primary@example.net',
+          expected:
+              'The backend record reflects only the state changes allowed by the scenario.',
+        ),
+      ];
+    }
+
+    return [
+      TestStep(
+        action: 'Navigate to the primary $feature interface',
+        data: '',
+        expected:
+            'The page displays the required fields, labels, and primary action control.',
+      ),
+      TestStep(
+        action: isSecurity
+            ? 'Enter the SQL injection payload into the credential field'
+            : 'Enter the prepared credentials into the $feature fields',
+        data: data,
+        expected: isSecurity
+            ? 'The input remains text in the field and no script, query, or debug output appears.'
+            : 'Each field accepts the entered value and shows its validation state.',
+      ),
+      TestStep(
+        action: isNegative || isSecurity
+            ? 'Submit the form and inspect the validation message'
+            : 'Submit the form and observe the destination view',
+        data: '',
+        expected: isNegative || isSecurity
+            ? 'A specific error message appears near the affected field and the user remains unauthenticated.'
+            : 'The application redirects to the authenticated landing view and shows the active session state.',
+      ),
+    ];
+  }
+
+  static String _expectedResult({
+    required String title,
+    required String type,
+    required String feature,
+    required String platform,
+  }) {
+    final lower = title.toLowerCase();
+    if (type == 'SECURITY' || lower.contains('injection')) {
+      return 'The request is blocked, no authenticated session is created, and sensitive implementation details remain hidden from the response.';
+    }
+    if (type == 'NEGATIVE' || lower.contains('failure')) {
+      return 'The application rejects the submitted data, keeps the user on the $feature screen, and displays a field-level error message.';
+    }
+    if (platform == 'API') {
+      return 'The service returns the documented response contract and persists only the intended state transition.';
+    }
+    return 'The application opens the authenticated destination view, displays the active session indicator, and records the expected audit state.';
   }
 }

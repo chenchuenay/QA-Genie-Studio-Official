@@ -1,17 +1,19 @@
-import 'package:qa_app/engine/platform_rules.dart';
-import 'package:qa_app/engine/generation_mode.dart';
-import 'package:qa_app/core/utils/stable_hash.dart';
-import 'package:qa_app/core/utils/id_generator.dart';
-import 'package:qa_app/engine/scenario_planner.dart';
-import 'package:qa_app/engine/generation_result.dart';
-import 'package:qa_app/core/utils/priority_utils.dart';
-import 'package:qa_app/engine/generation_metrics.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
-import 'package:qa_app/engine/deterministic_repair.dart';
-import 'package:qa_app/engine/qa_heuristics_engine.dart';
-import 'package:qa_app/core/utils/test_data_factory.dart';
-import 'package:qa_app/engine/fallback/fallback_generator.dart';
-import 'package:qa_app/data/datasources/remote/generation_api.dart';
+import 'package:qa_genie/engine/platform_rules.dart';
+import 'package:qa_genie/core/debug/pipeline_logger.dart';
+import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
+import 'package:qa_genie/engine/generation_mode.dart';
+import 'package:qa_genie/core/utils/stable_hash.dart';
+import 'package:qa_genie/core/utils/id_generator.dart';
+import 'package:qa_genie/engine/scenario_planner.dart';
+import 'package:qa_genie/engine/generation_result.dart';
+import 'package:qa_genie/core/utils/priority_utils.dart';
+import 'package:qa_genie/engine/generation_metrics.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/engine/deterministic_repair.dart';
+import 'package:qa_genie/engine/qa_heuristics_engine.dart';
+import 'package:qa_genie/core/utils/test_data_factory.dart';
+import 'package:qa_genie/engine/fallback/fallback_generator.dart';
+import 'package:qa_genie/data/datasources/remote/generation_api.dart';
 
 class GenerationService {
   final GenerationApi _api = GenerationApi();
@@ -129,7 +131,7 @@ class GenerationService {
   bool _passesFinalValidation(TestCaseModel tc, String platform) {
     if (_containsGarbage(tc)) return false;
     if (_violatesPlatform(tc, platform)) return false;
-    if (_qualityScore(tc) < 5) return false;
+    if (_qualityScore(tc) < 3) return false;
     if (tc.steps.length < 3) return false;
     if (tc.expectedResult.trim().isEmpty) return false;
     return true;
@@ -229,6 +231,12 @@ class GenerationService {
     String? aiFailureReason;
     bool fallbackUsed = false;
     List<TestCaseModel> cases = [];
+    final _pipelineLog = PipelineLogger(maxCases > 10 ? PipelineMode.pro : PipelineMode.core);
+    _pipelineLog.module = module;
+    _pipelineLog.feature = feature;
+    _pipelineLog.platform = platform;
+    _pipelineLog.constraints = notes ?? '';
+    _pipelineLog.requestedCount = maxCases;
 
     try {
       final prompt = _buildEnrichmentPrompt(
@@ -237,8 +245,14 @@ class GenerationService {
         feature,
         platform,
       );
+      _pipelineLog.basePrompt = prompt;
+      _pipelineLog.basePrompt = prompt;
+      _pipelineLog.finalApiPrompt = prompt;
+      PipelineDebugStore.lastFinalPrompt = prompt;
       cases = await _api.generate(prompt);
       aiCalls++;
+      _pipelineLog.parsedCases = List.from(cases);
+      _pipelineLog.aiGenerated = cases.length;
       aiGenerated = cases.length;
     } catch (e) {
       aiFailureReason = e.toString();
@@ -308,10 +322,19 @@ class GenerationService {
     }
 
     final beforeFilter = cases.length;
-    cases = cases.where((tc) => _qualityScore(tc) >= 4).toList();
+    cases = cases.where((tc) {
+      final score = _qualityScore(tc);
+      if (score >= 3) {
+        _pipelineLog.recordAcceptance(tc.title, 'quality score ok ($score)');
+        return true;
+      }
+      _pipelineLog.recordRejection(tc.title, 'quality score too low ($score)');
+      return false;
+    }).toList();
     cases = cases.where((tc) => !_violatesPlatform(tc, platform)).toList();
     filteredCount = beforeFilter - cases.length;
     aiAccepted = cases.length;
+    _pipelineLog.acceptedCases = List.from(cases);
 
     if (cases.length < maxCases) {
       final filler =
@@ -605,6 +628,37 @@ class GenerationService {
       print('FINAL OUTPUT: ${cases.length} cases');
     }
 
+    _pipelineLog.finalCases = List.from(cases.take(maxCases).toList());
+    _pipelineLog.fallbackUsed = fallbackUsed;
+    _pipelineLog.aiGenerated = aiGenerated;
+
+    _pipelineLog.rawAiResponse =
+        PipelineDebugStore.lastRawResponse;
+
+    _pipelineLog.cleanedAiResponse =
+        PipelineDebugStore.lastCleanedResponse;
+
+    _pipelineLog.finalApiPrompt =
+        PipelineDebugStore.lastFinalPrompt;
+
+    _pipelineLog.aiFailure = aiFailureReason != null;
+    _pipelineLog.writeToDisk().catchError((_) {});
+    _pipelineLog.finalCases = List.from(cases.take(maxCases).toList());
+    _pipelineLog.fallbackUsed = fallbackUsed;
+    _pipelineLog.aiGenerated = aiGenerated;
+
+    _pipelineLog.rawAiResponse =
+        PipelineDebugStore.lastRawResponse;
+
+    _pipelineLog.cleanedAiResponse =
+        PipelineDebugStore.lastCleanedResponse;
+
+    _pipelineLog.finalApiPrompt =
+        PipelineDebugStore.lastFinalPrompt;
+
+    _pipelineLog.aiFailure = aiFailureReason != null;
+    try {
+    } catch (_) {}
     return cases;
   }
 

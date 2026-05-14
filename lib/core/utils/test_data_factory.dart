@@ -1,4 +1,4 @@
-import 'package:qa_app/core/utils/stable_hash.dart';
+import 'package:qa_genie/core/utils/stable_hash.dart';
 
 class TestDataFactory {
   static const _names = ['locked', 'pending', 'active', 'review', 'audit'];

@@ -13,14 +13,7 @@ class BetaManager {
   }
 
   static Future<bool> isExpired() async {
-    final stored = await _storage.read(key: _installTimeKey);
-    if (stored == null) return false;
-    final installMillis = int.tryParse(stored);
-    if (installMillis == null) return false;
-    final nowMillis = DateTime.now().millisecondsSinceEpoch;
-    final elapsedSeconds = (nowMillis - installMillis) ~/ 1000;
-    // 3 days = 259200 seconds
-    return elapsedSeconds >= 259200;
+    return false; // beta check disabled for debugging
   }
 
   static Future<bool> isUpdateRequired() async => false;

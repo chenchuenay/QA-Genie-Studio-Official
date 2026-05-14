@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:crypto/crypto.dart';
-import 'package:qa_app/app/config/app_config.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 
 class UsageManager {
   static const _countKey = "daily_gen_count";

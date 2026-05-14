@@ -1,0 +1,12 @@
+{
+  "specification": {
+    "module": "User Authentication",
+    "feature": "Login with OTP",
+    "constraints": ""
+  },
+  "platforms": {
+    "Web": true,
+    "Mobile": false,
+    "API": false
+  }
+}

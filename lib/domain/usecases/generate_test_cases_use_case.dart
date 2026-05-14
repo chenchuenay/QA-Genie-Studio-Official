@@ -1,7 +1,7 @@
-import 'package:qa_app/core/database/database_service.dart';
-import 'package:qa_app/engine/generation_result.dart';
-import 'package:qa_app/engine/generation_service.dart';
-import 'package:qa_app/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/engine/generation_result.dart';
+import 'package:qa_genie/engine/generation_service.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class GenerateTestCasesUseCase {
   final GenerationService _service = GenerationService();

@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:excel/excel.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:qa_genie/features/export/folder/export_folder_service.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
-import 'package:qa_app/features/export/common/export_mapper.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/features/export/common/export_mapper.dart';
 
 class ExcelAdapter {
   // Steps are preserved in the order returned by the API.
@@ -28,7 +28,7 @@ class ExcelAdapter {
 
     final bytes = excel.save();
     if (bytes == null) throw Exception('Excel generation failed');
-    final dir = await getTemporaryDirectory();
+    final dir = await ExportFolderService.getTempDirectory();
     final file = File('${dir.path}/$fileName.xlsx');
     await file.writeAsBytes(bytes);
     await Share.shareXFiles([XFile(file.path)]);

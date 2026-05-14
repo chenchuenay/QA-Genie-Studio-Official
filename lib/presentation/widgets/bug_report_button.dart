@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants.dart';
-import 'package:qa_app/core/utils/dialog_utils.dart';
+import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
 
 class BugReportButton extends StatelessWidget {
   const BugReportButton({super.key});

@@ -1,5 +1,5 @@
-import 'package:qa_app/core/utils/priority_utils.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
+import 'package:qa_genie/core/utils/priority_utils.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
 
 class ExportMapper {
   static String _expectedResult(TestCaseModel tc) {

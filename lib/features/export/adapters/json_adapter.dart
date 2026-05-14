@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'package:qa_app/data/models/test_case_model.dart';
-import 'package:qa_app/features/export/common/export_mapper.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/features/export/common/export_mapper.dart';
 import '../writers/file_writer.dart';
 
 class JsonAdapter {

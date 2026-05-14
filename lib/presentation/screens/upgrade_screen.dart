@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants.dart';
-import 'package:qa_app/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class UpgradeScreen extends StatelessWidget {
   const UpgradeScreen({super.key});

@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants_premium.dart';
+import 'package:qa_genie/app/theme/constants_premium.dart';
 
 class HomePreview extends StatefulWidget {
   const HomePreview({super.key});

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
 
 class DatabaseService {
   static Database? _db;

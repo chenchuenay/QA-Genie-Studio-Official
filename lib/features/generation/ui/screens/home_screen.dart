@@ -1,16 +1,15 @@
 import 'package:flutter/services.dart';
-import 'package:qa_app/presentation/widgets/press_effect.dart';
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/config/app_config.dart';
-import 'package:qa_app/app/theme/constants.dart';
-import 'package:qa_app/core/utils/dialog_utils.dart';
-import 'package:qa_app/domain/usecases/generate_test_cases_use_case.dart';
-import 'package:qa_app/domain/usecases/save_test_suite_use_case.dart';
-import 'package:qa_app/features/beta/logic/beta_manager.dart';
-import 'package:qa_app/features/generation/ui/screens/preview_screen.dart';
-import 'package:qa_app/features/monetization/logic/usage_manager.dart';
-import 'package:qa_app/features/monetization/ads/ad_service.dart';
-import 'package:qa_app/presentation/widgets/ad_dialog.dart';
+import 'package:qa_genie/app/config/app_config.dart';
+import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
+import 'package:qa_genie/domain/usecases/save_test_suite_use_case.dart';
+import 'package:qa_genie/features/beta/logic/beta_manager.dart';
+import 'package:qa_genie/features/generation/ui/screens/preview_screen.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/features/monetization/ads/ad_service.dart';
+import 'package:qa_genie/presentation/widgets/ad_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   static final constraintsKey = GlobalKey();

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants_premium.dart';
-import 'package:qa_app/design_preview/home_preview.dart';
+import 'package:qa_genie/app/theme/constants_premium.dart';
+import 'package:qa_genie/design_preview/home_preview.dart';
 
 void main() {
   runApp(const DesignPreviewApp());

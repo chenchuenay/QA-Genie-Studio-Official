@@ -1,4 +1,4 @@
-import 'package:qa_app/core/utils/stable_hash.dart';
+import 'package:qa_genie/core/utils/stable_hash.dart';
 
 class StepPhraseBank {
   final String _seedPrefix;

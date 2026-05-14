@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants.dart';
+import 'package:qa_genie/app/theme/constants.dart';
 import 'package:in_app_review/in_app_review.dart';
 
 class ExportSuccessDialog extends StatelessWidget {

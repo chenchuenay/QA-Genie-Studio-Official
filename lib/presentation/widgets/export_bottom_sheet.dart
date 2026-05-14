@@ -1,8 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants.dart';
-import 'package:qa_app/presentation/widgets/export_preview_dialog.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
+import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/presentation/widgets/export_preview_dialog.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
 
 class ExportBottomSheet extends StatelessWidget {
   final List<TestCaseModel> cases;

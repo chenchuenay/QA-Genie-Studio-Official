@@ -1,5 +1,5 @@
-import 'package:qa_app/core/network/api_client.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
+import 'package:qa_genie/core/network/api_client.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
 
 class GenerationApi {
   final ApiClient _client = ApiClient();

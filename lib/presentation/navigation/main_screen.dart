@@ -1,14 +1,14 @@
-import 'package:qa_app/main.dart';
+import 'package:qa_genie/main.dart';
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants.dart';
-import 'package:qa_app/core/utils/dialog_utils.dart';
+import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import 'package:qa_app/presentation/widgets/bug_report_button.dart';
-import 'package:qa_app/presentation/widgets/guidelines_dialog.dart';
-import 'package:qa_app/features/suites/ui/screens/suites_screen.dart';
-import 'package:qa_app/presentation/screens/pro_benefits_screen.dart';
-import 'package:qa_app/features/generation/ui/screens/home_screen.dart';
+import 'package:qa_genie/presentation/widgets/bug_report_button.dart';
+import 'package:qa_genie/presentation/widgets/guidelines_dialog.dart';
+import 'package:qa_genie/features/suites/ui/screens/suites_screen.dart';
+import 'package:qa_genie/presentation/screens/pro_benefits_screen.dart';
+import 'package:qa_genie/features/generation/ui/screens/home_screen.dart';
 
 class MainScreen extends StatefulWidget {
   static final _suitesTabKey = GlobalKey();

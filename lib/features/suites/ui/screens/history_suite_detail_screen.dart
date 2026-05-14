@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/features/generation/ui/screens/preview_screen.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
+import 'package:qa_genie/features/generation/ui/screens/preview_screen.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
 
 class HistorySuiteDetailScreen extends StatelessWidget {
   final List<TestCaseModel> testCases;

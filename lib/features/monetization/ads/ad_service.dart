@@ -1,4 +1,4 @@
-import 'package:qa_app/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class AdService {
   static final AdService _instance = AdService._internal();

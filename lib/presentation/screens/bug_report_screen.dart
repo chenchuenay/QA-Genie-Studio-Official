@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants.dart';
+import 'package:qa_genie/app/theme/constants.dart';
 
 class BugReportScreen extends StatefulWidget {
   final bool firebaseReady;

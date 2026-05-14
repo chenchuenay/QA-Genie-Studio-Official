@@ -1,5 +1,5 @@
-import 'package:qa_app/core/database/database_service.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
+import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
 class SaveTestSuiteUseCase {
   Future<int> execute({required String module, required String feature, required String platform, required List<TestCaseModel> cases}) async {
     final id = await DatabaseService.insertSuite(module, feature, platform);

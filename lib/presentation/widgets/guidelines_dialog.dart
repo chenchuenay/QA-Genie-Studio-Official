@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:qa_app/app/theme/constants.dart';
+import 'package:qa_genie/app/theme/constants.dart';
 
 class GuidelinesDialog extends StatefulWidget {
   final bool showNeverAsk;

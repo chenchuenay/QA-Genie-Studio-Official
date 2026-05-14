@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:qa_app/app/theme/constants.dart';
-import 'package:qa_app/domain/usecases/export_test_cases_use_case.dart';
-import 'package:qa_app/domain/usecases/save_test_suite_use_case.dart';
-import 'package:qa_app/domain/usecases/get_history_use_case.dart';
-import 'package:qa_app/data/models/test_case_model.dart';
-import 'package:qa_app/features/generation/ui/widgets/master_table.dart';
-import 'package:qa_app/presentation/widgets/export_bottom_sheet.dart';
-import 'package:qa_app/presentation/widgets/export_success_dialog.dart';
-import 'package:qa_app/presentation/widgets/ad_dialog.dart';
-import 'package:qa_app/features/summary/ui/summary_report_screen.dart';
-import 'package:qa_app/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
+import 'package:qa_genie/domain/usecases/save_test_suite_use_case.dart';
+import 'package:qa_genie/domain/usecases/get_history_use_case.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
+import 'package:qa_genie/presentation/widgets/export_bottom_sheet.dart';
+import 'package:qa_genie/presentation/widgets/export_success_dialog.dart';
+import 'package:qa_genie/presentation/widgets/ad_dialog.dart';
+import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class PreviewScreen extends StatefulWidget {
   final List<TestCaseModel> testCases;
