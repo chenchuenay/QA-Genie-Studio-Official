@@ -1,9 +1,10 @@
-import 'package:qa_genie/data/models/test_case_model.dart';
-import 'scenario_planner.dart';
 import 'platform_rules.dart';
+import 'scenario_planner.dart';
 import 'qa_heuristics_engine.dart';
-import 'package:qa_genie/core/utils/test_data_factory.dart';
 import 'package:qa_genie/core/utils/stable_hash.dart';
+import 'package:qa_genie/domain/enums/case_source.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/core/utils/test_data_factory.dart';
 import 'package:qa_genie/engine/builders/preconditions_builder.dart';
 
 class DeterministicRepair {
@@ -27,6 +28,28 @@ class DeterministicRepair {
         .trim();
   }
 
+  String _intentHash(TestCaseModel tc) {
+    final title = tc.title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
+
+    final actions = tc.steps
+        .map(
+          (s) => s.action
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+              .trim(),
+        )
+        .join('|');
+
+    return '$title|$actions';
+  }
+
+  bool _hasPlaceholders(String text) {
+    return text.contains('{') || text.contains('}');
+  }
+
   String _smooth(String feature) {
     return feature
         .replaceAll(
@@ -41,10 +64,14 @@ class DeterministicRepair {
   }
 
   List<TestCaseModel> repair(List<TestCaseModel> cases, int targetCount) {
-    if (cases.length >= targetCount) return cases;
+    if (cases.length >= targetCount) {
+      return List<TestCaseModel>.from(cases);
+    }
     final existingNormalized = cases
         .map((c) => _normalizeTitle(c.title))
         .toSet();
+
+    final existingIntents = cases.map((c) => _intentHash(c)).toSet();
     final skeletons = planner.generateSkeletons();
     final repaired = <TestCaseModel>[...cases];
 
@@ -56,9 +83,28 @@ class DeterministicRepair {
       existingNormalized.add(normalized);
 
       final steps = _buildContextualSteps(sk);
+      final tempCase = TestCaseModel(
+        title: title,
+        module: sk['module'],
+        feature: sk['feature'],
+        platform: sk['platform'],
+        priority: sk['priority'],
+        type: sk['type'],
+        preconditions: const [],
+        steps: steps,
+        expectedResult: '',
+      );
+      final intentHash = _intentHash(tempCase);
+
+      if (existingIntents.contains(intentHash)) {
+        continue;
+      }
+
+      existingIntents.add(intentHash);
 
       repaired.add(
         TestCaseModel(
+          source: CaseSource.repairedAi,
           title: title,
           module: sk['module'],
           feature: sk['feature'],
@@ -81,16 +127,19 @@ class DeterministicRepair {
     final platform = sk['platform'] as String;
     final endpoint = PlatformRules.apiEndpoint(feature);
     final variants = _getVariantList(platform, category);
-    final key = '$feature-$category-$platform-${sk['title']}';
-    final idx = StableHash.forText(key, variants.length);
-    final variant = variants.isNotEmpty ? variants[idx] : [];
+    final key = '$feature|$category|$platform';
+    final variant = variants.isEmpty
+        ? <Map<String, String>>[]
+        : variants[StableHash.forText(key, variants.length)];
 
     final res = <TestStep>[];
+
     for (int i = 0; i < variant.length; i++) {
       final step = variant[i];
       final action = step['action']!
           .replaceAll('{feature}', smoothFeature)
           .replaceAll('{endpoint}', endpoint);
+
       final data = step['data']!
           .replaceAll('{validEmail}', TestDataFactory.validEmail(key))
           .replaceAll('{invalidEmail}', TestDataFactory.invalidEmail(key))
@@ -102,6 +151,11 @@ class DeterministicRepair {
       final expected = step['expected']!
           .replaceAll('{feature}', smoothFeature)
           .replaceAll('{endpoint}', endpoint);
+      if (_hasPlaceholders(action) ||
+          _hasPlaceholders(data) ||
+          _hasPlaceholders(expected)) {
+        continue;
+      }
 
       res.add(TestStep(action: action, data: data, expected: expected));
 
@@ -120,20 +174,6 @@ class DeterministicRepair {
           ),
         );
       }
-    }
-
-    if (res.length < 3 && platform != 'API') {
-      res.add(
-        TestStep(
-          action: 'Observe the final state of the {feature} module'.replaceAll(
-            '{feature}',
-            smoothFeature,
-          ),
-          data: '',
-          expected:
-              'The system state matches the expected outcome for this scenario.',
-        ),
-      );
     }
 
     return res;
@@ -343,7 +383,8 @@ class DeterministicRepair {
                   'action':
                       'Verify the returned data against expected outcomes',
                   'data': '',
-                  'expected': 'All required fields are present and accurate.',
+                  'expected':
+                      'Response body contains expected schema fields, valid status code, and correct persistence state.',
                 },
               ],
             ];

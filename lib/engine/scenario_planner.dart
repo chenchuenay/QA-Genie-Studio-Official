@@ -1,7 +1,7 @@
 import 'dart:math';
-import 'distribution_engine.dart';
-import 'template_registry.dart';
 import 'generation_mode.dart';
+import 'template_registry.dart';
+import 'distribution_engine.dart';
 import 'qa_heuristics_engine.dart';
 
 class ScenarioPlanner {
@@ -25,11 +25,17 @@ class ScenarioPlanner {
          seed ?? _generateSeed(module, feature, platform, domain),
        );
 
-  static int _generateSeed(String m, String f, String p, String d) {
-    return '$m|$f|$p|$d'.hashCode;
+  static int _generateSeed(
+    String module,
+    String feature,
+    String platform,
+    String domain,
+  ) {
+    return '$module|$feature|$platform|$domain'.hashCode;
   }
 
   Random get random => _random;
+
   String get stableSeed => '$module|$feature|$platform|$domain';
 
   List<Map<String, dynamic>> generateSkeletons() {
@@ -41,115 +47,212 @@ class ScenarioPlanner {
       count: count,
       domain: domain,
     );
-    final dist = engine.calculate();
+
+    final distribution = engine.calculate();
+
     final templates =
         TemplateRegistry.platformTemplates[platform] ??
         TemplateRegistry.platformTemplates['Web']!;
+
     final skeletons = <Map<String, dynamic>>[];
 
-    // Track used categories to prioritize unused ones
-    final usedCategories = <String>{};
-    final availableTemplates = Map<String, dynamic>.from(templates);
+    final usedTitles = <String>{};
 
-    // First pass: Fill with unique categories
-    if (count > 0 && availableTemplates.isNotEmpty) {
-      final availableCategoryKeys = availableTemplates.keys.toList();
-      availableCategoryKeys.shuffle(_random); // Shuffle to randomize selection
-      
-      for (final cat in availableCategoryKeys) {
-        if (skeletons.length >= count) break;
-        
-        final cnt = dist[cat] ?? 0;
-        if (cnt == 0) continue;
+    final categories = templates.keys.toList()..shuffle(_random);
 
-        final tpl = availableTemplates[cat];
-        if (tpl == null) continue;
+    // PASS 1: Try category-balanced generation first
+    for (final category in categories) {
+      if (skeletons.length >= count) {
+        break;
+      }
 
-        var scenarios = List<String>.from(tpl['scenarios'])
-            .where(
-              (scenario) => QaHeuristicsEngine.scenarioMatchesContext(
-                scenario,
-                module,
-                feature,
-                domain,
-              ),
-            )
-            .toList();
-        if (scenarios.isEmpty) {
-          // Corrected call to _syntheticScenario using 'cat'
-          scenarios = [_syntheticScenario(cat)]; 
-        }
-        scenarios.shuffle(_random);
+      final template = templates[category];
 
-        for (int i = 0; i < cnt; i++) {
-          if (skeletons.length >= count) break;
-          final idx = i % scenarios.length;
-          skeletons.add({
-            'category': cat,
-            'title': scenarios[idx],
-            'module': module,
-            'feature': feature,
-            'platform': platform,
-            'priority': QaHeuristicsEngine.priorityFor(
-              category: cat,
-              module: module,
-              feature: feature,
-              title: scenarios[idx],
-              platform: platform,
-              domain: domain,
+      if (template == null) {
+        continue;
+      }
+
+      final requiredCount = distribution[category] ?? 0;
+
+      if (requiredCount <= 0) {
+        continue;
+      }
+
+      List<String> scenarios = List<String>.from(
+        template['scenarios'] ?? const [],
+      );
+
+      scenarios = scenarios
+          .where(
+            (scenario) => QaHeuristicsEngine.scenarioMatchesContext(
+              scenario,
+              module,
+              feature,
+              domain,
             ),
-            'type': _categoryToType(cat),
-            'intent_id': tpl['intent_id'] ?? 'generic',
-          });
-          usedCategories.add(cat);
+          )
+          .toList();
+
+      if (scenarios.isEmpty) {
+        scenarios = [_syntheticScenario(category)];
+      }
+
+      scenarios.shuffle(_random);
+
+      for (int i = 0; i < requiredCount; i++) {
+        if (skeletons.length >= count) {
+          break;
         }
+
+        final scenario = scenarios[i % scenarios.length];
+        final normalizedTitle = scenario.toLowerCase().trim();
+
+        if (usedTitles.contains(normalizedTitle)) {
+          continue;
+        }
+
+        usedTitles.add(normalizedTitle);
+
+        skeletons.add(
+          _buildSkeleton(
+            category: category,
+            title: scenario,
+            intentId: template['intent_id'] ?? 'generic',
+          ),
+        );
       }
     }
 
-    // Second pass: If more count is needed, fill with potentially repeated categories, but prefer promoted ones.
-    // This logic ensures we meet the total count, while prioritizing diversity in the first pass.
-    // Further refinement could involve more sophisticated preference logic.
+    // PASS 2: Fill remaining gaps deterministically
+    int guard = 0;
+
+    while (skeletons.length < count && guard < count * 5) {
+      guard++;
+
+      final category = categories[guard % categories.length];
+
+      final template = templates[category];
+
+      if (template == null) {
+        continue;
+      }
+
+      List<String> scenarios = List<String>.from(
+        template['scenarios'] ?? const [],
+      );
+
+      scenarios = scenarios
+          .where(
+            (scenario) => QaHeuristicsEngine.scenarioMatchesContext(
+              scenario,
+              module,
+              feature,
+              domain,
+            ),
+          )
+          .toList();
+
+      final scenario = scenarios.isNotEmpty
+          ? scenarios[guard % scenarios.length]
+          : _syntheticScenario(category);
+
+      final uniqueScenario = '$scenario - Variant ${guard + 1}';
+
+      final normalizedTitle = uniqueScenario.toLowerCase().trim();
+
+      if (usedTitles.contains(normalizedTitle)) {
+        continue;
+      }
+
+      usedTitles.add(normalizedTitle);
+
+      skeletons.add(
+        _buildSkeleton(
+          category: category,
+          title: uniqueScenario,
+          intentId: template['intent_id'] ?? 'generic',
+        ),
+      );
+    }
 
     return skeletons.take(count).toList();
+  }
+
+  Map<String, dynamic> _buildSkeleton({
+    required String category,
+    required String title,
+    required String intentId,
+  }) {
+    return {
+      'category': category,
+      'title': title,
+      'module': module,
+      'feature': feature,
+      'platform': platform,
+      'priority': QaHeuristicsEngine.priorityFor(
+        category: category,
+        module: module,
+        feature: feature,
+        title: title,
+        platform: platform,
+        domain: domain,
+      ),
+      'type': _categoryToType(category),
+      'intent_id': intentId,
+    };
   }
 
   String _syntheticScenario(String category) {
     switch (category) {
       case 'positive':
         return 'Verify successful $feature flow with valid inputs';
+
       case 'negative':
         return 'Verify $feature rejects invalid input with clear validation feedback';
+
       case 'security':
         return 'Verify $feature blocks unauthorized or tampered requests';
+
       case 'boundary':
         return 'Verify $feature enforces input and payload boundary limits';
+
       case 'validation':
         return 'Verify $feature validates required fields and formats';
+
       case 'session':
         return 'Verify $feature maintains correct session lifecycle behavior';
+
       case 'usability':
         return 'Verify $feature remains accessible and clear during repeated use';
+
       default:
         return 'Verify $feature default workflow stability';
     }
   }
 
-  String _categoryToType(String cat) {
-    switch (cat) {
+  String _categoryToType(String category) {
+    switch (category) {
       case 'positive':
         return 'POSITIVE';
+
       case 'negative':
         return 'NEGATIVE';
+
       case 'security':
         return 'SECURITY';
+
       case 'boundary':
         return 'EDGE';
+
       case 'validation':
         return 'VALIDATION';
+
       case 'session':
         return 'SESSION';
+
       case 'usability':
         return 'USABILITY';
+
       default:
         return 'GENERAL';
     }

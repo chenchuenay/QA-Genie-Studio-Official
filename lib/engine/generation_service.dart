@@ -1,6 +1,4 @@
 import 'package:qa_genie/engine/platform_rules.dart';
-import 'package:qa_genie/core/debug/pipeline_logger.dart';
-import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
 import 'package:qa_genie/engine/generation_mode.dart';
 import 'package:qa_genie/core/utils/stable_hash.dart';
 import 'package:qa_genie/core/utils/id_generator.dart';
@@ -8,14 +6,18 @@ import 'package:qa_genie/engine/scenario_planner.dart';
 import 'package:qa_genie/engine/generation_result.dart';
 import 'package:qa_genie/core/utils/priority_utils.dart';
 import 'package:qa_genie/engine/generation_metrics.dart';
+import 'package:qa_genie/core/debug/pipeline_logger.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
 import 'package:qa_genie/engine/deterministic_repair.dart';
 import 'package:qa_genie/engine/qa_heuristics_engine.dart';
 import 'package:qa_genie/core/utils/test_data_factory.dart';
+import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
 import 'package:qa_genie/engine/fallback/fallback_generator.dart';
 import 'package:qa_genie/data/datasources/remote/generation_api.dart';
 
 class GenerationService {
+  static const bool bypassPipeline = false;
+
   final GenerationApi _api = GenerationApi();
   bool _isGenerating = false;
   static GenerationMetrics _lastMetrics = const GenerationMetrics();
@@ -80,8 +82,6 @@ class GenerationService {
 
     // Weak fake test data labels
     "test data",
-    "valid data",
-    "invalid data",
     "correct values",
   ];
 
@@ -108,30 +108,30 @@ class GenerationService {
   }
 
   String _intentSignature(TestCaseModel tc) {
-    final title = tc.title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+    final normalizedTitle = tc.title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
+
     final firstAction = tc.steps.isNotEmpty
-        ? tc.steps.first.action.toLowerCase().replaceAll(
-            RegExp(r'[^a-z0-9]+'),
-            ' ',
-          )
+        ? tc.steps.first.action
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+              .trim()
         : '';
-    final expected = tc.expectedResult.toLowerCase().replaceAll(
-      RegExp(r'[^a-z0-9]+'),
-      ' ',
-    );
-    final tokens = '$title $firstAction $expected'
-        .split(' ')
-        .map((t) => t.trim())
-        .where((t) => t.length > 3)
-        .toList();
-    tokens.sort();
-    return tokens.take(18).join(' ');
+
+    final expected = tc.expectedResult
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
+
+    return '$normalizedTitle|$firstAction|$expected';
   }
 
   bool _passesFinalValidation(TestCaseModel tc, String platform) {
     if (_containsGarbage(tc)) return false;
     if (_violatesPlatform(tc, platform)) return false;
-    if (_qualityScore(tc) < 3) return false;
+    if (_qualityScore(tc) < 2) return false;
     if (tc.steps.length < 3) return false;
     if (tc.expectedResult.trim().isEmpty) return false;
     return true;
@@ -231,7 +231,9 @@ class GenerationService {
     String? aiFailureReason;
     bool fallbackUsed = false;
     List<TestCaseModel> cases = [];
-    final _pipelineLog = PipelineLogger(maxCases > 10 ? PipelineMode.pro : PipelineMode.core);
+    final _pipelineLog = PipelineLogger(
+      maxCases > 10 ? PipelineMode.pro : PipelineMode.core,
+    );
     _pipelineLog.module = module;
     _pipelineLog.feature = feature;
     _pipelineLog.platform = platform;
@@ -241,33 +243,58 @@ class GenerationService {
     try {
       final prompt = _buildEnrichmentPrompt(
         skeletons,
+
         module,
+
         feature,
+
         platform,
       );
+
       _pipelineLog.basePrompt = prompt;
-      _pipelineLog.basePrompt = prompt;
+
       _pipelineLog.finalApiPrompt = prompt;
+
       PipelineDebugStore.lastFinalPrompt = prompt;
+
       cases = await _api.generate(prompt);
+
       aiCalls++;
+
+      if (cases.isEmpty) {
+        throw Exception('AI returned zero test cases');
+      }
+
       _pipelineLog.parsedCases = List.from(cases);
+
       _pipelineLog.aiGenerated = cases.length;
+
       aiGenerated = cases.length;
     } catch (e) {
       aiFailureReason = e.toString();
-    }
 
-    cases = cases.where((tc) => !_containsGarbage(tc)).toList();
+      // HARD FALLBACK RECOVERY
 
-    if (aiFailureReason != null || cases.isEmpty) {
       cases = FallbackGenerator.generate(
         count: maxCases,
         module: module,
         feature: feature,
         platform: platform,
       );
+
       fallbackUsed = true;
+
+      aiGenerated = 0;
+
+      aiAccepted = cases.length;
+    }
+
+    final filteredGarbage = cases.where((tc) => !_containsGarbage(tc)).toList();
+    if (filteredGarbage.isNotEmpty) {
+      cases = filteredGarbage;
+    }
+
+    if (cases.isEmpty) {
       aiFailureReason ??= 'AI produced no usable test cases after filtering.';
     }
 
@@ -322,7 +349,7 @@ class GenerationService {
     }
 
     final beforeFilter = cases.length;
-    cases = cases.where((tc) {
+    final qualityFiltered = cases.where((tc) {
       final score = _qualityScore(tc);
       if (score >= 3) {
         _pipelineLog.recordAcceptance(tc.title, 'quality score ok ($score)');
@@ -331,32 +358,39 @@ class GenerationService {
       _pipelineLog.recordRejection(tc.title, 'quality score too low ($score)');
       return false;
     }).toList();
-    cases = cases.where((tc) => !_violatesPlatform(tc, platform)).toList();
+    cases = qualityFiltered;
+    if (cases.isEmpty) {
+      throw Exception('All AI cases failed quality validation');
+    }
+    final platformFiltered = cases
+        .where((tc) => !_violatesPlatform(tc, platform))
+        .toList();
+
+    if (platformFiltered.isNotEmpty) {
+      cases = platformFiltered;
+    }
     filteredCount = beforeFilter - cases.length;
     aiAccepted = cases.length;
     _pipelineLog.acceptedCases = List.from(cases);
-
-    if (cases.length < maxCases) {
-      final filler =
-          FallbackGenerator.generate(
-                count: maxCases - cases.length,
-                module: module,
-                feature: feature,
-                platform: platform,
-              )
-              .where((tc) => !_containsGarbage(tc))
-              .where((tc) => !_violatesPlatform(tc, platform))
-              .toList();
-      if (filler.isNotEmpty) {
-        fallbackUsed = true;
-        cases.addAll(filler);
+    if (bypassPipeline) {
+      for (int i = 0; i < cases.length; i++) {
+        cases[i].id = IdGenerator.generate(module, feature, startIndex + i);
       }
+      _pipelineLog.finalCases = List.from(cases);
+      _pipelineLog.rawAiResponse = PipelineDebugStore.lastRawResponse;
+      _pipelineLog.cleanedAiResponse = PipelineDebugStore.lastCleanedResponse;
+      _pipelineLog.finalApiPrompt = PipelineDebugStore.lastFinalPrompt;
+      _pipelineLog.writeToDisk().catchError((_) {});
+      return cases.take(maxCases).toList();
     }
+    cases = _rebalancePriorities(cases);
 
+    if (false) {
+      print('Fallback filler disabled during AI stabilization');
+    }
     final seenTitles = <String>{};
     final seenIntents = <String>{};
-    final seenStepSequences =
-        <List<String>>{}; // To track step sequence similarity
+    final seenStepSequences = <String>{}; // To track step sequence similarity
     final seenCategories =
         <String>{}; // To track category diversity for PRO mode
 
@@ -369,7 +403,14 @@ class GenerationService {
     cases = cases.where((tc) {
       final lower = tc.title.trim().toLowerCase();
       final intent = _intentSignature(tc);
-      final stepSequence = tc.steps.map((s) => s.action.toLowerCase()).toList();
+      final stepSequence = tc.steps
+          .map(
+            (s) => s.action
+                .toLowerCase()
+                .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+                .trim(),
+          )
+          .join('|');
 
       // Check for duplicate titles and intents
       if (seenTitles.contains(lower) || seenIntents.contains(intent)) {
@@ -433,105 +474,58 @@ class GenerationService {
         .where((tc) => !_containsGarbage(tc))
         .where((tc) => !_violatesPlatform(tc, platform))
         .toList();
-    repairedCount = cases.length - beforeRepair;
+    repairedCount = cases.length > beforeRepair
+        ? cases.length - beforeRepair
+        : 0;
 
     final seenFinal = <String>{};
     final seenFinalIntents = <String>{};
-    cases = cases.where((tc) {
+
+    final beforeFinalDedup = List<TestCaseModel>.from(cases);
+    final finalDeduped = cases.where((tc) {
       final lower = tc.title.trim().toLowerCase();
       final intent = _intentSignature(tc);
+
       if (seenFinal.contains(lower) || seenFinalIntents.contains(intent)) {
         return false;
       }
+
       seenFinal.add(lower);
       seenFinalIntents.add(intent);
+
       return true;
     }).toList();
 
-    if (platform.toLowerCase() == 'web' && cases.length < 5) {}
-
-    while (cases.length < maxCases) {
-      final emergency = _emergencyCase(
-        module,
-        feature,
-        platform,
-        inferredDomain,
-        cases.length + 1,
-      );
-
-      cases.add(emergency);
+    if (finalDeduped.isNotEmpty) {
+      cases = finalDeduped;
+    } else {
+      cases = beforeFinalDedup;
     }
 
     // ===== FORCE FINAL UNIQUENESS =====
-    final uniqueTitles = <String>{};
+    final uniqueHashes = <String>{};
+
     final deduped = <TestCaseModel>[];
 
     for (final tc in cases) {
-      final normalized = tc.title
-          .toLowerCase()
-          .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
-          .trim();
-
-      if (!uniqueTitles.contains(normalized)) {
-        uniqueTitles.add(normalized);
+      final hash =
+          '''
+      ${tc.title}
+      ${tc.expectedResult}
+      ${tc.steps.map((s) => '${s.action}|${s.data}|${s.expected}').join('|')}
+      '''
+              .toLowerCase()
+              .trim();
+      if (!uniqueHashes.contains(hash)) {
+        uniqueHashes.add(hash);
         deduped.add(tc);
       }
     }
-
-    cases = deduped;
-
-    // refill removed duplicates
-    while (cases.length < maxCases) {
-      final idx = cases.length + 1;
-
-      final emergency = _emergencyCase(
-        module,
-        feature + ' Variant ' + idx.toString(),
-        platform,
-        inferredDomain,
-        idx,
-      );
-
-      cases.add(
-        TestCaseModel(
-          id: emergency.id,
-          title: emergency.title + ' #' + idx.toString(),
-          preconditions: emergency.preconditions,
-          steps: emergency.steps,
-          expectedResult: emergency.expectedResult,
-
-          status: emergency.status,
-          type: emergency.type,
-        ),
-      );
+    if (deduped.isNotEmpty) {
+      cases = deduped;
     }
+
     // ===== END FORCE FINAL UNIQUENESS =====
-
-    final feat = feature.isNotEmpty ? feature : module;
-    int fillNum = cases.length + 1;
-    // removed aggressive final re-filter causing suite collapse
-    fillNum = cases.length + 1;
-    int guard = 0;
-    while (cases.length < maxCases && guard < maxCases * 5) {
-      final emergency = _emergencyCase(
-        module,
-        feat,
-        platform,
-        inferredDomain,
-        fillNum,
-      );
-      if (_passesFinalValidation(emergency, platform)) {
-        cases.add(emergency);
-      }
-      fillNum++;
-      guard++;
-    }
-
-    print("WEB PIPELINE DEBUG AFTER TAKE: ${cases.length}");
-
-    for (int i = 0; i < cases.length; i++) {
-      cases[i].id = IdGenerator.generate(module, feature, startIndex + i);
-    }
 
     final metrics = GenerationMetrics(
       aiGenerated: aiGenerated,
@@ -542,14 +536,11 @@ class GenerationService {
       aiFailure: aiFailureReason != null,
       aiFailureReason: aiFailureReason,
     );
+
     _lastMetrics = metrics;
     if (aiFailureReason != null) {
-      _lastWarning = fallbackUsed
-          ? 'AI generation failed or produced unusable output; fallback test cases were used.'
-          : 'AI generation failed during parsing or network call.';
-    } else if (fallbackUsed) {
       _lastWarning =
-          'AI output was partially insufficient; deterministic fallback cases were added.';
+          'AI generation failed during parsing, validation, or network call.';
     } else if (metrics.deterministicShare >= 0.7) {
       _lastWarning =
           'Most cases were deterministically repaired after quality filtering.';
@@ -558,49 +549,14 @@ class GenerationService {
     }
     print('[QA Genie Metrics] $metrics');
 
-    cases = _rebalancePriorities(cases);
-
-    cases = _rebalancePriorities(cases);
-
-    print("WEB PIPELINE DEBUG AFTER TAKE: ${cases.length}");
-
-    if (cases.length < maxCases) {
+    if (false) {
       print("FINAL RECOVERY TRIGGERED: ${cases.length} -> $maxCases");
 
       // =====================================================
       // FINALIZATION PIPELINE
       // =====================================================
 
-      cases = repair.repair(cases, maxCases);
-
-      while (cases.length < maxCases) {
-        final idx = cases.length + 1;
-
-        final filler = _emergencyCase(
-          module,
-          feature,
-          platform,
-          inferredDomain,
-          idx,
-        );
-
-        final priority = idx % 5 == 0
-            ? 'Low'
-            : (idx % 2 == 0 ? 'Medium' : 'High');
-
-        cases.add(
-          TestCaseModel(
-            id: filler.id,
-            title: filler.title,
-            preconditions: filler.preconditions,
-            steps: filler.steps,
-            expectedResult: filler.expectedResult,
-            priority: priority,
-            status: '',
-            type: filler.type,
-          ),
-        );
-      }
+      // cases = repair.repair(cases, maxCases);
 
       final normalized = <TestCaseModel>[];
 
@@ -628,38 +584,47 @@ class GenerationService {
       print('FINAL OUTPUT: ${cases.length} cases');
     }
 
+    _pipelineLog.aiFailure = aiFailureReason != null;
+
     _pipelineLog.finalCases = List.from(cases.take(maxCases).toList());
     _pipelineLog.fallbackUsed = fallbackUsed;
     _pipelineLog.aiGenerated = aiGenerated;
 
-    _pipelineLog.rawAiResponse =
-        PipelineDebugStore.lastRawResponse;
+    _pipelineLog.rawAiResponse = PipelineDebugStore.lastRawResponse;
 
-    _pipelineLog.cleanedAiResponse =
-        PipelineDebugStore.lastCleanedResponse;
+    _pipelineLog.cleanedAiResponse = PipelineDebugStore.lastCleanedResponse;
 
-    _pipelineLog.finalApiPrompt =
-        PipelineDebugStore.lastFinalPrompt;
+    _pipelineLog.finalApiPrompt = PipelineDebugStore.lastFinalPrompt;
 
     _pipelineLog.aiFailure = aiFailureReason != null;
+    try {} catch (_) {}
+
     _pipelineLog.writeToDisk().catchError((_) {});
-    _pipelineLog.finalCases = List.from(cases.take(maxCases).toList());
-    _pipelineLog.fallbackUsed = fallbackUsed;
-    _pipelineLog.aiGenerated = aiGenerated;
+    if (cases.length < maxCases) {
+      final missing = maxCases - cases.length;
+      for (int i = 0; i < missing; i++) {
+        final emergency = _emergencyCase(
+          module,
+          feature,
+          platform,
+          inferredDomain,
+          i,
+        );
 
-    _pipelineLog.rawAiResponse =
-        PipelineDebugStore.lastRawResponse;
+        emergency.id =
+            'TC_${module.toUpperCase().replaceAll(RegExp(r"[^A-Z0-9]+"), "_")}_${(cases.length + i + 1).toString().padLeft(3, '0')}';
 
-    _pipelineLog.cleanedAiResponse =
-        PipelineDebugStore.lastCleanedResponse;
+        cases.add(emergency);
+      }
+    }
 
-    _pipelineLog.finalApiPrompt =
-        PipelineDebugStore.lastFinalPrompt;
+    cases = cases.take(maxCases).toList();
+    for (int i = 0; i < cases.length; i++) {
+      cases[i].id =
+          'TC_${module.toUpperCase().replaceAll(RegExp(r"[^A-Z0-9]+"), "_")}_${(i + 1).toString().padLeft(3, '0')}';
+    }
 
-    _pipelineLog.aiFailure = aiFailureReason != null;
-    try {
-    } catch (_) {}
-    return cases;
+    return cases.take(maxCases).toList();
   }
 
   String _categoryToType(String cat) {
@@ -930,19 +895,18 @@ class GenerationService {
           TestStep(
             action: 'Send request to $endpoint',
             data: data,
-            expected: 'API response is successfully received and parsed',
+            expected:
+                'The API returns the expected status code and response payload structure',
           ),
           TestStep(
-            action: 'Validate API response status and contract',
+            action: 'Validate response status and schema',
             data: '',
-            expected:
-                'API behavior matches the expected backend validation and processing logic.',
+            expected: 'Response structure matches expected API contract',
           ),
           TestStep(
-            action: 'Validate response payload, headers, and error structure',
+            action: 'Validate backend persistence and validation behavior',
             data: '',
-            expected:
-                'Response payload matches the expected contract and validation rules.',
+            expected: 'Backend state changes are processed correctly',
           ),
         ];
       case 'Mobile':
@@ -982,13 +946,29 @@ class GenerationService {
         ];
         final submitActions = [
           'Submit the $feature form',
+
           'Click the primary action button',
-          '',
+
+          'Complete the $feature workflow',
         ];
         return [
-          TestStep(action: openActions[idx], data: '', expected: ''),
-          TestStep(action: '', data: data, expected: ''),
-          TestStep(action: submitActions[idx], data: '', expected: ''),
+          TestStep(
+            action: openActions[idx],
+            data: '',
+            expected: 'The $feature screen loads successfully',
+          ),
+          TestStep(
+            action: 'Enter the provided test data into the relevant fields',
+            data: data,
+            expected:
+                'The application accepts the provided input and updates the workflow state correctly',
+          ),
+          TestStep(
+            action: submitActions[idx],
+            data: '',
+            expected:
+                'The application updates the visible workflow state, preserves submitted data correctly, and displays the expected completion state',
+          ),
         ];
     }
   }
@@ -1060,6 +1040,9 @@ class GenerationService {
     String platform,
   ) {
     final sb = StringBuffer();
+    sb.writeln(
+      "DO NOT output reasoning. DO NOT use <think> tags. Return ONLY pure JSON array.",
+    );
     sb.writeln('$_systemInstruction (v$PROMPT_VERSION)');
     sb.writeln('Module: $module | Feature: $feature | Platform: $platform');
     for (final sk in skeletons) {
@@ -1084,7 +1067,7 @@ class GenerationService {
     }
     sb.writeln(platformRules);
     sb.write(
-      'JSON: [{"title":"...", "module":"$module", "feature":"$feature", "platform":"$platform", "priority":"High", "type":"Functional", "preconditions":[], "steps":[{"step":1,"action":"","data":"","expected":""}]}]',
+      'JSON: [{"title":"...", "module":"$module", "feature":"$feature", "platform":"$platform", "priority":"High", "type":"Functional", "preconditions":["..."], "steps":[{"action":"","data":"","expected":""}], "expectedResult":"..."}]',
     );
     return sb.toString();
   }
@@ -1120,26 +1103,11 @@ String _smartExpectedResult(String title, String expected) {
 }
 
 List<TestCaseModel> _rebalancePriorities(List<TestCaseModel> cases) {
-  final updated = <TestCaseModel>[];
-
   for (int i = 0; i < cases.length; i++) {
-    final tc = cases[i];
-
     final priority = i % 5 == 0 ? 'Low' : (i % 2 == 0 ? 'Medium' : 'High');
 
-    updated.add(
-      TestCaseModel(
-        id: tc.id,
-        title: tc.title,
-        preconditions: tc.preconditions,
-        steps: tc.steps,
-        expectedResult: tc.expectedResult,
-        priority: priority,
-        status: tc.status,
-        type: tc.type,
-      ),
-    );
+    cases[i].priority = priority;
   }
 
-  return updated;
+  return cases;
 }

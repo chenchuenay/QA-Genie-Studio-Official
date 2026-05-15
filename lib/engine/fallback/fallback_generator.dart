@@ -1,3 +1,4 @@
+import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
 
 class FallbackGenerator {
@@ -82,16 +83,35 @@ class FallbackGenerator {
     final cases = <TestCaseModel>[];
     final keywords = _extractKeywords('$module $feature');
     final seenTitles = <String>{};
+    final seenIntents = <String>{};
     final resolvedFeature = feature.isNotEmpty ? feature : module;
 
     for (final key in keywords) {
       final scenarios = _scenarioMap[key] ?? [];
       for (final sc in scenarios) {
         final title = sc['title']!;
+
         if (seenTitles.contains(title.toLowerCase())) continue;
+
+        final generatedSteps = _buildSteps(
+          title: title,
+          type: sc['type'] ?? 'GENERAL',
+          feature: resolvedFeature,
+          platform: platform,
+        );
+
+        final intentHash = generatedSteps
+            .map((s) => s.action.toLowerCase().trim())
+            .join('|');
+
+        if (seenIntents.contains(intentHash)) continue;
+
+        seenIntents.add(intentHash);
         seenTitles.add(title.toLowerCase());
+
         cases.add(
           TestCaseModel(
+            source: CaseSource.fallback,
             title: title
                 .replaceAll('{feature}', resolvedFeature)
                 .replaceAll('{module}', module),
@@ -102,12 +122,7 @@ class FallbackGenerator {
               'A clean QA account exists for $resolvedFeature execution.',
               'The $platform test environment is reachable and seeded with known user records.',
             ],
-            steps: _buildSteps(
-              title: title,
-              type: sc['type'] ?? 'GENERAL',
-              feature: resolvedFeature,
-              platform: platform,
-            ),
+            steps: generatedSteps,
             expectedResult: _expectedResult(
               title: title,
               type: sc['type'] ?? 'GENERAL',
@@ -123,9 +138,13 @@ class FallbackGenerator {
     }
 
     int i = cases.length + 1;
-    while (cases.length < count) {
+    int safety = 0;
+
+    while (cases.length < count && safety < count * 3) {
+      safety++;
       cases.add(
         TestCaseModel(
+          source: CaseSource.fallback,
           title: 'Verify $resolvedFeature stability - variant $i',
           module: module,
           feature: feature,
@@ -224,7 +243,7 @@ class FallbackGenerator {
     required String feature,
     required String platform,
   }) {
-    final lower = title.toLowerCase();
+    final lower = title.toLowerCase().trim();
     if (type == 'SECURITY' || lower.contains('injection')) {
       return 'The request is blocked, no authenticated session is created, and sensitive implementation details remain hidden from the response.';
     }

@@ -1,0 +1,2 @@
+#!/bin/bash
+flutter run --dart-define=AI_PROVIDER=gemini

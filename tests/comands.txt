@@ -1,0 +1,12 @@
+adb shell run-as com.enaykumar.qagenie cat cache/test_results/core_pipeline.txt > tests/test_results/core_pipeline.txt
+adb shell run-as com.enaykumar.qagenie cat cache/test_results/pro_pipeline.txt > tests/test_results/pro_pipeline.txt
+
+
+echo "🚀 Run with: 
+
+flutter clean && flutter pub get && ./run_groq.sh 
+
+flutter clean && flutter pub get && ./run_gemini.sh
+
+
+ use VSCode debug configurations."
