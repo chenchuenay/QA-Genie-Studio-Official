@@ -156,7 +156,8 @@ class ScenarioPlanner {
           ? scenarios[guard % scenarios.length]
           : _syntheticScenario(category);
 
-      final uniqueScenario = '$scenario - Variant ${guard + 1}';
+      final uniqueScenario =
+          '$scenario with alternate valid inputs ${guard + 1}';
 
       final normalizedTitle = uniqueScenario.toLowerCase().trim();
 
@@ -226,7 +227,7 @@ class ScenarioPlanner {
         return 'Verify $feature remains accessible and clear during repeated use';
 
       default:
-        return 'Verify $feature default workflow stability';
+        return 'Verify $feature handles a representative user workflow with clear observable outcomes';
     }
   }
 

@@ -34,8 +34,9 @@ class TemplateRegistry {
       'boundary': {
         'intent_id': 'web_boundary_handling',
         'scenarios': [
-          'Verify input fields handle maximum character length',
-          'Verify numeric inputs reject out-of-range values',
+          'Verify email field handles maximum character length',
+          'Verify password field enforces maximum character length',
+          'Verify login input fields trim leading and trailing spaces safely',
           'Verify file upload size limit is enforced',
         ],
       },

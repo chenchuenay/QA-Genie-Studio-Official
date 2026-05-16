@@ -20,12 +20,31 @@ class ApiClient {
 
     PipelineDebugStore.lastProvider = providerName;
 
-    final cleaned = ResponseCleaner.clean(rawText, providerName);
+    late final String cleaned;
+    try {
+      cleaned = ResponseCleaner.clean(rawText, providerName);
+    } catch (e) {
+      PipelineDebugStore.lastCleanedResponse = '[CLEAN_FAILED] $e';
+      rethrow;
+    }
 
     PipelineDebugStore.lastCleanedResponse = cleaned;
 
-    final parsedCases = ResponseParser.parseArray(cleaned);
+    try {
+      final parsedCases = ResponseParser.parseArray(cleaned);
 
-    return parsedCases;
+      print(
+        '[QA Genie Parser salvage] recoveredObjects=${PipelineDebugStore.recoveredObjectCount} '
+        'rejectedChunks=${PipelineDebugStore.rejectedObjectCount} '
+        'malformedSkipped=${PipelineDebugStore.malformedObjectsSkipped} '
+        'partialRecovery=${PipelineDebugStore.partialRecoveryUsed} '
+        'cleanerRepairCount=${PipelineDebugStore.cleanerRepairCount}',
+      );
+
+      return parsedCases;
+    } catch (e) {
+      PipelineDebugStore.lastCleanedResponse = cleaned;
+      rethrow;
+    }
   }
 }

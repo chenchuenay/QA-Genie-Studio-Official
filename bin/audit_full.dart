@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:qa_app/engine/generation_service.dart';
+import 'package:qa_genie/engine/generation_service.dart';
 
 Future<void> main() async {
   final started = DateTime.now().toUtc();
@@ -71,19 +71,18 @@ Future<void> main() async {
 
     final cases = result.cases;
 
-    final uniqueTitles =
-        cases.map((e) => e.title.trim().toLowerCase()).toSet().length;
+    final uniqueTitles = cases
+        .map((e) => e.title.trim().toLowerCase())
+        .toSet()
+        .length;
 
     final duplicateTitles = cases.length - uniqueTitles;
 
-    final high =
-        cases.where((e) => e.priority == 'High').length;
+    final high = cases.where((e) => e.priority == 'High').length;
 
-    final medium =
-        cases.where((e) => e.priority == 'Medium').length;
+    final medium = cases.where((e) => e.priority == 'Medium').length;
 
-    final low =
-        cases.where((e) => e.priority == 'Low').length;
+    final low = cases.where((e) => e.priority == 'Low').length;
 
     const banned = [
       'system behaves correctly',
@@ -96,8 +95,7 @@ Future<void> main() async {
     int fillerCount = 0;
 
     for (final tc in cases) {
-      final combined =
-          '${tc.title} ${tc.expectedResult}'.toLowerCase();
+      final combined = '${tc.title} ${tc.expectedResult}'.toLowerCase();
 
       for (final phrase in banned) {
         if (combined.contains(phrase)) {
@@ -106,16 +104,12 @@ Future<void> main() async {
       }
     }
 
-    final realismScore =
-        ((uniqueTitles / cases.length) * 10)
-            .clamp(0, 10)
-            .toStringAsFixed(1);
+    final realismScore = ((uniqueTitles / cases.length) * 10)
+        .clamp(0, 10)
+        .toStringAsFixed(1);
 
     final pass =
-        duplicateTitles == 0 &&
-        fillerCount == 0 &&
-        medium > 0 &&
-        low > 0;
+        duplicateTitles == 0 && fillerCount == 0 && medium > 0 && low > 0;
 
     if (!pass) {
       alerts.add(
@@ -154,11 +148,9 @@ Future<void> main() async {
       'status': pass ? 'PASS' : 'FAIL',
     };
 
-    File('test_results/audit_history.jsonl')
-        .writeAsStringSync(
-      '${jsonEncode(historyEntry)}\n',
-      mode: FileMode.append,
-    );
+    File(
+      'test_results/audit_history.jsonl',
+    ).writeAsStringSync('${jsonEncode(historyEntry)}\n', mode: FileMode.append);
 
     final csvLine =
         '${started.toIso8601String()},${cfg['mode']},${cfg['platform']},${cases.length},$uniqueTitles,$duplicateTitles,$high,$medium,$low,$fillerCount,$realismScore,${pass ? 'PASS' : 'FAIL'}\n';
@@ -171,21 +163,18 @@ Future<void> main() async {
       );
     }
 
-    csvFile.writeAsStringSync(
-      csvLine,
-      mode: FileMode.append,
-    );
+    csvFile.writeAsStringSync(csvLine, mode: FileMode.append);
   }
 
   if (alerts.isEmpty) {
     alerts.add('NO REGRESSIONS DETECTED');
   }
 
-  File('test_results/latest_summary.md')
-      .writeAsStringSync(summary.toString());
+  File('test_results/latest_summary.md').writeAsStringSync(summary.toString());
 
-  File('test_results/regression_alerts.md')
-      .writeAsStringSync(alerts.join('\n'));
+  File(
+    'test_results/regression_alerts.md',
+  ).writeAsStringSync(alerts.join('\n'));
 
   print('');
   print('=====================================');

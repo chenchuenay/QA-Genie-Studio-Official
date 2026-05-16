@@ -279,6 +279,13 @@ class DeterministicRepair {
                   'expected':
                       'The focus order is logical and the user can reach the final "Success" state without a mouse.',
                 },
+                {
+                  'action':
+                      'Inspect the final visible state for the {feature} workflow',
+                  'data': '',
+                  'expected':
+                      'The interface shows a clear completion, validation, or blocked state that matches the scenario intent.',
+                },
               ],
             ];
         }
@@ -364,6 +371,13 @@ class DeterministicRepair {
                   'expected':
                       'A loading spinner is shown and the app prevents multiple taps on the submit button.',
                 },
+                {
+                  'action':
+                      'Review the final {feature} screen after the action completes',
+                  'data': '',
+                  'expected':
+                      'The screen displays a visible completion, validation, or retry state without losing user-entered data.',
+                },
               ],
             ];
         }
@@ -386,6 +400,12 @@ class DeterministicRepair {
                   'expected':
                       'Response body contains expected schema fields, valid status code, and correct persistence state.',
                 },
+                {
+                  'action': 'Repeat the request with the same reference data',
+                  'data': '{reference}',
+                  'expected':
+                      'The service handles the repeated request according to the documented idempotency or validation rules.',
+                },
               ],
             ];
           case 'negative':
@@ -405,6 +425,13 @@ class DeterministicRepair {
                   'expected':
                       'The service rejects the submission and notifies of the limitation.',
                 },
+                {
+                  'action':
+                      'Verify no backend state was created for the rejected request',
+                  'data': '{reference}',
+                  'expected':
+                      'The persisted state remains unchanged for the rejected input.',
+                },
               ],
             ];
           case 'security':
@@ -423,6 +450,12 @@ class DeterministicRepair {
                   'expected':
                       'The service rejects the request and prompts for valid authentication.',
                 },
+                {
+                  'action': 'Inspect the security error response',
+                  'data': '',
+                  'expected':
+                      'The response contains only the documented error fields and no sensitive implementation details.',
+                },
               ],
             ];
         }
@@ -434,6 +467,18 @@ class DeterministicRepair {
               'data': '{validEmail}',
               'expected':
                   'The system processes the operation and updates the visible state.',
+            },
+            {
+              'action': 'Review the resulting {feature} state',
+              'data': '{reference}',
+              'expected':
+                  'The final state clearly shows whether the operation completed, failed validation, or requires retry.',
+            },
+            {
+              'action': 'Confirm persisted data for the {feature} operation',
+              'data': '{reference}',
+              'expected':
+                  'The stored state matches the visible result and contains no duplicate operation record.',
             },
           ],
         ];

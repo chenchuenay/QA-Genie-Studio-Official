@@ -29,7 +29,7 @@ class GroqProvider implements AiProvider {
               {
                 'role': 'system',
                 'content':
-                    "You are a QA test case generator. Return ONLY pure JSON array. No markdown. No explanations. <think> tags.",
+                    "You are a senior QA test case generator for a canonical export schema. Return ONLY a pure JSON array. No markdown. No explanations. No <think> tags. No JavaScript expressions.",
               },
               {'role': 'user', 'content': prompt},
             ],

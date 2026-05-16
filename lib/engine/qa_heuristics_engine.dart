@@ -109,52 +109,112 @@ class QaHeuristicsEngine {
     final category = rawCategory.toLowerCase();
     final text = '$category $title'.toLowerCase();
     if (_hasAny(text, [
-      'security', 'xss', 'sql', 'csrf', 'token', 'unauthorized', 'tamper', 'replay', 'mitm', 'pinning', 'api key', 'clipboard', 'session', 'timeout', 'logout', 'expiry', 'expired'
+      'security',
+      'xss',
+      'sql',
+      'csrf',
+      'token',
+      'unauthorized',
+      'tamper',
+      'replay',
+      'mitm',
+      'pinning',
+      'api key',
+      'clipboard',
+      'session',
+      'timeout',
+      'logout',
+      'expiry',
+      'expired',
     ])) {
       return 'security';
     }
     if (_hasAny(text, [
-      'boundary', 'limit', 'maximum', 'minimum', 'oversized', 'out-of-range',
+      'boundary',
+      'limit',
+      'maximum',
+      'minimum',
+      'oversized',
+      'out-of-range',
     ])) {
       return 'boundary';
     }
     if (_hasAny(text, [
-      'validation', 'required', 'format', 'missing', 'malformed', 'invalid',
+      'validation',
+      'required',
+      'format',
+      'missing',
+      'malformed',
+      'invalid',
     ])) {
       return 'validation';
     }
     if (_hasAny(text, [
-      'network', 'connectivity', 'latency', 'timeout', 'offline', 'online', 'slow connection',
+      'network',
+      'connectivity',
+      'latency',
+      'timeout',
+      'offline',
+      'online',
+      'slow connection',
     ])) {
       return 'network_behavior';
     }
     if (_hasAny(text, [
-      'navigation', 'transition', 'route', 'page', 'screen', 'link',
+      'navigation',
+      'transition',
+      'route',
+      'page',
+      'screen',
+      'link',
     ])) {
       return 'navigation';
     }
     if (_hasAny(text, [
-      'permission', 'access', 'grant', 'deny', 'allow', 'ask for permission',
+      'permission',
+      'access',
+      'grant',
+      'deny',
+      'allow',
+      'ask for permission',
     ])) {
       return 'permissions';
     }
     if (_hasAny(text, [
-      'accessibility', 'screen reader', 'keyboard navigation', 'focus indicator', 'tab key', 'alt text', 'color contrast',
+      'accessibility',
+      'screen reader',
+      'keyboard navigation',
+      'focus indicator',
+      'tab key',
+      'alt text',
+      'color contrast',
     ])) {
       return 'accessibility';
     }
     if (_hasAny(text, [
-      'state persistence', 'save state', 'restore state', 'local storage', 'session storage', 'cache',
+      'state persistence',
+      'save state',
+      'restore state',
+      'local storage',
+      'session storage',
+      'cache',
     ])) {
       return 'state_persistence';
     }
     if (_hasAny(text, [
-      'failure', 'reject', 'blocked', 'incorrect', 'negative',
+      'failure',
+      'reject',
+      'blocked',
+      'incorrect',
+      'negative',
     ])) {
       return 'negative';
     }
     if (_hasAny(text, [
-      'usability', 'clarity', 'interactive elements', 'ease of use',
+      'usability',
+      'clarity',
+      'interactive elements',
+      'ease of use',
     ])) {
       return 'usability';
     }
@@ -174,7 +234,15 @@ class QaHeuristicsEngine {
     final context = '$module $feature'.toLowerCase();
 
     if (_hasAny(context, ['login', 'sign in']) &&
-        _hasAny(text, ['registration', 'password reset', 'checkout'])) {
+        _hasAny(text, [
+          'registration',
+          'password reset',
+          'checkout',
+          'payment',
+          'file upload',
+          'upload size',
+          'numeric inputs',
+        ])) {
       return false;
     }
     if (_hasAny(context, ['password reset', 'forgot password']) &&
@@ -254,7 +322,7 @@ class QaHeuristicsEngine {
       case 'Mobile':
         return _mobileExpected(category, inferred, subject);
       default:
-        return _webExpected(category, inferred, subject);
+        return _webExpected(category, inferred, subject, title);
     }
   }
 
@@ -279,7 +347,12 @@ class QaHeuristicsEngine {
     ]);
   }
 
-  static String _webExpected(String category, String domain, String subject) {
+  static String _webExpected(
+    String category,
+    String domain,
+    String subject,
+    String title,
+  ) {
     if (category == 'security') {
       return 'The browser prevents the unsafe operation, displays a secure validation message, maintains the current session security, and ensures no sensitive system details or debug information are visible to the user.';
     }
@@ -290,6 +363,13 @@ class QaHeuristicsEngine {
       return 'The input field enforces the character limit, prevents further typing once the limit is reached, and displays a "limit reached" indicator or character counter that matches the requirement.';
     }
     if (category == 'session') {
+      final text = '$subject $title'.toLowerCase();
+      if (_hasAny(text, ['refresh', 'persist'])) {
+        return 'The authenticated session remains active after the browser refresh, the user stays on the protected page, and no duplicate login prompt or lost form state appears.';
+      }
+      if (_hasAny(text, ['concurrent', 'leakage'])) {
+        return 'Each browser session keeps its own authenticated state, account data from one session never appears in the other session, and logging out from one session does not expose protected data.';
+      }
       return 'The application redirects the user to the login page upon session expiry, ensures all local session data is cleared, and verifies that restricted pages are no longer accessible without re-authentication.';
     }
     if (domain == 'payment') {

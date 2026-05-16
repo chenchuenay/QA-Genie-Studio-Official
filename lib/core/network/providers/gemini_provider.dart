@@ -29,6 +29,8 @@ No code fences.
 
 No comments.
 
+No JavaScript expressions such as "a".repeat(256). Use literal JSON strings only.
+
 ''';
 
     PipelineDebugStore.lastFinalPrompt = fullPrompt;
