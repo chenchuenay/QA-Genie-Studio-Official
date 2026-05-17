@@ -1,3 +1,4 @@
+import 'package:qa_genie/core/error/ui_error_store.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
@@ -62,6 +63,7 @@ class PipelineLogger {
   bool aiFailure = false;
   int promptTokensEstimate = 0;
   int responseTokensEstimate = 0;
+  String operationId = "";
 
   PipelineLogger(this._mode) {
     _stopwatch.start();
@@ -200,6 +202,16 @@ class PipelineLogger {
       }
     }
     _buf.writeln('\n=== AFTER REPAIR ===');
+    _buf.writeln("\n=== GENERATION SUMMARY ===");
+    _buf.writeln("operation_id: $operationId");
+    _buf.writeln("raw_generated: ${parsedCases.length}");
+    _buf.writeln("valid_accepted: $accepted");
+    _buf.writeln("repaired: $repaired");
+    _buf.writeln("rejected: $filtered");
+    _buf.writeln("duplicates_removed: $duplicatesRemoved");
+    _buf.writeln("fallback_used: $fallbackUsed");
+    _buf.writeln("generation_time_ms: $generationTimeMs");
+
     _buf.writeln('repaired_count: ${afterRepair.length}');
     _buf.writeln('\n=== FINAL OUTPUT ===');
     _buf.writeln('final_count: ${finalCases.length}');

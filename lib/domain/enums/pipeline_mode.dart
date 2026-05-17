@@ -1,0 +1,1 @@
+enum PipelineMode { core, pro }

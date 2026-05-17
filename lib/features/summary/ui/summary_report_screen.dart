@@ -1,8 +1,10 @@
-import 'package:qa_genie/core/utils/priority_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/constants.dart';
-import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
+import 'package:qa_genie/core/utils/priority_utils.dart';
+import 'package:qa_genie/core/error/ui_error_store.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/core/error/ui_error_service.dart';
+import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 
 class SummaryReportScreen extends StatefulWidget {
   final List<TestCaseModel> testCases;
@@ -80,15 +82,18 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
           ),
         );
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Export failed: $e"),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+    } catch (e, stack) {
+      // Log the error and show SnackBar
+      UiErrorService.logAndShow(
+        context: context,
+        source: 'export_ui',
+        screen: 'SummaryReportScreen',
+        stage: 'EXPORT',
+        severity: ErrorSeverity.error,
+        userMessage: 'Export failed: $e',
+        error: e,
+        stack: stack,
+      );
     }
   }
 

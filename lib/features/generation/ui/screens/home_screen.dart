@@ -1,15 +1,17 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
-import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
-import 'package:qa_genie/domain/usecases/save_test_suite_use_case.dart';
-import 'package:qa_genie/features/beta/logic/beta_manager.dart';
-import 'package:qa_genie/features/generation/ui/screens/preview_screen.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/features/monetization/ads/ad_service.dart';
+import 'package:qa_genie/core/error/ui_error_store.dart';
+import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/presentation/widgets/ad_dialog.dart';
+import 'package:qa_genie/features/beta/logic/beta_manager.dart';
+import 'package:qa_genie/features/monetization/ads/ad_service.dart';
+import 'package:qa_genie/domain/usecases/save_test_suite_use_case.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
+import 'package:qa_genie/features/generation/ui/screens/preview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   static final constraintsKey = GlobalKey();
@@ -577,12 +579,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       await _refreshStatus();
       final generationWarning = result.warning;
       if (mounted && generationWarning != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(generationWarning),
-            backgroundColor: AppColors.warning,
-            duration: const Duration(seconds: 3),
-          ),
+        // Log warning and show snackbar
+        UiErrorService.logAndShow(
+          context: context,
+          source: 'generation_ui',
+          screen: 'HomeScreen',
+          stage: 'GENERATION',
+          severity: ErrorSeverity.warning,
+          userMessage: generationWarning,
+          error: generationWarning,
+          showSnackBar: true,
         );
       }
       if (mounted)
@@ -598,7 +604,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
         );
-    } catch (e) {
+    } catch (e, stack) {
+      // Log the error (no snackbar, because we'll show a dialog)
+      UiErrorService.logAndShow(
+        context: context,
+        source: 'generation_ui',
+        screen: 'HomeScreen',
+        stage: 'GENERATION',
+        severity: ErrorSeverity.error,
+        userMessage: 'Generation failed: $e',
+        error: e,
+        stack: stack,
+        showSnackBar: false,
+      );
       if (mounted)
         showBlurredDialog(
           context,

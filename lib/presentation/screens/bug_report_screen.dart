@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/core/error/ui_error_store.dart';
+import 'package:qa_genie/core/error/ui_error_service.dart';
 
 class BugReportScreen extends StatefulWidget {
   final bool firebaseReady;
@@ -18,11 +20,14 @@ class _BugReportScreenState extends State<BugReportScreen> {
   Future<void> _submit() async {
     if (_descController.text.trim().isEmpty) return;
     if (!widget.firebaseReady) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Firebase not connected. Cannot submit."),
-          backgroundColor: AppColors.warning,
-        ),
+      UiErrorService.logAndShow(
+        context: context,
+        source: 'bug_report_ui',
+        screen: 'BugReportScreen',
+        stage: 'SUBMIT',
+        severity: ErrorSeverity.warning,
+        userMessage: 'Firebase not connected. Cannot submit.',
+        error: 'Firebase not connected',
       );
       return;
     }
@@ -39,12 +44,16 @@ class _BugReportScreenState extends State<BugReportScreen> {
           backgroundColor: AppColors.success,
         ),
       );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Submission failed: $e"),
-          backgroundColor: AppColors.error,
-        ),
+    } catch (e, stack) {
+      UiErrorService.logAndShow(
+        context: context,
+        source: 'bug_report_ui',
+        screen: 'BugReportScreen',
+        stage: 'SUBMIT',
+        severity: ErrorSeverity.error,
+        userMessage: 'Submission failed: $e',
+        error: e,
+        stack: stack,
       );
     } finally {
       setState(() => _submitting = false);

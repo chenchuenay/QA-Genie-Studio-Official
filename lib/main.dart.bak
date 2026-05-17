@@ -1,11 +1,7 @@
-import 'package:qa_genie/core/error/ui_error_store.dart';
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:qa_genie/app/config/app_config.dart';
-import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/presentation/animations/splash_screen.dart';
 
 void main() async {
@@ -21,33 +17,6 @@ void main() async {
     AppConfig.testProMode = prefs.getBool('testProMode') ?? false;
   }
   runApp(const MyApp());
-}
-
-void _setupErrorHandlers() {
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.dumpErrorToConsole(details);
-    UiErrorService.logOnly(
-      source: 'framework',
-      screen: 'GLOBAL',
-      stage: 'RUNTIME',
-      severity: ErrorSeverity.critical,
-      userMessage: 'Flutter framework error',
-      error: details.exception,
-      stack: details.stack,
-    );
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    UiErrorService.logOnly(
-      source: 'platform',
-      screen: 'GLOBAL',
-      stage: 'RUNTIME',
-      severity: ErrorSeverity.critical,
-      userMessage: 'Uncaught platform error',
-      error: error,
-      stack: stack,
-    );
-    return true;
-  };
 }
 
 class MyApp extends StatefulWidget {
@@ -97,10 +66,31 @@ class _MyAppState extends State<MyApp> {
           hoverColor: Colors.transparent,
         ),
         home: const SplashScreen(),
-        scrollBehavior: const MaterialScrollBehavior().copyWith(
-          overscroll: false,
-        ),
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        overscroll: false,
+      ),
       ),
     );
   }
+}
+
+// Global error handlers to capture uncaught exceptions
+import 'package:qa_genie/core/error/ui_error_service.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:ui';
+
+void _setupErrorHandlers() {
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.dumpErrorToConsole(details);
+    UiErrorService.logOnly(
+      'GLOBAL',
+      'Flutter framework error',
+      details.exception,
+      details.stack,
+    );
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    UiErrorService.logOnly('GLOBAL', 'Uncaught platform error', error, stack);
+    return true;
+  };
 }
