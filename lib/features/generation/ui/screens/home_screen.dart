@@ -582,9 +582,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         // Log warning and show snackbar
         UiErrorService.logAndShow(
           context: context,
-          source: 'generation_ui',
+          source: ErrorSource.generationUi,
           screen: 'HomeScreen',
-          stage: 'GENERATION',
+          stage: ErrorStage.generation,
           severity: ErrorSeverity.warning,
           userMessage: generationWarning,
           error: generationWarning,
@@ -608,9 +608,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // Log the error (no snackbar, because we'll show a dialog)
       UiErrorService.logAndShow(
         context: context,
-        source: 'generation_ui',
+        source: ErrorSource.generationUi,
         screen: 'HomeScreen',
-        stage: 'GENERATION',
+        stage: ErrorStage.generation,
         severity: ErrorSeverity.error,
         userMessage: 'Generation failed: $e',
         error: e,

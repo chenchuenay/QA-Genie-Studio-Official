@@ -7,10 +7,12 @@ import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/presentation/animations/splash_screen.dart';
+import 'package:qa_genie/core/logging/telemetry_collector.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   _setupErrorHandlers();
+  await TelemetryCollector().initializeSystemSnapshot();
   try {
     await dotenv.load();
   } catch (_) {
@@ -27,9 +29,9 @@ void _setupErrorHandlers() {
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
     UiErrorService.logOnly(
-      source: 'framework',
+      source: ErrorSource.framework,
       screen: 'GLOBAL',
-      stage: 'RUNTIME',
+      stage: ErrorStage.runtime,
       severity: ErrorSeverity.critical,
       userMessage: 'Flutter framework error',
       error: details.exception,
@@ -38,9 +40,9 @@ void _setupErrorHandlers() {
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     UiErrorService.logOnly(
-      source: 'platform',
+      source: ErrorSource.platform,
       screen: 'GLOBAL',
-      stage: 'RUNTIME',
+      stage: ErrorStage.runtime,
       severity: ErrorSeverity.critical,
       userMessage: 'Uncaught platform error',
       error: error,

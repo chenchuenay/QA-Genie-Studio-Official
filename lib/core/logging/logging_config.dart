@@ -1,13 +1,30 @@
-import 'package:qa_genie/app/config/app_config.dart';
+import 'dart:io';
 
 class LoggingConfig {
-  static bool get forensicLogging => AppConfig.forensicLogging;
+  static const bool forensicLogging = bool.fromEnvironment(
+    'FORENSIC_LOGGING',
+    defaultValue: false,
+  );
+
+  static const int schemaVersion = 1;
+  static const String encoding = 'UTF-8';
+  static const int rawResponseLimit = 50000;
+  static const int analyticalArchiveLimitBytes = 10 * 1024 * 1024;
+
+  static String get _basePath {
+    try {
+      if (Platform.isAndroid) {
+        return '/data/data/com.enaykumar.qagenie';
+      }
+    } catch (_) {}
+    return '.';
+  }
 
   static String pipelineFilePath(String mode) {
-    return mode == 'core' ? 'cache/test_results/core_pipeline.txt' : 'cache/test_results/pro_pipeline.txt';
+    return '$_basePath/cache/test_results/${mode}_pipeline.txt';
   }
 
   static String analyticalFilePath(String mode) {
-    return mode == 'core' ? 'cache/test_results/core_analytical_logs.txt' : 'cache/test_results/pro_analytical_logs.txt';
+    return '$_basePath/cache/test_results/${mode}_analytical_logs.txt';
   }
 }

@@ -1,121 +1,536 @@
 # QA Genie
 
-> AI‑powered test case generator that exports to every major test management format — Excel, Jira, Xray, Zephyr, and PDF.
+<p align="center">
+  <b>Production-focused AI-assisted QA generation platform</b><br>
+  Deterministic orchestration • Realistic test cases • Forensic observability • Export-safe workflows
+</p>
 
 ---
 
-## 🚀 Overview
+# About the Creator
 
-QA Genie transforms feature specifications into structured, industry‑standard test cases using Google Gemini AI.  
-It runs entirely on‑device (offline editing, local history) and exports to the exact CSV/XLSX formats expected by Jira, Xray, and Zephyr Scale — without requiring any test management tool.
+QA Genie is independently designed, engineered, tested, refined, and continuously evolved by:
 
-## ✨ Core Features
+## Enay Kumar
+- QA-focused builder
+- Manual testing enthusiast
+- Workflow-driven product thinker
+- Real-world QA realism advocate
+- Developer + Tester + Product Owner of QA Genie
 
-- **AI Test Case Generation** – single API call to Gemini Flash, single source‑of‑truth structured JSON
-- **Structured Steps** – every step includes `action`, `test data`, and `expected result`
-- **Export Engine** – 6 export targets:
-  - Excel (traditional table)
-  - Jira Native CSV
-  - Xray Standard CSV
-  - Xray Expanded CSV (step‑per‑row)
-  - Zephyr Scale Cloud CSV
-  - PDF (styled, branded)
-- **Editable Preview** – inline editing with Undo / Save
-- **History & Suites** – all generated suites stored locally (SQLite), reopen/edit/export at any time
-- **Free / Pro Tiers** – free tier with ads, Pro tier with unlimited exports & higher limits
-- **Bug Report System** – direct submission to Firebase Firestore (text only)
-- **Email Link Authentication** – password‑less (or Google Sign‑In), ties limits to a verified identity
-- **Ad‑supported free tier** – interstitial, banner, rewarded (mock in dev mode)
+This project was not built as a generic “AI app”.
 
-## 🏗 Architecture
-UI (Flutter)
-↓
-Use Cases (Generate, Save, Export, GetHistory)
-↓
-Repositories & Data Sources
-├── API Client (Gemini) ← only HTTP call
-├── Export Mapper ← adapts structured JSON → tool formats
-├── Excel / CSV / PDF Writer
-├── SQLite Database ← local suites & test cases
-└── Monetization Manager ← limits, Pro status, fingerprint
+It was built from the perspective of someone actively studying:
+- software testing realities
+- execution pain points
+- weak AI-generated QA outputs
+- repetitive test-case problems
+- export workflow friction
+- debugging failures
+- production-level QA process expectations
 
+QA Genie reflects the mindset of:
+> “AI should assist QA engineers — not replace QA thinking.”
 
+---
 
-### Design Principles
-- **Single Source of Truth** – AI returns structured JSON; all exports derive from one model
-- **Only one API call per batch** – generation is the sole network request; everything else is 100% local
-- **Clean separation** – UseCase layer isolates business logic; UI never touches databases or API keys directly
-- **Test / Production toggle** – `AppConfig.isProduction` switches between free‑for‑all testing and real limits/ads
+# Vision
 
-## 🧱 Tech Stack
+QA Genie exists to solve one core problem:
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | Flutter (Dart) |
-| AI Backend | Google Gemini Flash (via REST) |
-| Auth | Firebase Authentication (Email Link, Google Sign‑In) |
-| Bug Reports | Cloud Firestore |
-| Ads | Google AdMob (interstitial, banner, rewarded) |
-| Local DB | SQLite (sqflite) |
-| Export | `excel` package, custom CSV writer, `pdf` package |
-| Secure Storage | flutter_secure_storage |
-| Device Fingerprint | device_info_plus + package_info_plus |
-| State Management | setState (simple) + planned Cubit migration |
+> Most AI-generated test cases look impressive at first glance but fail in real QA execution workflows.
 
-## 📂 Project Structure
+Traditional AI outputs often produce:
+- generic assertions
+- unrealistic scenarios
+- repetitive flows
+- shallow validations
+- weak negative testing
+- broken exports
+- unusable execution structures
+
+QA Genie was built to push beyond “prompt → response”.
+
+The platform aims to behave more like:
+```text
+a controlled QA generation pipeline
+```
+
+instead of a simple AI wrapper.
+
+---
+
+# Core Philosophy
+
+## 1. AI Is Probabilistic Input — Not Trusted Truth
+
+AI providers can generate:
+- malformed outputs
+- repetitive cases
+- fake validations
+- weak assertions
+- broken JSON
+- hallucinated logic
+- export-breaking structures
+
+QA Genie assumes AI responses are:
+```text
+recoverable raw material
+```
+
+not authoritative truth.
+
+Everything passes through:
+- parsing
+- validation
+- deduplication
+- repair
+- fallback generation
+- normalization
+- export-safe formatting
+
+---
+
+## 2. Deterministic-Oriented Architecture
+
+The system prioritizes:
+- predictability
+- repairability
+- forensic traceability
+- export stability
+
+over:
+- uncontrolled autonomy
+- endless retries
+- hidden AI mutation
+
+AI generation is intentionally constrained and stabilized.
+
+---
+
+## 3. One Provider Call Per Generation
+
+Each generation session attempts to complete using:
+```text
+ONE AI provider call
+```
+
+Why:
+- lower latency
+- lower cost
+- simpler orchestration
+- reproducible debugging
+- easier forensic tracing
+- reduced prompt drift
+
+The pipeline repairs outputs locally instead of repeatedly asking the provider again.
+
+---
+
+# High-Level Architecture
+
+```text
+User Input
+    ↓
+Prompt Construction
+    ↓
+AI Provider Request
+    ↓
+Raw Response Capture
+    ↓
+Parser
+    ↓
+Validator
+    ↓
+Deduplication
+    ↓
+Deterministic Repair
+    ↓
+Fallback Generation
+    ↓
+Normalization
+    ↓
+Preview / Editing
+    ↓
+Export
+```
+
+---
+
+# Core Generation Goals
+
+QA Genie focuses on generating:
+
+- realistic QA flows
+- execution-ready scenarios
+- meaningful assertions
+- session-aware behavior
+- security-oriented edge cases
+- structured exports
+- editable outputs
+- deterministic expected results
+
+The platform intentionally avoids:
+- vague test cases
+- fake demo scenarios
+- “Verify button works”
+- meaningless validations
+- shallow AI filler content
+
+---
+
+# Test Case Realism Philosophy
+
+QA Genie attempts to mimic how experienced testers actually think.
+
+## Prioritized Scenarios
+
+### Functional
+- login validation
+- role access
+- navigation
+- form validation
+- CRUD flows
+- business rules
+
+### Negative
+- invalid credentials
+- malformed inputs
+- duplicate submissions
+- expired sessions
+- unauthorized access
+- empty states
+
+### Security-Oriented
+- session hijacking awareness
+- access boundary validation
+- token expiration
+- rate limiting
+- injection-oriented input checks
+
+### Reliability
+- retry flows
+- stale data
+- interrupted operations
+- browser refresh behavior
+- state inconsistency
+
+---
+
+# Deterministic Repair Pipeline
+
+One of QA Genie’s core architectural pillars.
+
+Instead of endlessly regenerating AI output, the system repairs valid portions locally.
+
+## Repair Goals
+- preserve usable AI creativity
+- stabilize exports
+- normalize structures
+- remove repetitive patterns
+- strengthen assertions
+- repair malformed cases
+
+## Repair Examples
+- fixing missing expected results
+- normalizing steps
+- removing duplicates
+- fixing malformed structures
+- improving weak validations
+- repairing export-breaking fields
+
+The repair system reduces provider dependency while improving consistency.
+
+---
+
+# Fallback Generation System
+
+Fallback generation exists to guarantee pipeline continuity.
+
+Triggered during:
+- parser failures
+- malformed provider responses
+- insufficient valid cases
+- validator over-rejection
+- incomplete AI output
+
+Fallback cases are:
+```text
+deterministically generated locally
+```
+
+not regenerated from the provider.
+
+This allows QA Genie to recover gracefully from partial AI failure.
+
+---
+
+# Export Architecture
+
+QA Genie exports are designed for real QA workflows.
+
+## Supported Formats
+- Excel
+- CSV
+- Jira
+- Xray
+- PDF
+
+## Export Goals
+- stable schema
+- deterministic column ordering
+- execution-ready structure
+- editable outputs
+- minimal cleanup effort
+
+---
+
+# Canonical Test Case Structure
+
+All generated test cases follow invariant structure:
+
+```json
+{
+  "id": "",
+  "title": "",
+  "preconditions": [],
+  "testData": "",
+  "steps": [],
+  "expectedResult": "",
+  "Actual Results": "",
+  "priority": "",
+  "status": "",
+  "type": ""
+}
+```
+
+This structure is intentionally preserved for:
+- export consistency
+- editing workflows
+- persistence stability
+- QA execution alignment
+
+---
+
+# AI Provider Architecture
+
+Currently supported providers:
+- Groq
+- Gemini
+
+Runtime selection:
+
+```bash
+flutter run --dart-define=AI_PROVIDER=groq
+```
+
+or
+
+```bash
+flutter run --dart-define=AI_PROVIDER=gemini
+```
+
+---
+
+# Forensic Observability System
+
+QA Genie includes a local forensic logging architecture for development and QA builds.
+
+Purpose:
+> Allow another engineer or AI system to fully diagnose a failed generation without requiring screenshots, prompts, or manually pasted logs.
+
+---
+
+# Forensic Files
+
+## Verbose Pipeline Dumps
+
+```text
+core_pipeline.txt
+pro_pipeline.txt
+```
+
+Contain:
+- full prompts
+- raw AI responses
+- parser traces
+- validator traces
+- repair traces
+- fallback traces
+- final outputs
+- performance telemetry
+- UI errors
+- token analytics
+
+These files:
+```text
+overwrite every generation
+```
+
+They represent:
+```text
+latest forensic snapshot only
+```
+
+---
+
+## Analytical Logs
+
+```text
+core_analytical_logs.txt
+pro_analytical_logs.txt
+```
+
+Contain:
+- compact telemetry history
+- performance trends
+- fallback frequency
+- provider behavior
+- repair metrics
+
+These logs:
+```text
+append historically
+```
+
+---
+
+# Forensic Design Principles
+
+The observability system follows strict separation boundaries.
+
+## TelemetryCollector
+- memory only
+- no filesystem access
+- no UI dependencies
+
+## Formatter
+- deterministic rendering only
+- no mutation
+- no business logic
+
+## Writer
+- filesystem only
+- atomic writes
+- safe overwrite/append behavior
+
+## Guarantees
+- no telemetry-caused crashes
+- no BuildContext dependency
+- no business-logic mutation
+- production-safe disable switch
+- overwrite verbose dumps
+- append analytical logs
+
+---
+
+# Development Philosophy
+
+QA Genie intentionally prioritizes:
+
+```text
+traceability
+repairability
+predictability
+realism
+export safety
+```
+
+over:
+- maximum automation
+- uncontrolled AI autonomy
+- flashy demo behavior
+
+The goal is:
+```text
+controlled AI-assisted QA generation
+```
+
+not autonomous AI testing fantasy.
+
+---
+
+# Current Engineering Focus
+
+Active architectural refinement areas:
+- validator strengthening
+- repair intelligence
+- forensic truthfulness
+- export stability
+- deterministic orchestration
+- execution realism
+- fallback quality
+- parser resilience
+
+---
+
+# Project Structure
+
+```text
 lib/
-├── main.dart
+├── app/
 ├── core/
-│ ├── config/ # AppConfig (production/test switch)
-│ ├── theme/ # Colors, spacing, text styles
-│ ├── ads/ # AdMob service with mock support
-│ ├── network/ # Gemini API client
-│ ├── monetization/ # Usage limits, Pro flag, export policy
-│ ├── use_cases/ # Business logic (generate, save, export, history)
-│ └── export/ # Format mappers, Excel/CSV/PDF writers
-├── data/
-│ ├── models/ # TestCaseModel, TestStep
-│ └── database/ # SQLite service (suites, test cases)
-└── presentation/
-├── screens/ # Home, Preview, History, Upgrade, Bug Report, Login
-├── widgets/ # MasterTable, ExportBottomSheet, dialogs
-└── animations/ # Shimmer, loading button
-
-
-## 🔮 Future Roadmap
-
-### Phase 2 – Cloud Sync & Collaboration
-- Firestore‑based test suites (sync across devices)
-- Move / copy test cases between suites
-- Team sharing (read‑only, contributor roles)
-
-### Phase 3 – Test Execution & Reporting
-- Actual results & pass/fail tracking per step
-- Test summary reports (PDF / Excel)
-- Link bugs to specific test cases
-
-### Phase 4 – CI/CD Integration
-- Webhook triggers for test generation
-- Jira/Xray API direct integration (no file upload)
-- CLI companion tool
-
-## ⚙️ Setup (Development)
-
-1. Clone the repository
-2. Run `flutter pub get`
-3. Set `AppConfig.isProduction = false` for test mode (no Firebase needed)
-4. For production:
-   - Create a Firebase project and add `google-services.json`
-   - Run `flutterfire configure`
-   - Set `AppConfig.isProduction = true`
-   - Replace ad unit IDs in `app_config.dart` with real AdMob IDs
+│   ├── error/
+│   ├── export/
+│   ├── logging/
+│   ├── network/
+│   └── utils/
+│
+├── engine/
+│   ├── deterministic_repair.dart
+│   ├── distribution_engine.dart
+│   ├── fallback_generator.dart
+│   ├── generation_service.dart
+│   ├── scenario_planner.dart
+│   └── validators/
+│
+├── features/
+├── presentation/
+└── main.dart
+```
 
 ---
 
-## 👤 Contact
-Developer: **Enay Kumar**  
-Email: chenchuenay97@gmail.com
+# Intended Users
+
+QA Genie is designed for:
+- QA engineers
+- manual testers
+- automation testers
+- freelancers
+- startups
+- low-resource QA teams
+- independent testers
 
 ---
 
-*QA Genie – Turn Features into Test Cases, Instantly.*
+# Build Philosophy
+
+The system is intentionally optimized for:
+- low operational cost
+- local debugging
+- reproducible outputs
+- deterministic repair
+- realistic QA workflows
+- export-safe execution
+
+---
+
+# Long-Term Goal
+
+QA Genie aims to become:
+
+```text
+A reliable AI-assisted QA generation system
+that produces execution-quality outputs
+instead of generic AI-generated filler.
+```
+
+---
+
+# License
+
+Private project.
+All rights reserved.
+
+Developed and maintained by Enay Kumar.

@@ -1,4 +1,5 @@
 import 'dart:math';
+
 import 'generation_mode.dart';
 
 class DistributionEngine {
@@ -74,7 +75,7 @@ class DistributionEngine {
         if (availableCapacity <= 0) break;
         final currentCount = dist[cat] ?? 0;
         final desiredCount = isProMode ? 2 : 1; // Aim for at least 1-2 for promoted categories
-        final toAdd = min(availableCapacity, desiredCount - currentCount);
+        final toAdd = min<int>(availableCapacity, desiredCount - currentCount);
         if (toAdd > 0) {
           dist[cat] = currentCount + toAdd;
           availableCapacity -= toAdd;
@@ -100,7 +101,7 @@ class DistributionEngine {
     if (sum > target) {
       for (final cat in reductionOrder) {
         if (dist.containsKey(cat) && dist[cat]! > 0 && sum > target) {
-          int reduce = min(dist[cat]!, sum - target);
+          int reduce = min<int>(dist[cat]!, sum - target);
           dist[cat] = dist[cat]! - reduce;
           sum -= reduce;
           if (sum == target) break;

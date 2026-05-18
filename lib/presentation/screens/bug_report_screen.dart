@@ -22,9 +22,9 @@ class _BugReportScreenState extends State<BugReportScreen> {
     if (!widget.firebaseReady) {
       UiErrorService.logAndShow(
         context: context,
-        source: 'bug_report_ui',
+        source: ErrorSource.bugReportUi,
         screen: 'BugReportScreen',
-        stage: 'SUBMIT',
+        stage: ErrorStage.submit,
         severity: ErrorSeverity.warning,
         userMessage: 'Firebase not connected. Cannot submit.',
         error: 'Firebase not connected',
@@ -47,9 +47,9 @@ class _BugReportScreenState extends State<BugReportScreen> {
     } catch (e, stack) {
       UiErrorService.logAndShow(
         context: context,
-        source: 'bug_report_ui',
+        source: ErrorSource.bugReportUi,
         screen: 'BugReportScreen',
-        stage: 'SUBMIT',
+        stage: ErrorStage.submit,
         severity: ErrorSeverity.error,
         userMessage: 'Submission failed: $e',
         error: e,

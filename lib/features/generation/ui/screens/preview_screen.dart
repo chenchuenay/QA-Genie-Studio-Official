@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/constants.dart';
 import 'package:qa_genie/core/error/ui_error_store.dart';
-import 'package:qa_genie/data/models/test_case_model.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
+
+import 'package:qa_genie/data/models/test_case_model.dart';
 import 'package:qa_genie/presentation/widgets/ad_dialog.dart';
 import 'package:qa_genie/domain/usecases/get_history_use_case.dart';
 import 'package:qa_genie/domain/usecases/save_test_suite_use_case.dart';
@@ -86,9 +87,9 @@ class _PreviewScreenState extends State<PreviewScreen>
     } catch (e, stack) {
       UiErrorService.logAndShow(
         context: context,
-        source: 'export_ui',
+        source: ErrorSource.exportEngine,
         screen: 'PreviewScreen',
-        stage: 'SAVE',
+        stage: ErrorStage.unknown,
         severity: ErrorSeverity.error,
         userMessage: 'Save failed: $e',
         error: e,
@@ -137,9 +138,9 @@ class _PreviewScreenState extends State<PreviewScreen>
       print('STACK: $stack');
       UiErrorService.logAndShow(
         context: context,
-        source: 'export_ui',
+        source: ErrorSource.exportEngine,
         screen: 'PreviewScreen',
-        stage: 'EXPORT',
+        stage: ErrorStage.export,
         severity: ErrorSeverity.error,
         userMessage: 'Export failed: $e',
         error: e,

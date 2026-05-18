@@ -1,120 +1,244 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'dart:ui' as ui;
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'error_registry.dart';
+import 'logging_config.dart';
 import 'telemetry_models.dart';
 import 'telemetry_snapshot.dart';
+import 'package:crypto/crypto.dart';
 
 class TelemetryCollector {
   static final TelemetryCollector _instance = TelemetryCollector._internal();
   factory TelemetryCollector() => _instance;
   TelemetryCollector._internal();
 
-  final List<ValidatorTrace> _validatorTraces = [];
-  final List<RepairTrace> _repairTraces = [];
-  final List<ExportTrace> _exportTraces = [];
-  final List<UiErrorTrace> _uiErrorTraces = [];
-  NetworkTrace? _networkTrace;
+  String sessionId = '';
+  DateTime timestamp = DateTime.now();
+  String provider = '';
+  String model = '';
+  String mode = '';
+  String generationState = 'init';
 
-  // Session metadata
-  String _sessionMode = '';
-  String _provider = '';
-  String _model = '';
-  int _timeoutMs = 0;
-  int _retryCount = 0;
-  int _promptChars = 0;
-  int _requestedCount = 0;
-  
-  // Timings
-  int _promptBuildMs = 0;
-  int _apiCallMs = 0;
-  int _parseMs = 0;
-  int _validationMs = 0;
-  int _repairMs = 0;
-  int _totalMs = 0;
+  // System & Build metadata
+  bool forensicMode = LoggingConfig.forensicLogging;
+  String buildMode = kDebugMode ? 'debug' : (kProfileMode ? 'profile' : 'release');
+  String appVersion = '1.2.100'; 
+  String buildNumber = '101';
+  String os = Platform.operatingSystem;
+  String osVersion = Platform.operatingSystemVersion;
+  String device = 'Unknown';
+  String locale = ui.PlatformDispatcher.instance.locale.toString();
+  String timezone = DateTime.now().timeZoneName;
+  String flutterVersion = 'unknown_runtime'; 
+  String dartVersion = Platform.version;
 
-  void startSession(String mode, String provider, String model) {
-    _sessionMode = mode;
-    _provider = provider;
-    _model = model;
-  }
+  String module = '';
+  String feature = '';
+  String platform = '';
+  String constraints = '';
+  String prompt = '';
+  String rawResponse = '';
+  int requestedCount = 0;
+  int promptTokensEstimate = 0;
+  int responseTokensEstimate = 0;
+  bool sessionCompleted = false;
 
-  void endSession(bool success, int durationMs) {
-    // Not used in minimal Phase 1
-  }
+  // Pipeline Metrics
+  int repairedCases = 0;
+  int fallbackGeneratedCases = 0;
+  String fallbackReason = '';
+  DedupTrace? dedupTrace;
 
-  void recordNetworkTrace(NetworkTrace trace) { _networkTrace = trace; }
-  void recordValidatorTrace(ValidatorTrace trace) { _validatorTraces.add(trace); }
-  void recordRepairTrace(RepairTrace trace) { _repairTraces.add(trace); }
-  void recordExportTrace(ExportTrace trace) { _exportTraces.add(trace); }
-  void recordUiErrorTrace(UiErrorTrace trace) { _uiErrorTraces.add(trace); }
+  bool fallbackTriggered = false;
+  String rawErrorBody = '';
 
-  void setSessionMetadata({
-    required String mode,
-    required String provider,
-    required String model,
-    required int timeoutMs,
-    required int retryCount,
-    required int promptChars,
-    required int requestedCount,
-  }) {
-    _sessionMode = mode;
-    _provider = provider;
-    _model = model;
-    _timeoutMs = timeoutMs;
-    _retryCount = retryCount;
-    _promptChars = promptChars;
-    _requestedCount = requestedCount;
-  }
+  String integrityHash = '';
+  int totalDurationMs = 0;
+  final List<String> stateTransitions = [];
+  final List<dynamic> finalCasesJson = [];
+  final List<ValidatorTrace> validatorTraces = [];
+  final List<RepairTrace> repairTraces = [];
+  final List<ExportTrace> exportTraces = [];
+  final List<UiErrorTrace> uiErrorTraces = [];
 
-  void recordTiming(String stage, int ms) {
-    switch (stage) {
-      case 'prompt_build': _promptBuildMs = ms; break;
-      case 'api_call': _apiCallMs = ms; break;
-      case 'parse': _parseMs = ms; break;
-      case 'validation': _validationMs = ms; break;
-      case 'repair': _repairMs = ms; break;
-      case 'total': _totalMs = ms; break;
+  ParserTrace? parserTrace;
+  PerformanceTrace? performanceTrace;
+  NetworkTrace? networkTrace;
+  FallbackTrace? fallbackTrace;
+
+  final ErrorRegistry errorRegistry = ErrorRegistry();
+
+  Future<void> initializeSystemSnapshot() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      appVersion = info.version;
+      buildNumber = info.buildNumber;
+      
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final android = await deviceInfo.androidInfo;
+        device = '${android.brand} ${android.model}';
+        osVersion = android.version.release;
+      } else if (Platform.isIOS) {
+        final ios = await deviceInfo.iosInfo;
+        device = ios.name;
+        osVersion = ios.systemVersion;
+      }
+    } catch (e) {
+      debugPrint('Failed to initialize system snapshot: $e');
     }
   }
 
-  TelemetrySnapshot freeze() {
-    return TelemetrySnapshot(
-      validatorTraces: List.unmodifiable(_validatorTraces),
-      repairTraces: List.unmodifiable(_repairTraces),
-      exportTraces: List.unmodifiable(_exportTraces),
-      uiErrorTraces: List.unmodifiable(_uiErrorTraces),
-      networkTrace: _networkTrace,
-      sessionMode: _sessionMode,
-      provider: _provider,
-      model: _model,
-      timeoutMs: _timeoutMs,
-      retryCount: _retryCount,
-      promptChars: _promptChars,
-      requestedCount: _requestedCount,
-      promptBuildMs: _promptBuildMs,
-      apiCallMs: _apiCallMs,
-      parseMs: _parseMs,
-      validationMs: _validationMs,
-      repairMs: _repairMs,
-      totalMs: _totalMs,
+  void clear() {
+    validatorTraces.clear();
+    repairTraces.clear();
+    exportTraces.clear();
+    uiErrorTraces.clear();
+    finalCasesJson.clear();
+    stateTransitions.clear();
+    parserTrace = null;
+    performanceTrace = null;
+    networkTrace = null;
+    fallbackTrace = null;
+    
+    repairedCases = 0;
+    fallbackGeneratedCases = 0;
+    fallbackReason = '';
+    dedupTrace = null;
+    
+    sessionCompleted = false;
+    generationState = 'init';
+    fallbackTriggered = false;
+    rawErrorBody = '';
+  }
+
+  void startSession(String m, String p, String mdl) {
+    clear();
+    mode = m;
+    provider = p;
+    model = mdl;
+    timestamp = DateTime.now();
+    sessionId = timestamp.millisecondsSinceEpoch.toString();
+    stateTransitions.add('init');
+  }
+
+  void updateGenerationState(String state) {
+    generationState = state;
+    if (stateTransitions.isEmpty || stateTransitions.last != state) {
+      stateTransitions.add(state);
+    }
+  }
+
+  void recordPrompt(String p, {required int promptCharacters, required int promptTokenEstimate}) {
+    prompt = p;
+    promptTokensEstimate = promptTokenEstimate;
+  }
+
+  void recordRawResponse(String response) {
+    rawResponse = response;
+    responseTokensEstimate = response.length ~/ 4;
+  }
+
+  void recordNetworkTrace(NetworkTrace trace) => networkTrace = trace;
+  void recordParserTrace(ParserTrace trace) => parserTrace = trace;
+  void recordValidatorTrace(ValidatorTrace trace) => validatorTraces.add(trace);
+  void recordRepairTrace(RepairTrace trace) => repairTraces.add(trace);
+  void recordExportTrace(ExportTrace trace) => exportTraces.add(trace);
+  void recordUiErrorTrace(UiErrorTrace trace) => uiErrorTraces.add(trace);
+  void recordFallbackTrace(FallbackTrace trace) => fallbackTrace = trace;
+  
+  void recordFallback({required bool triggered, required String reason, int generatedCases = 0}) {
+    fallbackTriggered = triggered;
+    fallbackReason = reason;
+    fallbackGeneratedCases = generatedCases;
+  }
+
+  void recordRawErrorBody(String body) {
+    rawErrorBody = body;
+  }
+
+  void recordFinalCases(List<dynamic> cases) {
+    finalCasesJson..clear()..addAll(cases);
+  }
+
+  void recordPerformanceTrace(PerformanceTrace trace) {
+    performanceTrace = trace;
+    totalDurationMs = trace.totalMs;
+    sessionCompleted = true;
+  }
+
+  void recordDedupStats({
+    required int aiInputCount,
+    required int duplicatesRemoved,
+    required int finalOutputCount,
+  }) {
+    dedupTrace = DedupTrace(
+      aiInputCount: aiInputCount,
+      duplicatesRemoved: duplicatesRemoved,
+      fallbackGeneratedCount: 0,
+      finalOutputCount: finalOutputCount,
     );
   }
 
-  void clear() {
-    _validatorTraces.clear();
-    _repairTraces.clear();
-    _exportTraces.clear();
-    _uiErrorTraces.clear();
-    _networkTrace = null;
-    _sessionMode = '';
-    _provider = '';
-    _model = '';
-    _timeoutMs = 0;
-    _retryCount = 0;
-    _promptChars = 0;
-    _requestedCount = 0;
-    _promptBuildMs = 0;
-    _apiCallMs = 0;
-    _parseMs = 0;
-    _validationMs = 0;
-    _repairMs = 0;
-    _totalMs = 0;
+  String _generateIntegrityHash() {
+    final raw = jsonEncode({
+      "prompt": prompt,
+      "rawResponse": rawResponse,
+      "finalCases": finalCasesJson,
+    });
+    return sha256.convert(utf8.encode(raw)).toString();
+  }
+
+  TelemetrySnapshot freeze() {
+    integrityHash = _generateIntegrityHash();
+    return TelemetrySnapshot(
+      sessionId: sessionId,
+      timestamp: timestamp,
+      provider: provider,
+      model: model,
+      mode: mode,
+      generationState: generationState,
+      forensicMode: forensicMode,
+      buildMode: buildMode,
+      appVersion: appVersion,
+      buildNumber: buildNumber,
+      os: os,
+      osVersion: osVersion,
+      device: device,
+      locale: locale,
+      timezone: timezone,
+      flutterVersion: flutterVersion,
+      dartVersion: dartVersion,
+      module: module,
+      feature: feature,
+      platform: platform,
+      constraints: constraints,
+      requestedCount: requestedCount,
+      prompt: prompt,
+      rawResponse: rawResponse,
+      promptTokensEstimate: promptTokensEstimate,
+      responseTokensEstimate: responseTokensEstimate,
+      sessionCompleted: sessionCompleted,
+      repairedCases: repairedCases,
+      fallbackGeneratedCases: fallbackGeneratedCases,
+      fallbackReason: fallbackReason,
+      dedupTrace: dedupTrace,
+      integrityHash: integrityHash,
+      totalDurationMs: totalDurationMs,
+      stateTransitions: stateTransitions,
+      finalCasesJson: finalCasesJson,
+      validatorTraces: validatorTraces,
+      repairTraces: repairTraces,
+      exportTraces: exportTraces,
+      uiErrorTraces: uiErrorTraces,
+      parserTrace: parserTrace,
+      performanceTrace: performanceTrace,
+      networkTrace: networkTrace,
+      fallbackTrace: fallbackTrace,
+      errorRegistry: errorRegistry,
+    );
   }
 }

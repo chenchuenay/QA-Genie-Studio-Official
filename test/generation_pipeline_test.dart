@@ -6,8 +6,16 @@ import 'package:qa_genie/core/network/response_parser.dart';
 import 'package:qa_genie/core/network/response_cleaner.dart';
 import 'package:qa_genie/engine/fallback/fallback_generator.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
+import 'package:qa_genie/core/error/ui_error_service.dart';
+import 'package:qa_genie/core/logging/telemetry_collector.dart';
+import 'package:qa_genie/core/error/ui_error_store.dart';
 
 void main() {
+  setUp(() {
+    TelemetryCollector().clear();
+    UiErrorStore().clear();
+  });
+
   test('parser repairs JavaScript repeat strings without another API call', () {
     final raw = jsonEncode([
       {
@@ -132,6 +140,45 @@ void main() {
 
     expect(parsed, hasLength(1));
     expect(parsed.single.steps.first.data, 'qa_long_email@example.test');
+  });
+
+  test('UI forensic error capture validation', () async {
+    final collector = TelemetryCollector();
+    final store = UiErrorStore();
+    store.startOperation('test_op_123');
+
+    // Trigger test errors
+    UiErrorService.logOnly(
+      source: ErrorSource.network,
+      screen: 'ForensicTest',
+      stage: ErrorStage.aiCall,
+      severity: ErrorSeverity.critical,
+      userMessage: 'Intentional network timeout',
+      error: 'TimeoutException: Connection lost',
+    );
+
+    UiErrorService.logOnly(
+      source: ErrorSource.uiPreview,
+      screen: 'ForensicTest',
+      stage: ErrorStage.uiRender,
+      severity: ErrorSeverity.error,
+      userMessage: 'Intentional UI render error',
+      error: 'RenderException: Null widget',
+    );
+
+    // Freeze telemetry snapshot
+    final snapshot = collector.freeze();
+
+    // Verification
+    expect(snapshot.uiErrorTraces.length, 2);
+    
+    final trace1 = snapshot.uiErrorTraces[0];
+    expect(trace1.userMessage, 'Intentional network timeout');
+    expect(trace1.technicalError, contains('TimeoutException'));
+
+    final trace2 = snapshot.uiErrorTraces[1];
+    expect(trace2.userMessage, 'Intentional UI render error');
+    expect(trace2.technicalError, contains('RenderException'));
   });
 
   test('login fallback generates canonical export-safe cases', () {

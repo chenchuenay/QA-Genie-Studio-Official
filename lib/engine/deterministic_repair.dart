@@ -6,9 +6,11 @@ import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
 import 'package:qa_genie/core/utils/test_data_factory.dart';
 import 'package:qa_genie/engine/builders/preconditions_builder.dart';
+import 'package:qa_genie/engine/models/repair_event.dart';
 
 class DeterministicRepair {
   final ScenarioPlanner planner;
+  final List<RepairEvent> repairEvents = [];
 
   DeterministicRepair(this.planner);
 
@@ -64,16 +66,43 @@ class DeterministicRepair {
   }
 
   List<TestCaseModel> repair(List<TestCaseModel> cases, int targetCount) {
-    if (cases.length >= targetCount) {
-      return List<TestCaseModel>.from(cases);
+    final repaired = <TestCaseModel>[];
+    
+    // Normalize and track mutations
+    for (final tc in cases) {
+      final oldExpected = tc.expectedResult;
+      
+      // Example of mutation tracking
+      if (QaHeuristicsEngine.hasWeakExpectedResult(tc.expectedResult)) {
+        tc.expectedResult = QaHeuristicsEngine.expectedResult(
+          platform: tc.platform,
+          category: tc.type,
+          module: tc.module,
+          feature: tc.feature,
+          title: tc.title,
+          domain: planner.domain,
+        );
+        repairEvents.add(RepairEvent(
+          testCaseId: tc.id,
+          changedField: 'expectedResult',
+          before: oldExpected,
+          after: tc.expectedResult,
+          reason: 'weak_expected_result_rewrite',
+        ));
+      }
+      repaired.add(tc);
     }
-    final existingNormalized = cases
+
+    if (repaired.length >= targetCount) {
+      return repaired;
+    }
+    
+    final existingNormalized = repaired
         .map((c) => _normalizeTitle(c.title))
         .toSet();
 
-    final existingIntents = cases.map((c) => _intentHash(c)).toSet();
+    final existingIntents = repaired.map((c) => _intentHash(c)).toSet();
     final skeletons = planner.generateSkeletons();
-    final repaired = <TestCaseModel>[...cases];
 
     for (final sk in skeletons) {
       if (repaired.length >= targetCount) break;
@@ -102,20 +131,31 @@ class DeterministicRepair {
 
       existingIntents.add(intentHash);
 
-      repaired.add(
-        TestCaseModel(
-          source: CaseSource.repairedAi,
-          title: title,
-          module: sk['module'],
-          feature: sk['feature'],
-          platform: sk['platform'],
-          priority: sk['priority'],
-          type: sk['type'],
-          preconditions: PreconditionsBuilder.generic(sk['feature']),
-          steps: steps,
-          expectedResult: _buildExpectedResult(sk),
+      final expectedResult = _buildExpectedResult(sk);
+      final newCase = TestCaseModel(
+        source: CaseSource.repairedAi,
+        title: title,
+        module: sk['module'],
+        feature: sk['feature'],
+        platform: sk['platform'],
+        priority: sk['priority'],
+        type: sk['type'],
+        preconditions: PreconditionsBuilder.generic(sk['feature']),
+        steps: steps,
+        expectedResult: expectedResult,
+      );
+
+      repairEvents.add(
+        RepairEvent(
+          testCaseId: 'NEW_GEN',
+          changedField: 'expectedResult',
+          before: '',
+          after: expectedResult,
+          reason: 'repair_generated_new_case',
         ),
       );
+
+      repaired.add(newCase);
     }
     return repaired.take(targetCount).toList();
   }

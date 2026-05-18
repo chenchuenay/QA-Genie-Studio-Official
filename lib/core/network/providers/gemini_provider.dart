@@ -7,7 +7,7 @@ import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
 class GeminiProvider implements AiProvider {
   static const String _apiKey = "AIzaSyBVj0nQTodCE2TRj_JdhtklItczt_HxKa4";
   static const String _baseUrl =
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
   @override
   Future<String> generate(String prompt) async {

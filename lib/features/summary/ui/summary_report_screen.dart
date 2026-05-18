@@ -86,9 +86,9 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
       // Log the error and show SnackBar
       UiErrorService.logAndShow(
         context: context,
-        source: 'export_ui',
+        source: ErrorSource.exportEngine,
         screen: 'SummaryReportScreen',
-        stage: 'EXPORT',
+        stage: ErrorStage.export,
         severity: ErrorSeverity.error,
         userMessage: 'Export failed: $e',
         error: e,

@@ -1,15 +1,43 @@
-import 'dart:io';
-import 'dart:math';
+import 'package:qa_genie/core/logging/telemetry_models.dart';
+import 'package:qa_genie/core/logging/telemetry_collector.dart';
 
 enum ErrorSeverity { info, warning, error, critical }
+
+enum ErrorSource {
+  generationUi,
+  exportEngine,
+  uiPreview,
+  framework,
+  platform,
+  auth,
+  storage,
+  network,
+  aiProvider,
+  bugReportUi,
+  unknown
+}
+
+enum ErrorStage {
+  request,
+  rawResponse,
+  parse,
+  repair,
+  validation,
+  export,
+  uiRender,
+  generation,
+  aiCall,
+  runtime,
+  submit,
+  unknown
+}
 
 class UiErrorRecord {
   final DateTime timestamp;
   final String operationId; // matches a generation batch
-  final String source; // e.g., generation_pipeline, export_engine, ui_preview
+  final ErrorSource source;
   final String screen; // screen name if applicable
-  final String
-  stage; // REQUEST, RAW_RESPONSE, PARSE, REPAIR, VALIDATION, EXPORT, UI_RENDER
+  final ErrorStage stage;
   final ErrorSeverity severity;
   final String userMessage;
   final String technicalError;
@@ -31,7 +59,7 @@ class UiErrorRecord {
   String toString() {
     final buf = StringBuffer();
     buf.writeln(
-      '[$timestamp] OP: $operationId | SOURCE: $source | SCREEN: $screen | STAGE: $stage | SEVERITY: ${severity.name.toUpperCase()}',
+      '[$timestamp] OP: $operationId | SOURCE: ${source.name.toUpperCase()} | SCREEN: $screen | STAGE: ${stage.name.toUpperCase()} | SEVERITY: ${severity.name.toUpperCase()}',
     );
     buf.writeln('  USER: $userMessage');
     buf.writeln('  TECH: $technicalError');
@@ -53,14 +81,26 @@ class UiErrorStore {
   }
 
   void add({
-    required String source,
+    required ErrorSource source,
     required String screen,
-    required String stage,
+    required ErrorStage stage,
     required ErrorSeverity severity,
     required String userMessage,
     required dynamic error,
     StackTrace? stack,
   }) {
+    try {
+      TelemetryCollector().uiErrorTraces.add(
+        UiErrorTrace(
+          timestamp: DateTime.now(),
+          screen: screen,
+          userMessage: userMessage,
+          technicalError: error.toString(),
+          stackTrace: stack?.toString(),
+        ),
+      );
+    } catch (_) {}
+
     _errors.add(
       UiErrorRecord(
         timestamp: DateTime.now(),

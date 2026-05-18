@@ -18,8 +18,8 @@ class ModelConfig {
       case ModelType.production:
         return ModelConfig(
           baseUrl:
-              'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
-          modelName: 'gemini-1.5-flash',
+              'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent',
+          modelName: 'gemini-1.5-flash-latest',
           maxTokens: 8000,
           temperature: 1.0,
         );

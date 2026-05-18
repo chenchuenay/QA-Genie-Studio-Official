@@ -1,0 +1,647 @@
+1: analize the files .
+
+2 this is our target :"DeepSeek, final forensic logging target below.
+This is NOT analytics SaaS logging.
+This is local on-device forensic observability for QA Genie dev/test builds only.
+
+Core principles:
+
+* zero business logic mutation
+* passive observation only
+* same codebase for dev/test/prod
+* production mode disables forensic system completely
+* no UI dependency
+* no BuildContext in logging
+* no telemetry affecting generation flow
+* overwrite verbose dumps every run
+* append compact analytical history
+
+==================================================
+FILES
+
+1. core_pipeline.txt
+2. pro_pipeline.txt
+
+PURPOSE:
+
+* full forensic snapshot
+* overwritten EVERY generation
+* contains ONLY latest run
+* no append history
+* full prompts/raw outputs/final outputs included
+* AI audit ready
+* no truncation except controlled raw-response cap
+
+==================================================
+
+3. core_analytical_logs.txt
+4. pro_analytical_logs.txt
+
+PURPOSE:
+
+* compact historical telemetry
+* append mode
+* lightweight machine-style logs
+* long-term debugging trends
+* session-by-session compact metrics
+
+==================================================
+PIPELINE FILES — REQUIRED CONTENT
+
+These are FULL FORENSIC SNAPSHOTS.
+
+Must contain:
+
+⸻
+
+FILE HEADER
+
+FILE_SCHEMA_VERSION=1
+ENCODING=UTF-8
+FORENSIC_MODE=true/false
+BUILD_MODE=debug/profile/release
+APP_VERSION=
+BUILD_NUMBER=
+
+⸻
+
+SESSION HEADER
+
+session_id=
+timestamp=
+generation_mode=core/pro
+session_completed=false initially
+provider=
+model=
+endpoint=
+thread=main
+logging_schema_version=1
+
+⸻
+
+SYSTEM SNAPSHOT
+
+os=
+os_version=
+device_model=
+flutter_version=
+dart_version=
+locale=
+timezone=
+sdk=
+memory_estimate=
+cpu_arch=
+
+⸻
+
+USER INPUT
+
+module=
+feature=
+platform=
+constraints=
+requested_case_count=
+prompt_characters=
+prompt_token_estimate=
+
+⸻
+
+FULL PROMPT
+
+COMPLETE prompt.
+NO trimming.
+NO summaries.
+
+Need:
+
+* repaired prompt
+* final sent prompt
+* any injected system instructions
+* dynamic constraints
+* merged instructions
+
+Everything.
+
+⸻
+
+NETWORK TRACE
+
+request_start=
+request_end=
+latency_ms=
+http_status=
+internet_available=
+socket_error=
+tls_error=
+retry_count=
+provider_error=
+timeout_triggered=
+response_characters=
+finish_reason=
+json_valid=true/false
+
+Need FULL provider failure details.
+
+⸻
+
+RAW AI RESPONSE
+
+FULL raw AI output.
+
+If >50k chars:
+
+* keep first 50k
+* store:
+    raw_response_original_size=
+    raw_response_stored_size=
+    truncated=true
+
+Need EXACT raw provider output.
+No prettifying.
+No formatting cleanup.
+
+⸻
+
+PARSER ANALYSIS
+
+parse_success=
+parsed_case_count=
+malformed_blocks=
+json_failures=
+parser_failures=
+
+Need exact malformed sections if possible.
+
+⸻
+
+VALIDATOR ANALYSIS
+
+For EVERY rejected case:
+
+* test_case_id
+* title
+* failed_rules
+* quality_score
+* missing_fields
+* generic_detection
+* duplicate_similarity if available
+
+Need why validator rejected.
+
+⸻
+
+DEDUP TRACE
+
+duplicate_clusters=
+removed_count=
+retained_count=
+similarity_scores=
+
+Need exact duplicate reasoning.
+
+⸻
+
+REPAIR TRACE
+
+For EVERY repaired case:
+
+* testcase_id
+* original_problem
+* repair_strategy
+* changed_fields
+* before
+* after
+* repair_success
+
+Need exact transformations.
+
+⸻
+
+FALLBACK TRACE
+
+fallback_triggered=
+trigger_reason=
+fallback_source=
+generated_count=
+accepted_count=
+rejected_count=
+
+Need exact reason AI pipeline failed.
+
+⸻
+
+FINAL OUTPUT
+
+FULL final generated cases AFTER:
+
+* validation
+* dedup
+* repair
+* fallback
+
+Need EXACT final state exported to UI.
+
+⸻
+
+PERFORMANCE TRACE
+
+prompt_build_ms=
+api_call_ms=
+parse_ms=
+validation_ms=
+repair_ms=
+fallback_ms=
+total_ms=
+
+⸻
+
+TOKEN ANALYTICS
+
+prompt_tokens_estimate=
+completion_tokens_estimate=
+total_tokens=
+estimated_cost=
+
+⸻
+
+EXPORT TRACE
+
+export_type=
+export_success=
+duration_ms=
+file_size=
+share_success=
+path=
+
+⸻
+
+UI ERRORS
+
+For ALL user-facing errors:
+
+* timestamp
+* screen
+* user_message
+* technical_error
+* stacktrace
+
+Need snackbar/dialog errors too.
+
+⸻
+
+GLOBAL ERROR CLASSIFICATION
+
+provider_errors=
+parser_errors=
+validator_errors=
+repair_errors=
+export_errors=
+ui_errors=
+unknown_errors=
+
+⸻
+
+SESSION FOOTER
+
+final_status=
+session_integrity_hash=
+duration_ms=
+session_completed=true
+
+==================================================
+ANALYTICAL FILES — REQUIRED CONTENT
+
+These are COMPACT historical telemetry logs.
+
+Append mode.
+
+Each session should be small.
+
+Format example:
+
+[SESSION]
+id=
+mode=
+provider=
+model=
+duration=
+status=
+
+[NETWORK]
+status=
+latency=
+timeout=
+internet=
+
+[PIPELINE]
+parsed=
+validated=
+repaired=
+fallback=
+duplicates_removed=
+
+[PERFORMANCE]
+prompt_ms=
+api_ms=
+parse_ms=
+repair_ms=
+total_ms=
+
+[TOKENS]
+prompt=
+completion=
+cost=
+
+[ERRORS]
+provider=
+parser=
+validator=
+ui=
+export=
+
+[STATE]
+init→prompt_built→request_sent→response_received→parsed→validated→repaired→finalized
+
+[STORAGE]
+write_success=
+write_failure=
+disk_full=
+permission_error=
+
+==================================================
+VERY IMPORTANT RULES
+
+1. pipeline files OVERWRITE every run
+2. analytical logs APPEND
+3. no business logic mutation
+4. no logging side effects
+5. collector = memory only
+6. writer = filesystem only
+7. formatter = deterministic only
+8. no direct file writes anywhere else
+9. no telemetry inside validators/repair engines
+10. only passive calls from generation_service
+11. same codebase for dev/test/prod
+12. prod disables forensic logging fully
+13. atomic writes only
+14. no file corruption risk
+15. no UI dependency
+16. no telemetry-caused crashes
+17. logging failures must NEVER fail generation
+18. full prompt + full raw response mandatory
+19. no summaries replacing raw forensic data
+20. overwrite verbose dumps because AI auditing uses latest run only
+
+This logging system exists ONLY so another AI can fully investigate failures without us manually pasting prompts/responses/errors."
+
+3.this is our plan of implimentation :"Perfect. You understood the separation correctly.
+
+A few final clarifications before implementation begins, because these details are critical for long-term stability.
+
+━━━━━━━━━━━━━━━━━━━━
+PHASE 1 EXPECTATIONS
+━━━━━━━━━━━━━━━━━━━━
+
+Your infrastructure layer must behave like a dormant subsystem initially.
+
+Meaning:
+
+* all files/classes can exist
+* project compiles
+* no telemetry writes occur
+* no runtime behavior changes
+* no generation timing changes
+* no memory retention leaks
+* no additional async chains
+
+Even if forensicLogging=false,
+the architecture must still remain fully wired and future-ready.
+
+Important:
+DO NOT create partial implementations that later require architectural rewrites.
+
+Even Phase 1 stubs should already respect final boundaries:
+
+* collector never imports dart:io
+* writer never knows generation internals
+* formatter never mutates data
+* DTOs remain flat
+* snapshot immutable
+
+━━━━━━━━━━━━━━━━━━━━
+VERY IMPORTANT ABOUT SNAPSHOT
+━━━━━━━━━━━━━━━━━━━━
+
+Do NOT use:
+
+Map<String, dynamic>
+
+for the final freeze output.
+
+Even temporarily.
+
+Create:
+
+TelemetrySnapshot
+
+early.
+
+Reason:
+Later phases will explode in complexity:
+
+* validator traces
+* repair traces
+* network traces
+* export traces
+* performance traces
+* UI errors
+* state transitions
+
+Using dynamic maps here will become impossible to maintain safely.
+
+━━━━━━━━━━━━━━━━━━━━
+IMPORTANT ABOUT RAW RESPONSE STORAGE
+━━━━━━━━━━━━━━━━━━━━
+
+Do NOT store multiple giant copies of raw AI responses in memory.
+
+Need:
+
+* single canonical raw response field
+* truncation only during formatting/writing
+* not during collection
+
+Collector stores original.
+Formatter decides truncation policy.
+
+Otherwise:
+huge memory spikes possible during Pro generations.
+
+━━━━━━━━━━━━━━━━━━━━
+VERY IMPORTANT ABOUT WRITER
+━━━━━━━━━━━━━━━━━━━━
+
+Pipeline files:
+
+core_pipeline.txt
+pro_pipeline.txt
+
+MUST:
+
+* overwrite every run
+* contain latest run only
+
+DO NOT append.
+
+Analytical logs:
+
+core_analytical_logs.txt
+pro_analytical_logs.txt
+
+MUST:
+
+* append mode
+* compact history only
+
+━━━━━━━━━━━━━━━━━━━━
+IMPORTANT ABOUT FILE CORRUPTION
+━━━━━━━━━━━━━━━━━━━━
+
+DumpWriter responsibilities are extremely important.
+
+Need:
+
+1. temp write
+2. flush
+3. atomic rename
+4. safe failure handling
+
+If writer fails:
+
+* generation continues
+* telemetry silently fails
+* no app crash
+* no partial corruption
+
+Telemetry system must NEVER become a production risk.
+
+━━━━━━━━━━━━━━━━━━━━
+MAIN.DART REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━
+
+Global hooks only.
+
+Allowed:
+
+FlutterError.onError
+PlatformDispatcher.instance.onError
+
+NOT allowed:
+
+* UI snackbar logic
+* dialogs
+* BuildContext usage
+* widget dependencies
+
+These hooks should ONLY forward sanitized traces to collector IF forensicLogging=true.
+
+━━━━━━━━━━━━━━━━━━━━
+VERY IMPORTANT ABOUT PHASE 3
+━━━━━━━━━━━━━━━━━━━━
+
+When you later implement formatters:
+
+DO NOT summarize forensic data.
+
+Need FULL:
+
+* prompt
+* raw AI output
+* final testcase output
+
+Another AI should diagnose failures WITHOUT asking the user for anything else.
+
+That is the entire purpose of this architecture.
+
+━━━━━━━━━━━━━━━━━━━━
+VERY IMPORTANT ABOUT GENERATION_SERVICE
+━━━━━━━━━━━━━━━━━━━━
+
+Do not attempt helper abstractions for orchestration instrumentation.
+
+Example:
+DO NOT propose:
+
+TelemetryMiddleware
+PipelineObserver
+AutoInstrumentation
+
+Those abstractions become dangerous in this codebase.
+
+ChatGPT Phase 2 will insert explicit passive calls manually at precise lifecycle boundaries.
+
+That file needs surgical instrumentation, not abstraction frameworks.
+
+━━━━━━━━━━━━━━━━━━━━
+PHASE 4 MOST IMPORTANT GOAL
+━━━━━━━━━━━━━━━━━━━━
+
+Production equivalence.
+
+When:
+
+forensicLogging=false
+
+Need:
+
+* zero forensic writes
+* near-zero overhead
+* identical behavior
+* identical generation output
+* identical timing characteristics
+* identical export behavior
+
+Production must behave as if forensic system does not exist.
+
+━━━━━━━━━━━━━━━━━━━━
+FINAL IMPLEMENTATION PHILOSOPHY
+━━━━━━━━━━━━━━━━━━━━
+
+This system is NOT analytics.
+
+This is:
+LOCAL FORENSIC OBSERVABILITY.
+
+Purpose:
+After one failed generation,
+another AI should fully diagnose:
+
+* provider failure
+* malformed response
+* parser failure
+* validator rejection
+* dedup issue
+* repair corruption
+* fallback trigger
+* export failure
+* UI error
+
+WITHOUT requesting:
+
+* screenshots
+* prompts
+* raw outputs
+* stack traces
+
+Everything must already exist inside:
+
+* core_pipeline.txt
+* pro_pipeline.txt
+
+while analytical logs provide compact historical trends.
+
+Your ownership boundaries are correct.
+
+You may proceed with Phase 1 architecture implementation once the user provides the detailed plan."
+
+note:we finished phase 2 

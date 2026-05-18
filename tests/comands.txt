@@ -7,6 +7,11 @@ echo "🚀 Run with:
 flutter clean && flutter pub get && ./run_groq.sh 
 
 flutter clean && flutter pub get && ./run_gemini.sh
+>
+flutter run --dart-define=AI_PROVIDER=groq --dart-define=FORENSIC_LOGGING=true
+
+<
+flutter run --dart-define=FORENSIC_LOGGING=true
 
 
  use VSCode debug configurations."
@@ -14,3 +19,23 @@ flutter clean && flutter pub get && ./run_gemini.sh
 
  chenchuenay@MacBook-Air QA_Genie % adb shell run-as com.enaykumar.qagenie cat cache/test_results/core_pipeline.txt > tests/test_results/core_pipeline.txt
 adb shell run-as com.enaykumar.qagenie cat cache/test_results/pro_pipeline.txt > tests/test_results/pro_pipeline.txt
+
+
+
+mkdir -p tests/test_results && \
+adb shell run-as com.enaykumar.qagenie cat cache/test_results/core_pipeline.txt > tests/test_results/core_pipeline.txt && \
+adb shell run-as com.enaykumar.qagenie cat cache/test_results/pro_pipeline.txt > tests/test_results/pro_pipeline.txt && \
+adb shell run-as com.enaykumar.qagenie cat cache/test_results/core_analytical_logs.txt > tests/test_results/core_analytical_logs.txt && \
+adb shell run-as com.enaykumar.qagenie cat cache/test_results/pro_analytical_logs.txt > tests/test_results/pro_analytical_logs.txt && \
+echo "✅ All 4 forensic files pulled to tests/test_results/"
+
+
+
+
+
+
+
+
+
+git add . && git commit -m "stable app 17/05.2026 19:38"
+[main ff96c8a] stable app 17/05.2026 19:38

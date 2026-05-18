@@ -1,4 +1,3 @@
-import 'package:qa_genie/core/debug/pipeline_logger.dart';
 
 class UiErrorRecord {
   final DateTime timestamp;

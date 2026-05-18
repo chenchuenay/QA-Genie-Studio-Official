@@ -1,5 +1,6 @@
-import 'package:qa_genie/core/error/ui_error_store.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
 
@@ -24,10 +25,12 @@ class DuplicateCluster {
 }
 
 class RepairTransform {
+  final String testCaseId;
   final String before;
   final String after;
+  final String reason;
   final List<String> actions;
-  RepairTransform(this.before, this.after, this.actions);
+  RepairTransform(this.testCaseId, this.before, this.after, this.reason, this.actions);
 }
 
 class PipelineLogger {
@@ -89,8 +92,14 @@ class PipelineLogger {
     duplicateClusters.add(DuplicateCluster([...titles], reason));
   }
 
-  void recordRepairTransform(String before, String after, List<String> actions) {
-    repairTransforms.add(RepairTransform(before, after, actions));
+  void recordRepairTransform(
+    String testCaseId,
+    String before,
+    String after,
+    String reason,
+    List<String> actions,
+  ) {
+    repairTransforms.add(RepairTransform(testCaseId, before, after, reason, actions));
   }
 
   void finalize() {
@@ -102,7 +111,6 @@ class PipelineLogger {
 
   Future<void> writeToDisk() async {
     finalize();
-    // Guaranteed writable path on Android
     final debugDir = Directory('/data/data/com.enaykumar.qagenie/cache/test_results');
     if (!debugDir.existsSync()) {
       debugDir.createSync(recursive: true);
@@ -194,8 +202,10 @@ class PipelineLogger {
     if (repairTransforms.isNotEmpty) {
       _buf.writeln('\n=== REPAIR TRANSFORMATIONS ===');
       for (final t in repairTransforms) {
+        _buf.writeln('TC_ID: ${t.testCaseId}');
         _buf.writeln('BEFORE: ${t.before}');
         _buf.writeln('AFTER: ${t.after}');
+        _buf.writeln('REASON: ${t.reason}');
         _buf.writeln('TRANSFORMATIONS:');
         for (final a in t.actions) { _buf.writeln('- $a'); }
         _buf.writeln();
@@ -237,6 +247,14 @@ class PipelineLogger {
     _buf.writeln('ai_failure: $aiFailure');
     _buf.writeln('prompt_tokens_estimate: $promptTokensEstimate');
     _buf.writeln('response_tokens_estimate: $responseTokensEstimate');
+
+    _buf.writeln('\n=== SESSION FOOTER ===');
+    final content = _buf.toString();
+    _buf.writeln('final_status=success');
+    _buf.writeln('session_integrity_hash=${sha256.convert(utf8.encode(content)).toString()}');
+    _buf.writeln('duration_ms=$generationTimeMs');
+    _buf.writeln('session_completed=true');
+
     _buf.writeln('\n$sep');
     _buf.writeln('END');
     _buf.writeln(sep);

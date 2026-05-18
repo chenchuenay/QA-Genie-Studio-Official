@@ -5,9 +5,9 @@ import 'package:qa_genie/app/theme/constants.dart';
 class UiErrorService {
   static void logAndShow({
     required BuildContext context,
-    required String source,
+    required ErrorSource source,
     required String screen,
-    required String stage,
+    required ErrorStage stage,
     required ErrorSeverity severity,
     required String userMessage,
     required dynamic error,
@@ -38,9 +38,9 @@ class UiErrorService {
   }
 
   static void logOnly({
-    required String source,
+    required ErrorSource source,
     required String screen,
-    required String stage,
+    required ErrorStage stage,
     required ErrorSeverity severity,
     required String userMessage,
     required dynamic error,
