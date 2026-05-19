@@ -1,33 +1,42 @@
-import 'package:qa_genie/core/error/ui_error_store.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:qa_genie/app/config/app_config.dart';
+import 'package:qa_genie/core/error/ui_error_store.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:qa_genie/presentation/animations/splash_screen.dart';
 import 'package:qa_genie/core/logging/telemetry_collector.dart';
+import 'package:qa_genie/presentation/navigation/main_screen.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   _setupErrorHandlers();
+
   await TelemetryCollector().initializeSystemSnapshot();
+
   try {
-    await dotenv.load();
-  } catch (_) {
-    // .env file may be missing – that's fine in beta
+    await dotenv.load(fileName: '.env');
+
+    debugPrint('✅ QAGenie .env loaded successfully');
+  } catch (e) {
+    debugPrint('⚠️ QAGenie .env not found: $e');
   }
+
   if (!AppConfig.isProduction) {
     final prefs = await SharedPreferences.getInstance();
+
     AppConfig.testProMode = prefs.getBool('testProMode') ?? false;
   }
-  runApp(const MyApp());
+
+  runApp(const QAGenieApp());
 }
 
 void _setupErrorHandlers() {
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
+
     UiErrorService.logOnly(
       source: ErrorSource.framework,
       screen: 'GLOBAL',
@@ -38,6 +47,7 @@ void _setupErrorHandlers() {
       stack: details.stack,
     );
   };
+
   PlatformDispatcher.instance.onError = (error, stack) {
     UiErrorService.logOnly(
       source: ErrorSource.platform,
@@ -48,23 +58,27 @@ void _setupErrorHandlers() {
       error: error,
       stack: stack,
     );
+
     return true;
   };
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class QAGenieApp extends StatefulWidget {
+  const QAGenieApp({super.key});
+
   static void restartApp(BuildContext context) {
-    final state = context.findAncestorStateOfType<_MyAppState>();
+    final state = context.findAncestorStateOfType<_QAGenieAppState>();
+
     state?.restart();
   }
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  State<QAGenieApp> createState() => _QAGenieAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _QAGenieAppState extends State<QAGenieApp> {
   Key _appKey = UniqueKey();
+
   void restart() {
     setState(() {
       _appKey = UniqueKey();
@@ -77,28 +91,41 @@ class _MyAppState extends State<MyApp> {
       key: _appKey,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'QA Genie Studio',
+
+        title: 'QA Genie',
+
         theme: ThemeData(
-          bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-            selectedItemColor: Color(0xFF46DFFF),
-            unselectedItemColor: Color(0xFF8D93A3),
-            showUnselectedLabels: true,
-            backgroundColor: Color(0xFF07090D),
-            elevation: 0,
-            type: BottomNavigationBarType.fixed,
-          ),
           brightness: Brightness.dark,
+
           scaffoldBackgroundColor: const Color(0xFF020409),
+
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+
           colorScheme: const ColorScheme.dark(
             primary: Color(0xFF46DFFF),
             secondary: Color(0xFF46DFFF),
             surface: Color(0xFF12141A),
           ),
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          hoverColor: Colors.transparent,
+
+          bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+            selectedItemColor: Color(0xFF46DFFF),
+
+            unselectedItemColor: Color(0xFF8D93A3),
+
+            showUnselectedLabels: true,
+
+            backgroundColor: Color(0xFF07090D),
+
+            elevation: 0,
+
+            type: BottomNavigationBarType.fixed,
+          ),
         ),
-        home: const SplashScreen(),
+
+        home: const MainScreen(),
+
         scrollBehavior: const MaterialScrollBehavior().copyWith(
           overscroll: false,
         ),

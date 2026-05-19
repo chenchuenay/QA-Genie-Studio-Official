@@ -48,6 +48,7 @@ class GenerationContextBuilder {
       requestedCount: requestedCount,
       deterministicSeed: deterministicSeed,
       skeletons: skeletons,
+      notes: notes ?? '',
       config: config,
     );
 

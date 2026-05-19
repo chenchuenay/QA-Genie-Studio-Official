@@ -23,6 +23,7 @@ import 'package:qa_genie/core/logging/telemetry_models.dart';
 import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
 import 'package:qa_genie/core/logging/telemetry_collector.dart';
 import 'package:qa_genie/core/logging/analytical_formatter.dart';
+import 'package:qa_genie/core/network/providers/api_client.dart';
 import 'package:qa_genie/engine/fallback/fallback_generator.dart';
 import 'package:qa_genie/data/datasources/remote/generation_api.dart';
 import 'package:qa_genie/core/network/providers/provider_factory.dart';
@@ -73,7 +74,7 @@ class _PipelineCounters {
 class GenerationService {
   static const bool bypassPipeline = false;
 
-  final GenerationApi _api = GenerationApi();
+  final GenerationApi _api = GenerationApi(ApiClient(ProviderFactory.create()));
   final TelemetryCollector _telemetry = TelemetryCollector();
   bool _isGenerating = false;
   static GenerationMetrics _lastMetrics = const GenerationMetrics();
@@ -84,22 +85,6 @@ class GenerationService {
   String? get lastWarning => _lastWarning;
 
   static const String PROMPT_VERSION = "v1.4";
-
-  static const String _systemInstruction =
-      "You are a senior QA engineer generating enterprise-grade, execution-ready manual test cases for QA Genie, a canonical export layer for Excel, Jira, Xray, PDF, and manual execution. "
-      "Each JSON object must be a complete canonical test case that can be edited in a table and converted to external QA tools without cleanup. "
-      "Identify the fixed scenario intent first, then derive realistic preconditions, execution steps, test data, and observable expected results directly from that scenario. "
-      "Use fictional or reserved testing phone numbers only. Never generate real personal contact information. "
-      "Generate unique, practical, non-repetitive test cases with context-aware data such as realistic reserved-domain emails, URLs, reference IDs, credentials, request bodies, and tokens only when the platform makes them relevant. "
-      "Avoid generic QA wording, placeholders, vague validations, filler phrases, dummy values, JavaScript expressions, and non-observable outcomes. "
-      "Never use phrases like 'works correctly', 'behaves as expected', 'successful operation', 'verify success', or similar generic wording. "
-      "Each step must separate action, data, and expected behavior: action is what the tester does, data is only the exact input/reference value, and expected is the immediate observable result for that step. "
-      "Generate at least three meaningful steps per test case. "
-      "Expected results must describe observable UI behavior, API responses, validations, navigation changes, state changes, persistence effects, session behavior, database effects, or security outcomes. "
-      "Support validation, session, security, usability, persistence, network, navigation, permissions, and accessibility scenarios when relevant. "
-      "Use only reserved documentation domains such as example.com, example.org, example.net, or .test for generated emails and URLs. "
-      "Restrict advanced security topics unless explicitly requested. "
-      "Return ONLY a valid JSON array without markdown, comments, explanations, headings, or extra text.";
 
   static const List<String> _bannedPhrases = [
     // Generic filler outcomes
@@ -343,7 +328,7 @@ class GenerationService {
     pipelineLog.platform = platform;
     pipelineLog.constraints = notes ?? '';
     pipelineLog.requestedCount = targetCount;
-    PipelineDebugStore.reset();
+    PipelineDebugStore.resetAll();
     promptStopwatch.start();
     final prompt = _buildPromptStage(
       skeletons: skeletons,
@@ -467,7 +452,7 @@ class GenerationService {
       c: c,
     );
     cases = dedupResult.cases;
-    
+
     if (LoggingConfig.forensicLogging) {
       try {
         _telemetry.recordDedupStats(
@@ -543,15 +528,15 @@ class GenerationService {
       counters: c,
     );
 
-
     final fallbackCount = finalized
         .where((e) => e.source == CaseSource.fallback)
         .length;
     if (LoggingConfig.forensicLogging) {
       try {
         _telemetry.fallbackTriggered = fallbackCount > 0;
-        _telemetry.fallbackReason =
-            fallbackCount > 0 ? 'partial_pipeline_recovery' : '';
+        _telemetry.fallbackReason = fallbackCount > 0
+            ? 'partial_pipeline_recovery'
+            : '';
         _telemetry.fallbackGeneratedCases = fallbackCount;
       } catch (_) {}
     }
@@ -624,7 +609,7 @@ class GenerationService {
       try {
         final snapshot = _telemetry.freeze();
 
-        final pipelineDump = DumpFormatter.buildPipelineDump(snapshot);
+        final pipelineDump = DumpFormatter.build(snapshot);
 
         final analyticalDump = AnalyticalFormatter.buildAnalyticalDump(
           snapshot,
@@ -984,7 +969,7 @@ class GenerationService {
     final beforeRepair = cases.length;
     final repair = DeterministicRepair(planner);
     var next = repair.repair(cases, maxCases);
-    
+
     // Log repairs
     for (final event in repair.repairEvents) {
       pipelineLog.recordRepairTransform(
@@ -1858,20 +1843,13 @@ class GenerationService {
     String platform,
   ) {
     final sb = StringBuffer();
-    sb.writeln(
-      "DO NOT output reasoning. DO NOT use <think> tags. Return ONLY pure JSON array.",
-    );
-    sb.writeln('$_systemInstruction (v$PROMPT_VERSION)');
+
+    sb.writeln('(Prompt centralized in system_prompt.dart) v$PROMPT_VERSION');
     sb.writeln('Module: $module | Feature: $feature | Platform: $platform');
     sb.writeln(
       'Return exactly ${skeletons.length} JSON objects in the same order as these fixed scenario contracts. Do not rename a scenario into a different intent.',
     );
-    sb.writeln(
-      'Canonical export rules: preconditions are setup only; steps[].action is the tester action only; steps[].data is exact input only; steps[].expected is the immediate expected observation; expectedResult is the final pass condition; actualResult must be ""; status must be "Not Executed".',
-    );
-    sb.writeln(
-      'Use realistic reserved test data. Never use user@example.com, test@example.com, password123, dummy data, sample data, "a".repeat(...), or placeholders.',
-    );
+
     for (final sk in skeletons) {
       sb.writeln('- ${sk['title']} (${sk['category']}, type: ${sk['type']})');
     }

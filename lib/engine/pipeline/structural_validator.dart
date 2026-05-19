@@ -1,5 +1,5 @@
+import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/pipeline/generation_context.dart';
-import 'package:qa_genie/engine/pipeline/models/pipeline_models.dart';
 
 class StructuralValidationResult {
   final List<WorkingCase> validCases;

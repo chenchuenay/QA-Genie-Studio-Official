@@ -1,8 +1,7 @@
 import 'dart:convert';
-
-import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
-import 'package:qa_genie/data/models/test_case_model.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
 
 class ResponseParser {
   /// Salvage-first ingestion: salvage executes only after full-structure decode fails,
@@ -47,10 +46,7 @@ class ResponseParser {
   }
 
   static dynamic _attemptFullStructuralDecode(String source) {
-    final candidates = <String>{
-      source,
-      _sanitizeMalformedDelimiters(source),
-    };
+    final candidates = <String>{source, _sanitizeMalformedDelimiters(source)};
 
     final envelope = _firstBalancedEnvelope(source);
     if (envelope != null) {
@@ -85,8 +81,7 @@ class ResponseParser {
     }
 
     for (var i = parts.length; i >= 1; i--) {
-      final candidate =
-          '[' + parts.take(i).join(',') + ']';
+      final candidate = '[' + parts.take(i).join(',') + ']';
       final repaired = _sanitizeMalformedDelimiters(candidate);
       if (_decodeLoose(repaired) != null) {
         softened.add(repaired);
@@ -124,10 +119,13 @@ class ResponseParser {
 
     if (node is List) {
       for (final raw in node) {
-        final map = _safeMap(raw,
-            bumpRejections: countStructuralSkips &&
-                raw is! Map &&
-                raw is! Map<String, dynamic>);
+        final map = _safeMap(
+          raw,
+          bumpRejections:
+              countStructuralSkips &&
+              raw is! Map &&
+              raw is! Map<String, dynamic>,
+        );
         if (map != null) {
           sink.add(map);
         }
@@ -179,6 +177,73 @@ class ResponseParser {
     }
   }
 
+  /// Splits an array string into individual object strings, handling nested braces.
+  static List<String> _splitArrayIntoObjects(String arrayStr) {
+    final results = <String>[];
+
+    if (!arrayStr.startsWith('[') || !arrayStr.endsWith(']')) {
+      return results;
+    }
+
+    final inner = arrayStr.substring(1, arrayStr.length - 1);
+
+    bool inString = false;
+    bool escape = false;
+
+    int braceDepth = 0;
+    int start = -1;
+
+    for (int i = 0; i < inner.length; i++) {
+      final ch = inner[i];
+
+      if (escape) {
+        escape = false;
+        continue;
+      }
+
+      if (ch == '\\' && inString) {
+        escape = true;
+        continue;
+      }
+
+      if (ch == '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) {
+        continue;
+      }
+
+      if (ch == '{') {
+        if (braceDepth == 0) {
+          start = i;
+        }
+        braceDepth++;
+      } else if (ch == '}') {
+        braceDepth--;
+
+        if (braceDepth < 0) {
+          braceDepth = 0;
+          start = -1;
+          continue;
+        }
+
+        if (braceDepth == 0 && start != -1) {
+          final obj = inner.substring(start, i + 1).trim();
+
+          if (obj.isNotEmpty) {
+            results.add(obj);
+          }
+
+          start = -1;
+        }
+      }
+    }
+
+    return results;
+  }
+
   /// Stage 2 salvage: chunked decode + greedy brace slicing over the envelope + prose.
   static List<Map<String, dynamic>> _salvageMaps(String repaired) {
     final collector = _UniqueMapAccumulator();
@@ -199,32 +264,22 @@ class ResponseParser {
       collector.addMany(extracted);
     }
 
+    // First, try to extract the outermost array and split it into individual objects
     final envelope = _firstBalancedEnvelope(repaired);
-
-    final targets = <String>{repaired};
-    if (envelope != null) {
-      targets.add(envelope.trim());
-      if (envelope.trim().startsWith('[') && envelope.trim().length >= 2) {
-        targets.add(envelope.trim().substring(1, envelope.trim().length - 1));
+    if (envelope != null && envelope.trim().startsWith('[')) {
+      final objects = _splitArrayIntoObjects(envelope);
+      for (final objStr in objects) {
+        tryIngestString(objStr);
       }
-    }
-
-    for (final chunk in targets) {
-      tryIngestString(chunk);
-
-      final trimmedOuter = chunk.trim();
-      if (trimmedOuter.startsWith('[')) {
-        final innerBody = trimmedOuter.length > 2
-            ? trimmedOuter.substring(1, trimmedOuter.length - 1)
-            : '';
-        final segments = _splitTopLevelSeparated(innerBody, ',');
-        for (final segment in segments) {
-          tryIngestString(segment);
+    } else {
+      // Fall back to the original method
+      final targets = <String>{repaired};
+      if (envelope != null) targets.add(envelope.trim());
+      for (final chunk in targets) {
+        tryIngestString(chunk);
+        for (final braceObject in _collectBalancedBraceObjects(chunk)) {
+          tryIngestString(braceObject);
         }
-      }
-
-      for (final braceObject in _collectBalancedBraceObjects(chunk)) {
-        tryIngestString(braceObject);
       }
     }
 
@@ -244,7 +299,8 @@ class ResponseParser {
     );
     repaired = repaired.replaceAllMapped(
       RegExp(
-          r'"([^"\\]*)"\.replace\("([^"\\]*)",\s*"([^"\\]*)"\)\s*\+\s*"([^"\\]*)"'),
+        r'"([^"\\]*)"\.replace\("([^"\\]*)",\s*"([^"\\]*)"\)\s*\+\s*"([^"\\]*)"',
+      ),
       (m) {
         final text = m.group(1)!;
         final from = m.group(2)!;
@@ -287,19 +343,25 @@ class ResponseParser {
 
   static String? _firstBalancedEnvelope(String input) {
     final anchor = _firstStructuralOpenIndex(input);
-    if (anchor == null) return null;
 
-    final closingIndex = _closingDelimiterIndex(input, anchor);
-    if (closingIndex == null) return null;
+    if (anchor == null) {
+      return null;
+    }
 
-    return input.substring(anchor, closingIndex + 1).trim();
+    final closing = _closingDelimiterIndex(input, anchor);
+
+    if (closing == null) {
+      return null;
+    }
+
+    return input.substring(anchor, closing + 1).trim();
   }
 
   static int? _firstStructuralOpenIndex(String raw) {
-    var inString = false;
-    var escape = false;
+    bool inString = false;
+    bool escape = false;
 
-    for (var i = 0; i < raw.length; i++) {
+    for (int i = 0; i < raw.length; i++) {
       final ch = raw[i];
 
       if (escape) {
@@ -326,26 +388,33 @@ class ResponseParser {
   }
 
   static int? _closingDelimiterIndex(String source, int startIndex) {
-    if (startIndex >= source.length) return null;
+    if (startIndex >= source.length) {
+      return null;
+    }
 
     final opener = source[startIndex];
 
     late final Map<String, int> weights;
+
     switch (opener) {
       case '[':
         weights = {'[': 1, ']': -1};
+        break;
+
       case '{':
         weights = {'{': 1, '}': -1};
+        break;
+
       default:
         return null;
     }
 
-    var depth = 0;
-    var inString = false;
-    var escape = false;
+    int depth = 0;
+    bool inString = false;
+    bool escape = false;
 
-    for (var cursor = startIndex; cursor < source.length; cursor++) {
-      final ch = source[cursor];
+    for (int i = startIndex; i < source.length; i++) {
+      final ch = source[i];
 
       if (escape) {
         escape = false;
@@ -367,9 +436,10 @@ class ResponseParser {
       }
 
       if (!inString && depth == 0) {
-        return cursor;
+        return i;
       }
     }
+
     return null;
   }
 
@@ -377,15 +447,12 @@ class ResponseParser {
     final pieces = <String>[];
     final buf = StringBuffer();
 
-    assert(token.length == 1, 'delimiter must be single char');
+    bool inString = false;
+    bool escape = false;
+    int depth = 0;
 
-    var nestDepth = 0;
-
-    var inString = false;
-    var escape = false;
-
-    for (var cursor = 0; cursor < fragment.length; cursor++) {
-      final ch = fragment[cursor];
+    for (int i = 0; i < fragment.length; i++) {
+      final ch = fragment[i];
 
       if (escape) {
         escape = false;
@@ -407,14 +474,12 @@ class ResponseParser {
 
       if (!inString) {
         if (ch == '{' || ch == '[') {
-          nestDepth++;
+          depth++;
         } else if (ch == '}' || ch == ']') {
-          if (nestDepth > 0) {
-            nestDepth--;
-          }
+          if (depth > 0) depth--;
         }
 
-        if (ch == ',' && nestDepth == 0 && token == ',') {
+        if (ch == token && depth == 0) {
           pieces.add(buf.toString());
           buf.clear();
           continue;
@@ -426,18 +491,15 @@ class ResponseParser {
 
     pieces.add(buf.toString());
 
-    return pieces
-        .map((piece) => piece.trim())
-        .where((piece) => piece.isNotEmpty)
-        .toList();
+    return pieces.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
   }
 
   static List<String> _collectBalancedBraceObjects(String haystack) {
     final results = <String>[];
 
-    var cursor = 0;
-    var inString = false;
-    var escape = false;
+    int cursor = 0;
+    bool inString = false;
+    bool escape = false;
 
     while (cursor < haystack.length) {
       final char = haystack[cursor];
@@ -462,8 +524,10 @@ class ResponseParser {
 
       if (!inString && char == '{') {
         final close = _closingDelimiterIndex(haystack, cursor);
+
         if (close != null) {
           results.add(haystack.substring(cursor, close + 1));
+
           cursor = close + 1;
           continue;
         }
@@ -475,22 +539,21 @@ class ResponseParser {
     return results;
   }
 
-  static List<TestCaseModel> _buildModels(List<Map<String, dynamic>> decodedList) {
+  static List<TestCaseModel> _buildModels(
+    List<Map<String, dynamic>> decodedList,
+  ) {
     final parsedCases = <TestCaseModel>[];
+
     final seenTitles = <String>{};
-    final seenIntentHashes = <String>{};
 
     for (final item in decodedList) {
       try {
         final map = Map<String, dynamic>.from(item);
+
         map['source'] = CaseSource.ai.name;
 
-        if (map['steps'] is! List) {
-          map['steps'] = [];
-        }
-        if (map['preconditions'] is! List) {
-          map['preconditions'] = [];
-        }
+        map['steps'] ??= [];
+        map['preconditions'] ??= [];
 
         map['id'] ??= '';
         map['module'] ??= '';
@@ -504,7 +567,7 @@ class ResponseParser {
 
         final title = (map['title'] ?? '').toString().trim();
 
-        if (title.isEmpty || title.length < 5) {
+        if (title.length < 5) {
           PipelineDebugStore.malformedObjectsSkipped++;
           continue;
         }
@@ -520,75 +583,51 @@ class ResponseParser {
 
         final tc = TestCaseModel.fromJson(map);
 
-        final extractedAction = tc.steps.isNotEmpty
-            ? tc.steps.first.action
-                .toLowerCase()
-                .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-                .trim()
-            : '';
-
-        final firstAction =
-            extractedAction.isEmpty ? normalizedTitle : extractedAction;
-
-        final intentHash = '$normalizedTitle|$firstAction';
-
-        if (seenIntentHashes.contains(intentHash)) {
-          continue;
-        }
-
         while (tc.steps.length < 3) {
           tc.steps.add(
             TestStep(
-              action: 'Validate application response state',
+              action: 'Validate application behavior',
               data: '',
-              expected:
-                  'Application responds correctly and maintains stable behavior',
+              expected: 'Application behaves correctly and remains stable',
             ),
           );
         }
 
-        for (final step in tc.steps) {
-          if (step.action.trim().isEmpty) {
-            step.action = 'Perform workflow action';
-          }
-
-          if (step.expected.trim().isEmpty) {
-            step.expected =
-                'Application responds correctly and maintains stable behavior';
-          }
+        if (tc.preconditions.isEmpty) {
+          tc.preconditions = ['Application is installed and accessible'];
         }
 
         if (tc.expectedResult.trim().isEmpty) {
-          tc.expectedResult =
-              'Application processes the workflow correctly and maintains stable behavior';
-        }
-
-        if (tc.preconditions.isEmpty) {
-          tc.preconditions = ['Application is accessible and stable'];
-        }
-
-        switch (tc.priority.trim().toLowerCase()) {
-          case 'high':
-            tc.priority = 'High';
-            break;
-          case 'low':
-            tc.priority = 'Low';
-            break;
-          default:
-            tc.priority = 'Medium';
+          tc.expectedResult = 'Application processes the workflow successfully';
         }
 
         if (!TestCaseModel.isValid(tc)) {
           PipelineDebugStore.malformedObjectsSkipped++;
+
+          print('❌ VALIDATION FAILED');
+          print('TITLE: ${tc.title}');
+          print('MODULE: ${tc.module}');
+          print('FEATURE: ${tc.feature}');
+          print('TYPE: ${tc.type}');
+          print('PRIORITY: ${tc.priority}');
+          print('PRECONDITIONS: ${tc.preconditions.length}');
+          print('STEPS: ${tc.steps.length}');
+          print('EXPECTED RESULT: ${tc.expectedResult}');
+          print('RAW MAP: $map');
+
           continue;
         }
 
         seenTitles.add(normalizedTitle);
-        seenIntentHashes.add(intentHash);
 
         parsedCases.add(tc);
-      } catch (_) {
+      } catch (e, st) {
         PipelineDebugStore.malformedObjectsSkipped++;
+
+        print('❌ TC PARSE FAILURE');
+        print('ERROR: $e');
+        print('STACK: $st');
+        print('RAW MAP: $item');
       }
     }
 
@@ -602,22 +641,24 @@ class ResponseParser {
 
 class _UniqueMapAccumulator {
   final _seen = <String>{};
+
   final records = <Map<String, dynamic>>[];
 
   static String _fingerprint(Map<String, dynamic> map) {
     try {
-      return const JsonEncoder().convert(map).replaceAll(RegExp(r'\s+'), '').toLowerCase();
+      return const JsonEncoder()
+          .convert(map)
+          .replaceAll(RegExp(r'\s+'), '')
+          .toLowerCase();
     } catch (_) {
-      final title = '${map['title']}'.toLowerCase();
-      final module = '${map['module']}'.toLowerCase();
-      final steps = '${map['steps']}';
-      return '$title|$module|$steps'.toLowerCase();
+      return map.toString().toLowerCase();
     }
   }
 
   void addMany(List<Map<String, dynamic>> blobs) {
     for (final map in blobs) {
       final key = _fingerprint(map);
+
       if (_seen.add(key)) {
         records.add(Map<String, dynamic>.from(map));
       }

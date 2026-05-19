@@ -1,5 +1,5 @@
 import 'package:qa_genie/engine/generation_metrics.dart';
-import 'package:qa_genie/engine/pipeline/models/pipeline_models.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/pipeline/pipeline_config.dart';
 
 class GenerationContext {
@@ -12,6 +12,7 @@ class GenerationContext {
   final int requestedCount;
   final String deterministicSeed;
   final PipelineConfig config;
+  final String notes;
 
   final DateTime firstApiCallTimestamp = DateTime.now();
   String? modelUsed;
@@ -21,19 +22,19 @@ class GenerationContext {
   final Map<String, dynamic> promptMetadata;
   final Set<String> semanticSignals;
   final Set<String> detectedCategories;
-  
+
   // Pipeline State
   final List<Map<String, dynamic>> skeletons;
   final List<String> warnings;
   final List<String> errors;
-  
+
   // Forensic Audit Streams
   final List<String> apiInvocationLog = [];
   final List<String> repairLog = [];
   final List<String> fallbackLog = [];
   final List<String> escalationLog = [];
   final List<RejectedCaseInfo> rejectedCases = [];
-  
+
   // Intermediate Snapshots (Immutable Transitions)
   String rawApiResponse = '';
   final List<WorkingCase> normalizedCases = [];
@@ -43,7 +44,7 @@ class GenerationContext {
   final List<WorkingCase> deduplicatedCases = [];
   final List<WorkingCase> scoredCases = [];
   final List<FinalizedTestCase> finalCases = [];
-  
+
   GenerationMetrics metrics;
   final Stopwatch _stopwatch = Stopwatch();
 
@@ -57,6 +58,7 @@ class GenerationContext {
     required this.requestedCount,
     required this.deterministicSeed,
     required this.skeletons,
+    required this.notes,
     this.config = PipelineConfig.production,
     GenerationMetrics? metrics,
   }) : promptMetadata = {},
@@ -85,12 +87,17 @@ class GenerationContext {
   PipelineAuditReport generateAuditReport() {
     double totalConfidence = 0;
     if (scoredCases.isNotEmpty) {
-      totalConfidence = scoredCases.map((c) => c.metadata.confidenceScore).reduce((a, b) => a + b) / scoredCases.length;
+      totalConfidence =
+          scoredCases
+              .map((c) => c.metadata.confidenceScore)
+              .reduce((a, b) => a + b) /
+          scoredCases.length;
     }
 
     final balance = <String, int>{};
     for (final c in scoredCases) {
-      balance[c.metadata.semanticProfile] = (balance[c.metadata.semanticProfile] ?? 0) + 1;
+      balance[c.metadata.semanticProfile] =
+          (balance[c.metadata.semanticProfile] ?? 0) + 1;
     }
 
     return PipelineAuditReport(

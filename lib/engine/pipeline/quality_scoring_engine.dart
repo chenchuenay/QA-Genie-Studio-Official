@@ -1,11 +1,12 @@
-import 'package:qa_genie/engine/pipeline/models/pipeline_models.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
 
 class QualityScoringEngine {
   double calculateConfidence(WorkingCase tc) {
     double confidence = 1.0;
 
     // Penalty for weak expected result
-    if (tc.expectedResult.length < 30 || tc.expectedResult.toLowerCase().contains('works correctly')) {
+    if (tc.expectedResult.length < 30 ||
+        tc.expectedResult.toLowerCase().contains('works correctly')) {
       confidence -= 0.3;
       tc.metadata.qualityPenalties['weak_expected_result'] = 0.3;
     }

@@ -1,5 +1,5 @@
 import 'package:qa_genie/data/models/test_case_model.dart';
-import 'package:qa_genie/engine/pipeline/models/pipeline_models.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/pipeline/generation_context.dart';
 import 'package:qa_genie/engine/pipeline/semantic_validator.dart';
 import 'package:qa_genie/engine/pipeline/deduplication_engine.dart';
@@ -21,11 +21,11 @@ class EmergencyRecoveryEngine {
     final deduper = DeduplicationEngine();
 
     var attempt = 0;
-    while (recovered.length + currentCases.length < maxCases && 
-           attempt < context.config.maxRecoveryAttempts) {
+    while (recovered.length + currentCases.length < maxCases &&
+        attempt < context.config.maxRecoveryAttempts) {
       if (context.isTimedOut) break;
       attempt += 1;
-      
+
       final emergency = _buildEmergencyWorkingCase(
         context,
         currentCases.length + recovered.length + 1,
@@ -34,14 +34,21 @@ class EmergencyRecoveryEngine {
       // Emergency cases MUST pass all deterministic gates
       final structural = structuralValidator.validate(context, [emergency]);
       if (structural.validCases.isEmpty) continue;
-      
-      final semantic = semanticValidator.validate(context, structural.validCases);
+
+      final semantic = semanticValidator.validate(
+        context,
+        structural.validCases,
+      );
       if (semantic.validCases.isEmpty) continue;
-      
-      final confidence = quality.calculateConfidence(semantic.validCases.single);
+
+      final confidence = quality.calculateConfidence(
+        semantic.validCases.single,
+      );
       if (confidence < 0.6) continue;
-      
-      if (!exportValidator.validate([semantic.validCases.single]).isSuccessful) {
+
+      if (!exportValidator.validate([
+        semantic.validCases.single,
+      ]).isSuccessful) {
         continue;
       }
 
@@ -50,8 +57,9 @@ class EmergencyRecoveryEngine {
         ...recovered,
         semantic.validCases.single,
       ]);
-      
-      if (dedupResult.cases.length == currentCases.length + recovered.length + 1) {
+
+      if (dedupResult.cases.length ==
+          currentCases.length + recovered.length + 1) {
         recovered.add(semantic.validCases.single);
       }
     }
@@ -83,20 +91,46 @@ class EmergencyRecoveryEngine {
       _EmergencyScenario(
         title: 'Happy Path Execution',
         steps: [
-          TestStep(action: 'Launch $feature feature', data: '', expected: 'Feature loads successfully.'),
-          TestStep(action: 'Input standard $feature data', data: 'valid_input', expected: 'Data is accepted.'),
-          TestStep(action: 'Submit $feature action', data: '', expected: 'Action completes without error.'),
+          TestStep(
+            action: 'Launch $feature feature',
+            data: '',
+            expected: 'Feature loads successfully.',
+          ),
+          TestStep(
+            action: 'Input standard $feature data',
+            data: 'valid_input',
+            expected: 'Data is accepted.',
+          ),
+          TestStep(
+            action: 'Submit $feature action',
+            data: '',
+            expected: 'Action completes without error.',
+          ),
         ],
-        expected: 'The core $feature workflow completes under normal conditions.',
+        expected:
+            'The core $feature workflow completes under normal conditions.',
       ),
       _EmergencyScenario(
         title: 'Empty State Validation',
         steps: [
-          TestStep(action: 'Open $feature with no records', data: '', expected: 'Empty state is displayed.'),
-          TestStep(action: 'Attempt action on empty $feature', data: '', expected: 'Graceful warning shown.'),
-          TestStep(action: 'Verify system stability', data: '', expected: 'No crash occurred.'),
+          TestStep(
+            action: 'Open $feature with no records',
+            data: '',
+            expected: 'Empty state is displayed.',
+          ),
+          TestStep(
+            action: 'Attempt action on empty $feature',
+            data: '',
+            expected: 'Graceful warning shown.',
+          ),
+          TestStep(
+            action: 'Verify system stability',
+            data: '',
+            expected: 'No crash occurred.',
+          ),
         ],
-        expected: 'The $feature feature handles empty data scenarios gracefully.',
+        expected:
+            'The $feature feature handles empty data scenarios gracefully.',
       ),
     ];
     return scenarios[index % scenarios.length];
@@ -107,5 +141,9 @@ class _EmergencyScenario {
   final String title;
   final List<TestStep> steps;
   final String expected;
-  _EmergencyScenario({required this.title, required this.steps, required this.expected});
+  _EmergencyScenario({
+    required this.title,
+    required this.steps,
+    required this.expected,
+  });
 }

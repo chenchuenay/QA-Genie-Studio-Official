@@ -2,104 +2,127 @@ import 'dart:async';
 import 'dart:convert';
 import 'ai_provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:qa_genie/engine/pipeline/system_prompt.dart';
 import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
 
 class GeminiProvider implements AiProvider {
-  static const String _apiKey = "AIzaSyBVj0nQTodCE2TRj_JdhtklItczt_HxKa4";
-  static const String _baseUrl =
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  final String apiKey;
+
+  GeminiProvider({String? apiKey})
+    : apiKey =
+          apiKey ??
+          dotenv.env['GEMINI_API_KEY'] ??
+          const String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+
+  static const _model = 'gemini-2.5-flash';
 
   @override
   Future<String> generate(String prompt) async {
-    final fullPrompt =
-        '''
-$prompt
+    PipelineDebugStore.lastProvider = 'gemini';
 
-CRITICAL:
+    final cleanedKey = apiKey.trim();
 
-Return ONLY a pure JSON array.
+    if (cleanedKey.isEmpty) {
+      throw Exception('Missing GEMINI_API_KEY');
+    }
 
-No markdown.
+    final uri = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/$_model:generateContent?key=$cleanedKey',
+    );
 
-No explanations.
+    final payload = {
+      'system_instruction': {
+        'parts': [
+          {'text': SystemPrompt.systemInstruction},
+        ],
+      },
 
-No <think>.
+      'contents': [
+        {
+          'parts': [
+            {'text': prompt},
+          ],
+        },
+      ],
 
-No code fences.
+      'generationConfig': {
+        'temperature': 0.2,
+        'topP': 0.9,
+        'candidateCount': 1,
+        'maxOutputTokens': 8192,
 
-No comments.
+        // IMPORTANT FOR JSON STABILITY
+        'responseMimeType': 'application/json',
+      },
 
-No JavaScript expressions such as "a".repeat(256). Use literal JSON strings only.
+      'safetySettings': [
+        {'category': 'HARM_CATEGORY_HATE_SPEECH', 'threshold': 'BLOCK_NONE'},
+        {'category': 'HARM_CATEGORY_HARASSMENT', 'threshold': 'BLOCK_NONE'},
+        {
+          'category': 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+          'threshold': 'BLOCK_NONE',
+        },
+        {
+          'category': 'HARM_CATEGORY_DANGEROUS_CONTENT',
+          'threshold': 'BLOCK_NONE',
+        },
+      ],
+    };
 
-''';
-
-    PipelineDebugStore.lastFinalPrompt = fullPrompt;
-
-    final res = await http
+    final response = await http
         .post(
-          Uri.parse(_baseUrl),
-
-          headers: {
-            "Content-Type": "application/json",
-
-            "X-goog-api-key": _apiKey,
-          },
-
-          body: jsonEncode({
-            "contents": [
-              {
-                "parts": [
-                  {"text": fullPrompt},
-                ],
-              },
-            ],
-
-            "generationConfig": {
-              "temperature": 0.4,
-
-              "topK": 32,
-
-              "topP": 1,
-
-              "maxOutputTokens": 8192,
-            },
-          }),
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
         )
-        .timeout(const Duration(seconds: 45));
+        .timeout(const Duration(seconds: 120));
 
-    PipelineDebugStore.lastRawResponse =
-        'STATUS: ${res.statusCode}\nBODY:\n${res.body}';
+    PipelineDebugStore.lastRawResponse = response.body;
 
-    if (res.statusCode != 200) {
-      throw Exception('Gemini HTTP ${res.statusCode}: ${res.body}');
+    if (response.statusCode != 200) {
+      throw Exception('Gemini error ${response.statusCode}: ${response.body}');
     }
 
-    final data = jsonDecode(res.body);
+    final decoded = jsonDecode(response.body);
 
-    final candidates = data['candidates'];
+    final text =
+        decoded['candidates']?[0]?['content']?['parts']?[0]?['text']
+            ?.toString() ??
+        '';
 
-    if (candidates == null || candidates.isEmpty) {
-      throw Exception('Gemini returned no candidates');
+    if (text.trim().isEmpty) {
+      throw Exception('Empty Gemini response');
     }
 
-    final content = candidates[0]['content'];
+    return _sanitize(text);
+  }
 
-    if (content == null) {
-      throw Exception('Gemini content missing');
+  String _sanitize(String value) {
+    var cleaned = value.trim();
+
+    cleaned = cleaned
+        .replaceAll('```json', '')
+        .replaceAll('```', '')
+        .replaceAll('<think>', '')
+        .replaceAll('</think>', '')
+        .replaceAll('<thinking>', '')
+        .replaceAll('</thinking>', '');
+
+    cleaned = cleaned.replaceAllMapped(
+      RegExp(r'^\s*Here(?: is| are).*?:', caseSensitive: false),
+      (_) => '',
+    );
+
+    cleaned = cleaned.trim();
+
+    final arrayStart = cleaned.indexOf('[');
+    final arrayEnd = cleaned.lastIndexOf(']');
+
+    if (arrayStart != -1 && arrayEnd != -1 && arrayEnd > arrayStart) {
+      cleaned = cleaned.substring(arrayStart, arrayEnd + 1);
     }
 
-    final parts = content['parts'];
-
-    if (parts == null || parts.isEmpty) {
-      throw Exception('Gemini parts missing');
-    }
-
-    final text = parts[0]['text'];
-
-    if (text == null || text.toString().trim().isEmpty) {
-      throw Exception('Gemini returned empty text');
-    }
-
-    return text.toString().trim();
+    return cleaned.trim();
   }
 }

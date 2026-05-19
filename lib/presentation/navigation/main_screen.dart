@@ -215,7 +215,7 @@ class MainScreenState extends State<MainScreen> {
               context,
               MaterialPageRoute(
                 builder: (_) => ProBenefitsScreen(
-                  onRestart: () => MyApp.restartApp(context),
+                  onRestart: () => QAGenieApp.restartApp(context),
                 ),
               ),
             ),

@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import 'generation_mode.dart';
 import 'template_registry.dart';
 import 'distribution_engine.dart';

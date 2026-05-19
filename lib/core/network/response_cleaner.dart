@@ -1,74 +1,72 @@
-import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
-
 class ResponseCleaner {
-  static String clean(String raw, String provider) {
-    PipelineDebugStore.cleanerRepairCount = 0;
-
-    String text = raw.trim();
-    if (text.isEmpty) {
-      return text;
+  static String clean(String raw) {
+    if (raw.trim().isEmpty) {
+      return '';
     }
 
-    text = text
-        .replaceAll('\uFEFF', '')
-        .replaceAll('\u200B', '')
-        .replaceAll('\u200C', '')
-        .replaceAll('\u200D', '');
+    var cleaned = raw.trim();
 
-    final before = text;
+    cleaned = _removeMarkdown(cleaned);
+    cleaned = _removeThinkTags(cleaned);
+    cleaned = _removeXmlArtifacts(cleaned);
+    cleaned = _removeControlChars(cleaned);
+    cleaned = _normalizeQuotes(cleaned);
+    cleaned = _extractJsonEnvelope(cleaned);
 
-    text = text.replaceAll(
-      RegExp(
-        r'<(?:redacted_)?thinking>[\s\S]*?<\/(?:redacted_)?thinking>',
-        multiLine: true,
-        caseSensitive: false,
-      ),
-      '',
-    );
-    text = text.replaceAll(
-      RegExp(
-        r'<think>[\s\S]*?<\/redacted_thinking>',
-        multiLine: true,
-        caseSensitive: false,
-      ),
-      '',
-    );
+    return cleaned.trim();
+  }
 
-    text = text
-        .replaceAll('```json', '')
-        .replaceAll('```JSON', '')
-        .replaceAll('```Json', '')
-        .replaceAll('```', '');
+  static String _removeMarkdown(String input) {
+    return input
+        .replaceAll(RegExp(r'```json', caseSensitive: false), '')
+        .replaceAll(RegExp(r'```', caseSensitive: false), '');
+  }
 
-    final prefixes = [
-      'Here is the JSON:',
-      'Here\'s the JSON:',
-      'Sure! Here is the JSON:',
-      'Sure! Here\'s the JSON:',
-      'Below is the JSON:',
-      'Response:',
-      'Output:',
-      'JSON:',
-    ];
-    for (final prefix in prefixes) {
-      if (text.startsWith(prefix)) {
-        text = text.substring(prefix.length).trim();
-      }
+  static String _removeThinkTags(String input) {
+    return input
+        .replaceAll(
+          RegExp(r'<think>[\s\S]*?<\/think>', caseSensitive: false),
+          '',
+        )
+        .replaceAll(
+          RegExp(r'<thinking>[\s\S]*?<\/thinking>', caseSensitive: false),
+          '',
+        );
+  }
+
+  static String _removeXmlArtifacts(String input) {
+    return input
+        .replaceAll(RegExp(r'<\/?response>', caseSensitive: false), '')
+        .replaceAll(RegExp(r'<\/?json>', caseSensitive: false), '');
+  }
+
+  static String _removeControlChars(String input) {
+    return input.replaceAll(RegExp(r'[\u0000-\u001F]'), ' ');
+  }
+
+  static String _normalizeQuotes(String input) {
+    return input
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('‘', "'")
+        .replaceAll('’', "'");
+  }
+
+  static String _extractJsonEnvelope(String input) {
+    final arrayStart = input.indexOf('[');
+    final arrayEnd = input.lastIndexOf(']');
+
+    if (arrayStart != -1 && arrayEnd != -1 && arrayEnd > arrayStart) {
+      return input.substring(arrayStart, arrayEnd + 1);
     }
 
-    text = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
+    final objStart = input.indexOf('{');
+    final objEnd = input.lastIndexOf('}');
 
-    text = text.replaceAll(RegExp(r',(\s*[\]}])'), r'$1');
-
-    final after = text;
-    if (before != after) {
-      PipelineDebugStore.cleanerRepairCount++;
+    if (objStart != -1 && objEnd != -1 && objEnd > objStart) {
+      return input.substring(objStart, objEnd + 1);
     }
 
-    if (text == '[]') {
-      return text;
-    }
-
-    return text;
+    return input;
   }
 }

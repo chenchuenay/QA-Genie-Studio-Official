@@ -15,3 +15,5 @@ backups/
 *.g.dart
 *.freezed.dart
 test_results/
+.dart_tool/
+.env

@@ -51,7 +51,7 @@ void main() {
       },
     ]).replaceFirst('"placeholder"', '"a".repeat(64)');
 
-    final cleaned = ResponseCleaner.clean(raw, 'groq');
+    final cleaned = ResponseCleaner.clean(raw);
     final parsed = ResponseParser.parseArray(cleaned);
 
     expect(parsed, hasLength(1));
@@ -93,7 +93,7 @@ void main() {
       },
     ]).replaceFirst('"placeholder"', '"a".replace("a", "qa_long_email") + "@example.test"');
 
-    final cleaned = ResponseCleaner.clean(raw, 'groq');
+    final cleaned = ResponseCleaner.clean(raw);
     final parsed = ResponseParser.parseArray(cleaned);
 
     expect(parsed, hasLength(1));
@@ -135,7 +135,7 @@ void main() {
       },
     ]).replaceFirst('"placeholder"', '"qa_long_email" + "@example.test"');
 
-    final cleaned = ResponseCleaner.clean(raw, 'groq');
+    final cleaned = ResponseCleaner.clean(raw);
     final parsed = ResponseParser.parseArray(cleaned);
 
     expect(parsed, hasLength(1));

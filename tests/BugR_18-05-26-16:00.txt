@@ -1,0 +1,362 @@
+Your sentence correction:
+“Okay good, list all the bugs that are holding us back from reaching a production-ready app. Let’s solve them one by one to make the app concrete.”
+
+Better prompt style:
+“Create a prioritized bug backlog of all production-critical defects blocking QA Genie from becoming stable and scalable. Focus on real crashes, corruption risks, race conditions, export failures, lifecycle bugs, and architecture instability.”
+
+The biggest mistake now would be mixing:
+
+* architecture improvements
+* feature requests
+* cosmetic polish
+* real production blockers
+
+We need ONLY:
+CRASH → CORRUPTION → DATA LOSS → EXPORT FAILURE → NON-DETERMINISM → PERFORMANCE.
+
+REAL Production Blocking Bugs Backlog
+
+P0 — APP BREAKERS (Must Fix First)
+
+BUG-001 Export RangeError Crash
+
+Evidence:
+
+* all export paths crashing
+* summary/export pipeline mismatch
+* likely index/schema desync
+
+Impact:
+
+* destroys core product promise
+* app unusable professionally
+
+Likely Root:
+
+* invalid row mapping
+* empty/null column mismatch
+* dynamic column assumptions
+* malformed test case arrays
+
+Fix Priority:
+IMMEDIATE.
+
+⸻
+
+BUG-002 Schema Mutation Corruption
+
+Evidence:
+
+* multiple generators/repairs touching same model
+* export depends on invariant structure
+
+Impact:
+
+* random export failures
+* silent corruption
+
+Likely Root:
+
+* mutable maps/lists
+* late-stage repair mutation
+
+Fix:
+immutable normalized DTO layer.
+
+⸻
+
+BUG-003 Async Race Between Save/Export/Edit
+
+Evidence:
+
+* PreviewScreen + autosave + export overlap risk
+
+Impact:
+
+* partial exports
+* stale exports
+* overwritten edits
+
+Likely Root:
+
+* no centralized operation queue
+
+Fix:
+single async operation manager.
+
+⸻
+
+BUG-004 Non-Deterministic Repair Output
+
+Evidence:
+
+* same prompts produce structurally different cases
+
+Impact:
+
+* impossible debugging
+* unstable exports
+
+Likely Root:
+
+* unordered repairs
+* random fallback logic
+
+Fix:
+stable deterministic repair ordering.
+
+⸻
+
+BUG-005 MainScreen Orchestration Overload
+
+Evidence:
+
+* too many responsibilities:
+    * tutorials
+    * ads
+    * tabs
+    * navigation
+    * dialogs
+    * generation
+
+Impact:
+
+* lifecycle bugs
+* random state inconsistencies
+
+Fix:
+controller separation.
+
+⸻
+
+P1 — HIGH RISK PRODUCTION BUGS
+
+BUG-006 Empty/Invalid Expected Results
+
+Impact:
+
+* low-quality QA output
+* export validation failure
+
+Fix:
+strict validator.
+
+⸻
+
+BUG-007 Duplicate Test Case Generation
+
+Impact:
+
+* fake-looking AI output
+* user trust loss
+
+Fix:
+hash-based duplicate detection.
+
+⸻
+
+BUG-008 Invalid Priority/Status Values
+
+Impact:
+
+* Jira/Xray mapping failures
+
+Fix:
+enum-safe normalization.
+
+⸻
+
+BUG-009 PDF Pagination Overflow
+
+Impact:
+
+* broken exports on huge suites
+
+Fix:
+streamed pagination.
+
+⸻
+
+BUG-010 Large Suite UI Freeze
+
+Impact:
+
+* ANRs
+* frame drops
+
+Likely Root:
+
+* giant widget rebuilds
+* non-virtualized tables
+
+Fix:
+pagination/virtual rendering.
+
+⸻
+
+BUG-011 Autosave Data Loss
+
+Impact:
+
+* user trust destroyed
+
+Likely Root:
+
+* save interrupted during navigation/backgrounding
+
+Fix:
+transaction queue + lifecycle-safe persistence.
+
+⸻
+
+BUG-012 Dialog Context Disposal Crash
+
+Impact:
+
+* random navigation exceptions
+
+Likely Root:
+
+* async dialog callbacks after dispose
+
+Fix:
+mounted/context-safe orchestration.
+
+⸻
+
+P2 — ARCHITECTURE BUGS
+
+BUG-013 Legacy Generator Leakage
+
+Impact:
+
+* old unstable logic accidentally executes
+
+Fix:
+remove dead paths.
+
+⸻
+
+BUG-014 Tight Coupling Between UI & Engine
+
+Impact:
+
+* cascading bugs
+
+Fix:
+strict layering.
+
+⸻
+
+BUG-015 Repair Layer Double Mutation
+
+Impact:
+
+* malformed arrays/steps
+
+Fix:
+single normalization stage.
+
+⸻
+
+BUG-016 Inconsistent Export Mapping
+
+Impact:
+
+* Excel/Jira/PDF mismatch
+
+Fix:
+central export adapter contract.
+
+⸻
+
+BUG-017 Memory Retention Leak
+
+Impact:
+
+* low-end device crashes
+
+Fix:
+dispose/cache cleanup.
+
+⸻
+
+P3 — TRUST / PRODUCT BUGS
+
+BUG-018 AI-Looking Generic Cases
+
+Impact:
+
+* product loses credibility
+
+Fix:
+humanized QA heuristics.
+
+⸻
+
+BUG-019 Weak Negative/Security Coverage
+
+Impact:
+
+* low professional value
+
+Fix:
+heuristic expansion.
+
+⸻
+
+BUG-020 Ad Flow Deadlock
+
+Impact:
+
+* blocked UX
+
+Fix:
+timeout recovery system.
+
+REALISTIC SOLVING ORDER
+
+DO NOT randomly fix bugs.
+
+Correct order:
+
+1. Export crash
+2. Schema normalization
+3. Async queue
+4. Deterministic repair
+5. Export contract validator
+6. Autosave safety
+7. Large suite performance
+8. Memory cleanup
+9. Regression tests
+10. UX polish LAST
+
+MOST IMPORTANT TRUTH
+
+Right now your app’s danger is NOT:
+
+* UI
+* colors
+* animations
+* features
+
+It’s:
+“uncontrolled state mutation.”
+
+That is the root disease behind:
+
+* export crashes
+* corruption
+* non-determinism
+* async failures
+* random bugs
+
+Fix that → app stability jumps massively.
+
+Figures:
+
+* Current blocker severity: ~8.5/10
+* Export system risk: critical
+* Architecture maturity: mid-level
+* UX maturity: high
+* Production readiness estimate: ~55–65%

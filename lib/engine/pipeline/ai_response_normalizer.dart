@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:qa_genie/data/models/test_case_model.dart';
-import 'package:qa_genie/engine/pipeline/models/pipeline_models.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
 
 class AIResponseNormalizer {
   static final RegExp _jsonBlockPattern = RegExp(r'```json\s*([\s\S]*?)\s*```');
@@ -9,7 +9,7 @@ class AIResponseNormalizer {
   List<WorkingCase> normalize(String rawResponse, String origin) {
     final sanitized = _sanitize(rawResponse);
     final dynamic decoded = _parseJson(sanitized);
-    
+
     if (decoded is! List) {
       throw const FormatException('AI response did not produce a JSON array.');
     }
@@ -55,9 +55,11 @@ class AIResponseNormalizer {
       priority: (item['priority'] ?? 'Medium').toString(),
       type: (item['type'] ?? 'FUNCTIONAL').toString(),
       preconditions: List<String>.from((item['preconditions'] as List?) ?? []),
-      steps: (item['steps'] as List?)
-          ?.map((s) => TestStep.fromJson(s as Map<String, dynamic>))
-          .toList() ?? [],
+      steps:
+          (item['steps'] as List?)
+              ?.map((s) => TestStep.fromJson(s as Map<String, dynamic>))
+              .toList() ??
+          [],
       expectedResult: (item['expectedResult'] ?? '').toString(),
       actualResult: (item['actualResult'] ?? '').toString(),
       status: (item['status'] ?? 'Draft').toString(),
