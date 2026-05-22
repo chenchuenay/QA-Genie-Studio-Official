@@ -31,6 +31,12 @@ class AIResponseNormalizer {
       text = text.replaceAll('```json', '').replaceAll('```', '');
     }
     text = text.replaceAll(_commentPattern, '');
+    
+    // Deterministic Pruning: Remove banned fields from raw JSON text before parsing
+    final bannedFields = ['"module"', '"feature"', '"platform"', '"actualResult"', '"status"'];
+    for (final field in bannedFields) {
+      text = text.replaceAll(RegExp('$field:.*?(?=[,}])'), '"$field":""');
+    }
     return text.trim();
   }
 
@@ -47,11 +53,11 @@ class AIResponseNormalizer {
 
   WorkingCase _toWorkingCase(Map<String, dynamic> item, String origin) {
     return WorkingCase(
-      id: (item['id'] ?? 'TEMP-ID').toString(),
+      id: '', // Engine-assigned
       title: (item['title'] ?? 'Missing Title').toString(),
-      module: (item['module'] ?? '').toString(),
-      feature: (item['feature'] ?? '').toString(),
-      platform: (item['platform'] ?? '').toString(),
+      module: '', 
+      feature: '', 
+      platform: '', 
       priority: (item['priority'] ?? 'Medium').toString(),
       type: (item['type'] ?? 'FUNCTIONAL').toString(),
       preconditions: List<String>.from((item['preconditions'] as List?) ?? []),
@@ -61,8 +67,8 @@ class AIResponseNormalizer {
               .toList() ??
           [],
       expectedResult: (item['expectedResult'] ?? '').toString(),
-      actualResult: (item['actualResult'] ?? '').toString(),
-      status: (item['status'] ?? 'Draft').toString(),
+      actualResult: '',
+      status: '',
       metadata: CaseMetadata(origin: origin),
     );
   }

@@ -18,7 +18,7 @@ class GenerationApi {
 
   GenerationApi(this._client);
 
-  Future<List<TestCaseModel>> generate(String prompt) async {
+  Future<List<TestCaseModel>> generate(String prompt, {int? maxTokens}) async {
     final stopwatch = Stopwatch()..start();
 
     int statusCode = 0;
@@ -27,7 +27,7 @@ class GenerationApi {
     try {
       NetworkTraceStore.clear();
 
-      final cases = await _client.generate(prompt);
+      final cases = await _client.generate(prompt, maxTokens: maxTokens);
 
       statusCode = 200;
 

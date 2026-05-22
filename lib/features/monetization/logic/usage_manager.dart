@@ -109,29 +109,30 @@ class UsageManager {
   }
 
   static Future<bool> canGenerate({bool afterRewardedAd = false}) async {
-    final pro = await isPro();
+    final pro = await UsageManager.isPro();
     if (!AppConfig.isProduction && pro) return true;
     final count = await getGenerationCount();
-    if (pro) return count < 20;
-    if (count < 3) return true;
-    if (count < 10) return afterRewardedAd;
+    if (pro) return count < 15;
+    if (count < 1) return true;
+    if (count < 6) return afterRewardedAd;
     return false;
   }
 
   static Future<int> freeGensRemaining() async {
     final count = await getGenerationCount();
-    if (count >= 3) return 0;
-    return 3 - count;
+    if (count >= 6) return 0;
+    return 6 - count;
   }
 
   static Future<int> proGensRemaining() async {
     final count = await getGenerationCount();
-    return (20 - count).clamp(0, 20);
+    return (15 - count).clamp(0, 15);
   }
 
   static Future<int> maxCasesPerBatch() async {
-    return (await isPro()) ? 20 : 10;
+    return (await isPro()) ? 16 : 8;
   }
+
 
   static Future<bool> canExport({bool afterRewardedAd = false}) async {
     final pro = await isPro();

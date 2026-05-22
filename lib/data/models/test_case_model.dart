@@ -1,4 +1,6 @@
 import 'package:qa_genie/domain/enums/case_source.dart';
+import 'package:qa_genie/domain/enums/execution_intent.dart';
+import 'package:qa_genie/domain/enums/test_case_origin.dart';
 
 class TestStep {
   String action;
@@ -47,6 +49,11 @@ class TestCaseModel {
   String expectedResult;
   String actualResult;
   String status;
+  ExecutionIntent? intent;
+  TestCaseOrigin forensicOrigin = TestCaseOrigin.ai;
+  List<String> repairOperations = [];
+  List<String> realismOperations = [];
+  bool visibleToUser = true;
 
   TestCaseModel({
     this.source = CaseSource.ai,
@@ -63,6 +70,8 @@ class TestCaseModel {
     this.expectedResult = '',
     this.actualResult = '',
     this.status = 'Not Executed',
+    this.intent,
+    this.forensicOrigin = TestCaseOrigin.ai,
   });
 
   static bool isValid(TestCaseModel tc) {
@@ -123,6 +132,46 @@ class TestCaseModel {
         .entries
         .map((e) => '${e.key + 1}. ${e.value.action}')
         .join('\n');
+  }
+
+  TestCaseModel copyWith({
+    CaseSource? source,
+    int? dbId,
+    String? id,
+    String? title,
+    String? module,
+    String? feature,
+    String? platform,
+    String? priority,
+    String? type,
+    List<String>? preconditions,
+    List<TestStep>? steps,
+    String? expectedResult,
+    String? actualResult,
+    String? status,
+    ExecutionIntent? intent,
+  }) {
+    return TestCaseModel(
+      source: source ?? this.source,
+      dbId: dbId ?? this.dbId,
+      id: id ?? this.id,
+      title: title ?? this.title,
+      module: module ?? this.module,
+      feature: feature ?? this.feature,
+      platform: platform ?? this.platform,
+      priority: priority ?? this.priority,
+      type: type ?? this.type,
+      preconditions: preconditions ?? List<String>.from(this.preconditions),
+      steps: steps ??
+          this.steps
+              .map((s) =>
+                  TestStep(action: s.action, data: s.data, expected: s.expected))
+              .toList(),
+      expectedResult: expectedResult ?? this.expectedResult,
+      actualResult: actualResult ?? this.actualResult,
+      status: status ?? this.status,
+      intent: intent ?? this.intent,
+    );
   }
 
   TestCaseModel copy() {
@@ -251,6 +300,17 @@ class TestCaseModel {
         orElse: () => CaseSource.ai,
       );
 
+      // ===== INTENT NORMALIZATION =====
+      final intentName = (j['intent'] ?? '').toString();
+      ExecutionIntent? parsedIntent;
+      try {
+        parsedIntent = ExecutionIntent.values.firstWhere(
+          (e) => e.name == intentName,
+        );
+      } catch (_) {
+        parsedIntent = null;
+      }
+
       // ===== EXPECTED RESULT RECOVERY =====
 
       String expectedResult = (j['expectedResult'] ?? '')
@@ -275,43 +335,20 @@ class TestCaseModel {
             .replaceAll(RegExp(r'\s+'), ' ')
             .trim(),
 
-        module: (j['module'] ?? '')
-            .toString()
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim(),
-
-        feature: (j['feature'] ?? '')
-            .toString()
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim(),
-
-        platform: (j['platform'] ?? '')
-            .toString()
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim(),
-
+        module: '',
+        feature: '',
+        platform: '',
         priority: normalizedPriority,
-
         type: (j['type'] ?? 'Functional')
             .toString()
             .replaceAll(RegExp(r'\s+'), ' ')
             .trim(),
-
         preconditions: parsedPreconditions,
-
         steps: parsedSteps,
-
         expectedResult: expectedResult,
-
-        actualResult: (j['actualResult'] ?? '')
-            .toString()
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim(),
-
-        status: (j['status'] ?? 'Not Executed')
-            .toString()
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim(),
+        actualResult: '',
+        status: '',
+        intent: parsedIntent,
       );
     } catch (e) {
       throw Exception('TestCaseModel.fromJson failed: $e');
@@ -334,6 +371,7 @@ class TestCaseModel {
       'status': status,
       'source': source.name,
       'dbId': dbId,
+      'intent': intent?.name,
     };
   }
 }

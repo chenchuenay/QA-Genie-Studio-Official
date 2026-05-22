@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/constants.dart';
-import 'package:qa_genie/domain/usecases/get_history_use_case.dart';
 import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/domain/usecases/get_history_use_case.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/generation/ui/screens/preview_screen.dart';
 import 'package:qa_genie/presentation/screens/upgrade_coming_soon_screen.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class SuitesScreen extends StatefulWidget {
   final VoidCallback? onGenerate;
@@ -191,7 +191,7 @@ class SuitesScreenState extends State<SuitesScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             child: Text(
-              "Your data stays local. Cloud sync brewing.",
+              "Your data stays local.",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,

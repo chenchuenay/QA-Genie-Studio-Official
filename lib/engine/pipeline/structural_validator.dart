@@ -1,5 +1,5 @@
 import 'package:qa_genie/engine/models/pipeline_models.dart';
-import 'package:qa_genie/engine/pipeline/generation_context.dart';
+import 'package:qa_genie/engine/qa_heuristics_engine.dart';
 
 class StructuralValidationResult {
   final List<WorkingCase> validCases;
@@ -15,8 +15,8 @@ class StructuralValidator {
   const StructuralValidator();
 
   StructuralValidationResult validate(
-    GenerationContext context,
     List<WorkingCase> cases,
+    Function(RejectedCaseInfo) logRejected,
   ) {
     final valid = <WorkingCase>[];
     final rejected = <int, String>{};
@@ -31,7 +31,7 @@ class StructuralValidator {
       } else {
         rejected[index] = reason;
 
-        context.logRejected(
+        logRejected(
           RejectedCaseInfo(
             title: tc.title,
             reason: reason,
@@ -47,68 +47,35 @@ class StructuralValidator {
     );
   }
 
-  /// HARD FAIL ONLY
-  /// No AI-quality scoring here.
-  /// Only reject cases that can break execution,
-  /// exports, rendering, or pipeline integrity.
   String? _validate(WorkingCase tc) {
-    // =========================================================
-    // TITLE VALIDATION
-    // =========================================================
-
-    final title = tc.title.trim();
-
-    if (title.isEmpty) {
-      return 'Hard Fail: Title is empty.';
+    if (tc.title.trim().isEmpty || tc.title.toLowerCase() == 'missing title') {
+      return 'Hard Fail: Title is empty or placeholder.';
     }
-
-    if (title.toLowerCase() == 'missing title') {
-      return 'Hard Fail: Title contains placeholder value.';
-    }
-
-    // =========================================================
-    // ID VALIDATION
-    // =========================================================
 
     if (tc.id.trim().isEmpty) {
       return 'Hard Fail: ID is missing.';
     }
 
-    // =========================================================
-    // EXPECTED RESULT VALIDATION
-    // =========================================================
-
     if (tc.expectedResult.trim().isEmpty) {
       return 'Hard Fail: Expected result is empty.';
     }
 
-    // =========================================================
-    // STEP COUNT VALIDATION
-    // =========================================================
-
-    if (tc.steps.length < 3) {
-      return 'Hard Fail: Minimum 3 steps required. Found ${tc.steps.length}.';
+    // NEW: Meaningfulness validation
+    if (tc.steps.isEmpty) {
+      return 'Hard Fail: No steps provided.';
     }
-
-    // =========================================================
-    // STEP STRUCTURE VALIDATION
-    // =========================================================
+    
+    final meaningfulCount = tc.steps.where(QaHeuristicsEngine.isMeaningfulStep).length;
+    if (meaningfulCount == 0) {
+      return 'Hard Fail: No meaningful steps found. Testcase intent is ambiguous.';
+    }
 
     for (int i = 0; i < tc.steps.length; i++) {
       final step = tc.steps[i];
-
-      if (step.action.trim().isEmpty) {
-        return 'Hard Fail: Step ${i + 1} action is empty.';
-      }
-
-      if (step.expected.trim().isEmpty) {
-        return 'Hard Fail: Step ${i + 1} expected result is empty.';
+      if (step.action.trim().isEmpty || step.expected.trim().isEmpty) {
+        return 'Hard Fail: Step ${i + 1} structure is incomplete.';
       }
     }
-
-    // =========================================================
-    // PASS
-    // =========================================================
 
     return null;
   }

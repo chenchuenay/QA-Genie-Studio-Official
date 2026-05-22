@@ -7,16 +7,48 @@ echo "🚀 Run with:
 flutter clean && flutter pub get && ./run_groq.sh 
 
 flutter clean && flutter pub get && ./run_gemini.sh
->
-flutter run --dart-define=AI_PROVIDER=groq --dart-define=FORENSIC_LOGGING=true
-flutter run --dart-define=AI_PROVIDER=gemini --dart-define=FORENSIC_LOGGING=true
 
+3. flutter test live_mass_generation_test.dart
 
 <
 flutter run --dart-define=FORENSIC_LOGGING=true
 
 
  use VSCode debug configurations."
+
+
+
+
+
+
+
+
+   1. flutter run --dart-define=AI_PROVIDER=gemini --dart-define=FORENSIC_LOGGING=true
+   
+
+
+   3. flutter test --dart-define=FORENSIC_LOGGING=true test/live_mass_generation_test.dart
+
+
+
+
+
+
+
+
+
+flutter test \ --dart-define=PIPELINE_MODE=core \ test/generation_pipeline_test.dart
+
+flutter test \ --dart-define=PIPELINE_MODE=pro \ test/generation_pipeline_test.dart
+
+
+
+
+
+
+
+
+
 
 
 

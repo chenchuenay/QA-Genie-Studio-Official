@@ -8,6 +8,8 @@ import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/core/logging/telemetry_collector.dart';
 import 'package:qa_genie/presentation/navigation/main_screen.dart';
+import 'package:qa_genie/core/prompts/system_prompt.dart';
+import 'package:qa_genie/core/network/providers/gemini_cache_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,9 +26,15 @@ Future<void> main() async {
     debugPrint('⚠️ QAGenie .env not found: $e');
   }
 
-  if (!AppConfig.isProduction) {
-    final prefs = await SharedPreferences.getInstance();
+  final prefs = await SharedPreferences.getInstance();
+  const promptVersion = SystemPrompt.version;
+  final cachedPromptVersion = prefs.getString('geminiPromptCacheVersion');
+  if (cachedPromptVersion != promptVersion) {
+    GeminiCacheService.clearCache();
+    await prefs.setString('geminiPromptCacheVersion', promptVersion);
+  }
 
+  if (!AppConfig.isProduction) {
     AppConfig.testProMode = prefs.getBool('testProMode') ?? false;
   }
 

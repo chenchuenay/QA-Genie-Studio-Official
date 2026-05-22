@@ -1,8 +1,7 @@
 import 'dart:math';
 import 'generation_mode.dart';
-import 'template_registry.dart';
-import 'distribution_engine.dart';
 import 'qa_heuristics_engine.dart';
+import '../core/utils/template_registry.dart';
 
 class ScenarioPlanner {
   final String module;
@@ -38,50 +37,55 @@ class ScenarioPlanner {
 
   String get stableSeed => '$module|$feature|$platform|$domain';
 
+  List<String> _weightedDefaultCategories() {
+    final weighted = <String>[
+      // -------------------------
+      // PRIMARY USER EXPERIENCE
+      // -------------------------
+      'positive',
+      'positive',
+      'positive',
+      'positive',
+      // -------------------------
+      // NORMAL QA NEGATIVE CASES
+      // -------------------------
+      'negative',
+      'validation',
+      // -------------------------
+      // OCCASIONAL SECONDARY
+      // -------------------------
+      'boundary',
+      'usability',
+      // -------------------------
+      // RARE WITHOUT CONSTRAINTS
+      // -------------------------
+      'session',
+      'security',
+    ];
+    weighted.shuffle(_random);
+    return weighted;
+  }
+
   List<Map<String, dynamic>> generateSkeletons() {
-    final engine = DistributionEngine(
-      module: module,
-      feature: feature,
-      platform: platform,
-      mode: mode,
-      count: count,
-      domain: domain,
-    );
-
-    final distribution = engine.calculate();
-
     final templates =
         TemplateRegistry.platformTemplates[platform] ??
         TemplateRegistry.platformTemplates['Web']!;
-
     final skeletons = <Map<String, dynamic>>[];
-
     final usedTitles = <String>{};
+    final categories = _weightedDefaultCategories();
 
-    final categories = templates.keys.toList()..shuffle(_random);
-
-    // PASS 1: Try category-balanced generation first
     for (final category in categories) {
       if (skeletons.length >= count) {
         break;
       }
-
       final template = templates[category];
-
       if (template == null) {
-        continue;
-      }
-
-      final requiredCount = distribution[category] ?? 0;
-
-      if (requiredCount <= 0) {
         continue;
       }
 
       List<String> scenarios = List<String>.from(
         template['scenarios'] ?? const [],
       );
-
       scenarios = scenarios
           .where(
             (scenario) => QaHeuristicsEngine.scenarioMatchesContext(
@@ -92,27 +96,21 @@ class ScenarioPlanner {
             ),
           )
           .toList();
-
       if (scenarios.isEmpty) {
         scenarios = [_syntheticScenario(category)];
       }
-
       scenarios.shuffle(_random);
 
-      for (int i = 0; i < requiredCount; i++) {
+      for (final rawScenario in scenarios) {
         if (skeletons.length >= count) {
           break;
         }
-
-        final scenario = scenarios[i % scenarios.length];
+        final scenario = _compressScenarioTitle(rawScenario);
         final normalizedTitle = scenario.toLowerCase().trim();
-
         if (usedTitles.contains(normalizedTitle)) {
           continue;
         }
-
         usedTitles.add(normalizedTitle);
-
         skeletons.add(
           _buildSkeleton(
             category: category,
@@ -120,6 +118,9 @@ class ScenarioPlanner {
             intentId: template['intent_id'] ?? 'generic',
           ),
         );
+        // Break inner loop to ensure we pick from different categories if possible,
+        // but since categories are weighted and shuffled, we will likely get more POSITIVEs.
+        break;
       }
     }
 
@@ -152,12 +153,13 @@ class ScenarioPlanner {
           )
           .toList();
 
-      final scenario = scenarios.isNotEmpty
-          ? scenarios[guard % scenarios.length]
-          : _syntheticScenario(category);
+      final scenario = _compressScenarioTitle(
+        scenarios.isNotEmpty
+            ? scenarios[guard % scenarios.length]
+            : _syntheticScenario(category),
+      );
 
-      final uniqueScenario =
-          '$scenario with alternate valid inputs ${guard + 1}';
+      final uniqueScenario = '$scenario alt ${guard + 1}';
 
       final normalizedTitle = uniqueScenario.toLowerCase().trim();
 
@@ -201,6 +203,68 @@ class ScenarioPlanner {
       'type': _categoryToType(category),
       'intent_id': intentId,
     };
+  }
+
+  String _compressScenarioTitle(String title) {
+    var text = title.trim();
+
+    const replacements = {
+      'Verify successful login with valid credentials': 'Valid login succeeds',
+      'Verify login failure with incorrect password':
+          'Invalid password rejected',
+      'Verify session persists after page refresh': 'Session survives refresh',
+      'Verify login form is protected against SQL injection':
+          'SQL injection blocked',
+      'Verify login form is protected against XSS attacks': 'XSS blocked',
+      'Verify session token is invalidated after logout':
+          'Logout clears session',
+      'Verify email field handles maximum character length':
+          'Email max length enforced',
+      'Verify password field enforces maximum character length':
+          'Password max length enforced',
+      'Verify required field validation messages are displayed':
+          'Required fields validated',
+      'Verify email format validation rejects invalid addresses':
+          'Invalid email rejected',
+      'Verify form submission is blocked with missing fields':
+          'Missing fields blocked',
+      'Verify session expires after inactivity timeout': 'Idle session expires',
+      'Verify concurrent sessions prevent session leakage':
+          'Sessions stay isolated',
+    };
+
+    text = replacements[text] ?? text;
+    text = text
+        .replaceFirst(RegExp(r'^Verify\s+', caseSensitive: false), '')
+        .replaceAll(
+          RegExp(r'\bis protected against\b', caseSensitive: false),
+          'blocks',
+        )
+        .replaceAll(
+          RegExp(r'\bfailure with\b', caseSensitive: false),
+          'rejects',
+        )
+        .replaceAll(RegExp(r'\bsuccessful\b', caseSensitive: false), 'valid')
+        .replaceAll(
+          RegExp(r'\bmessages are displayed\b', caseSensitive: false),
+          'shown',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (text.length <= 45) return text;
+
+    final words = text.split(' ');
+    final compact = StringBuffer();
+    for (final word in words) {
+      final next = compact.isEmpty ? word : '${compact.toString()} $word';
+      if (next.length > 45) break;
+      compact
+        ..clear()
+        ..write(next);
+    }
+
+    return compact.isEmpty ? text.substring(0, 45).trim() : compact.toString();
   }
 
   String _syntheticScenario(String category) {

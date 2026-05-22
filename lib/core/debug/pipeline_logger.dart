@@ -111,7 +111,7 @@ class PipelineLogger {
 
   Future<void> writeToDisk() async {
     finalize();
-    final debugDir = Directory('/data/data/com.enaykumar.qagenie/cache/test_results');
+    final debugDir = Directory('cache/test_results');
     if (!debugDir.existsSync()) {
       debugDir.createSync(recursive: true);
     }
@@ -136,13 +136,12 @@ class PipelineLogger {
 
   void _buildDump() {
     _buf.clear();
+    _buf.writeln('[QA GENIE END-TO-END FORENSIC REPLAY]');
     final sep = '=' * 72;
     _buf.writeln(sep);
-    final buildMode = kReleaseMode ? 'release' : (kProfileMode ? 'profile' : 'debug');
     _buf.writeln('MODE: ${_mode == PipelineMode.core ? 'CORE' : 'PRO'}');
     _buf.writeln('session_id: $sessionId');
     _buf.writeln('generated_at: $createdAt');
-    _buf.writeln('build_mode: $buildMode');
     _buf.writeln(sep);
     _buf.writeln('\n=== INPUT ===');
     _buf.writeln('module: $module');
@@ -150,111 +149,47 @@ class PipelineLogger {
     _buf.writeln('platform: $platform');
     _buf.writeln('constraints: $constraints');
     _buf.writeln('requested_count: $requestedCount');
-    _buf.writeln('\n=== BASE PROMPT ===');
-    _buf.writeln(_cap(basePrompt, 30000));
     _buf.writeln('\n=== FINAL API PROMPT ===');
     _buf.writeln(_cap(finalApiPrompt, 30000));
     _buf.writeln('\n=== RAW AI RESPONSE ===');
     _buf.writeln(_cap(rawAiResponse, 50000));
-    _buf.writeln('\n=== CLEANED AI RESPONSE ===');
-    _buf.writeln(_cap(cleanedAiResponse, 50000));
-    if (parseFailures.isNotEmpty) {
-      _buf.writeln('\n=== PARSE FAILURES ===');
-      for (final f in parseFailures) { _buf.writeln('- $f'); }
-    }
     _buf.writeln('\n=== PARSED TEST CASES ===');
     _buf.writeln('generated_count: ${parsedCases.length}');
     for (var i = 0; i < parsedCases.length; i++) {
       final tc = parsedCases[i];
       _buf.writeln('${i + 1}. ${tc.title}');
-      _buf.writeln('   Steps: ${tc.steps.length}');
-      _buf.writeln('   Priority: ${tc.priority}');
-      _buf.writeln('   Expected: ${_safe(tc.expectedResult, 80)}');
-    }
-    _buf.writeln('\n=== VALIDATOR ACCEPTED ===');
-    _buf.writeln('accepted_count: ${acceptedCases.length}');
-    for (final tc in acceptedCases) {
-      _buf.writeln('- ${tc.title}');
-      _buf.writeln('  Acceptance reasons:');
-      for (final a in acceptedReasons.where((a) => a.title == tc.title)) {
-        for (final r in a.reasons) { _buf.writeln('    - $r'); }
-      }
     }
     _buf.writeln('\n=== VALIDATOR REJECTED ===');
     _buf.writeln('rejected_count: ${rejectedCases.length}');
     for (final r in rejectedCases) {
       _buf.writeln('- ${r.title}');
-      _buf.writeln('  Rejection reasons:');
-      for (final reason in r.reasons) { _buf.writeln('    - $reason'); }
     }
-    if (duplicateClusters.isNotEmpty) {
-      _buf.writeln('\n=== DUPLICATE CLUSTERS ===');
-      for (final cluster in duplicateClusters) {
-        _buf.writeln('Cluster:');
-        for (final title in cluster.titles) { _buf.writeln('- $title'); }
-        _buf.writeln('Reason: ${cluster.reason}');
-        _buf.writeln();
-      }
-    }
-    _buf.writeln('\n=== AFTER DEDUP ===');
-    _buf.writeln('remaining_count: ${afterDedup.length}');
-    for (var i = 0; i < afterDedup.length; i++) { _buf.writeln('${i + 1}. ${afterDedup[i].title}'); }
-    if (repairTransforms.isNotEmpty) {
-      _buf.writeln('\n=== REPAIR TRANSFORMATIONS ===');
-      for (final t in repairTransforms) {
-        _buf.writeln('TC_ID: ${t.testCaseId}');
-        _buf.writeln('BEFORE: ${t.before}');
-        _buf.writeln('AFTER: ${t.after}');
-        _buf.writeln('REASON: ${t.reason}');
-        _buf.writeln('TRANSFORMATIONS:');
-        for (final a in t.actions) { _buf.writeln('- $a'); }
-        _buf.writeln();
-      }
-    }
-    _buf.writeln('\n=== AFTER REPAIR ===');
-    _buf.writeln("\n=== GENERATION SUMMARY ===");
-    _buf.writeln("operation_id: $operationId");
-    _buf.writeln("raw_generated: ${parsedCases.length}");
-    _buf.writeln("valid_accepted: $accepted");
-    _buf.writeln("repaired: $repaired");
-    _buf.writeln("rejected: $filtered");
-    _buf.writeln("duplicates_removed: $duplicatesRemoved");
-    _buf.writeln("fallback_used: $fallbackUsed");
-    _buf.writeln("generation_time_ms: $generationTimeMs");
-
-    _buf.writeln('repaired_count: ${afterRepair.length}');
     _buf.writeln('\n=== FINAL OUTPUT ===');
     _buf.writeln('final_count: ${finalCases.length}');
     for (final tc in finalCases) {
-      _buf.writeln('- ${tc.title}');
-      _buf.writeln('  Steps:');
+      _buf.writeln('- title: ${tc.title}');
+      _buf.writeln('  priority: ${tc.priority}');
+      _buf.writeln('  type: ${tc.type}');
+      _buf.writeln('  preconditions: ${tc.preconditions}');
+      _buf.writeln('  steps:');
       for (final step in tc.steps) {
-        _buf.writeln('    - ${_safe(step.action, 100)} | data: ${_safe(step.data, 100)} | expected: ${_safe(step.expected, 100)}');
+        _buf.writeln('    - action: ${step.action}');
+        _buf.writeln('      data: ${step.data}');
+        _buf.writeln('      expected: ${step.expected}');
       }
-      _buf.writeln('  Expected Result: ${_safe(tc.expectedResult, 200)}');
-      _buf.writeln('  Priority: ${tc.priority}');
-      _buf.writeln('  Type: ${tc.type}');
+      _buf.writeln('  expectedResult: ${tc.expectedResult}');
+      _buf.writeln('  status: ${tc.status}');
       _buf.writeln();
     }
     _buf.writeln('\n=== PIPELINE METRICS ===');
-    _buf.writeln('generated: $aiGenerated');
-    _buf.writeln('accepted: $accepted');
-    _buf.writeln('repaired: $repaired');
-    _buf.writeln('filtered: $filtered');
-    _buf.writeln('duplicates_removed: $duplicatesRemoved');
-    _buf.writeln('fallback_used: $fallbackUsed');
-    _buf.writeln('generation_time_ms: $generationTimeMs');
-    _buf.writeln('ai_failure: $aiFailure');
-    _buf.writeln('prompt_tokens_estimate: $promptTokensEstimate');
-    _buf.writeln('response_tokens_estimate: $responseTokensEstimate');
-
-    _buf.writeln('\n=== SESSION FOOTER ===');
-    final content = _buf.toString();
-    _buf.writeln('final_status=success');
-    _buf.writeln('session_integrity_hash=${sha256.convert(utf8.encode(content)).toString()}');
+    _buf.writeln('ai_cases=$aiGenerated');
+    _buf.writeln('accepted=$accepted');
+    _buf.writeln('repaired=$repaired');
+    _buf.writeln('fallback_cases=${fallbackUsed ? finalCases.length : 0}');
+    _buf.writeln('filtered=$filtered');
     _buf.writeln('duration_ms=$generationTimeMs');
     _buf.writeln('session_completed=true');
-
+    _buf.writeln('session_integrity_hash=${sha256.convert(utf8.encode(_buf.toString())).toString()}');
     _buf.writeln('\n$sep');
     _buf.writeln('END');
     _buf.writeln(sep);

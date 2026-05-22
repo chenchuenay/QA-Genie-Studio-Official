@@ -1,15 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:qa_genie/features/export/common/export_mapper.dart';
 import 'package:qa_genie/app/theme/constants.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/features/export/common/export_mapper.dart';
 
 class ExportPreviewDialog extends StatefulWidget {
   final String type;
   final List<TestCaseModel> cases;
   final String moduleName;
   final String featureName;
-  final Function(List<List<String>> editedData) onConfirm;
+  final Function(List<TestCaseModel> updatedCases) onSave;
+  final Function(List<TestCaseModel> updatedCases) onShare;
 
   const ExportPreviewDialog({
     super.key,
@@ -17,7 +18,8 @@ class ExportPreviewDialog extends StatefulWidget {
     required this.cases,
     required this.moduleName,
     required this.featureName,
-    required this.onConfirm,
+    required this.onSave,
+    required this.onShare,
   });
 
   @override
@@ -29,19 +31,18 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   late List<List<TextEditingController>> _controllers;
   bool _editing = false;
 
-  // Column widths – generous for IDs and descriptions
   static const List<double> _colWidths = [
-    120, // ID / issueId
-    100, // Module / TestType / summary
-    100, // Feature / IssueType / testType
-    200, // Title / Summary / description
-    150, // Preconditions / Description / precondition
-    130, // Test Data / Priority / priority
-    180, // Test Steps / Status / status
-    160, // Expected Result / steps
-    120, // Actual Result
-    100, // Status
-    100, // Priority
+    120,
+    100,
+    100,
+    200,
+    150,
+    130,
+    350,
+    160,
+    120,
+    100,
+    100,
   ];
 
   double _totalWidth(int count) {
@@ -106,14 +107,37 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
         ];
         final rows = <List<String>>[keys];
         for (final obj in jsonData) {
-          rows.add(
-            keys.map((k) {
-              if (k == "steps") {
-                return jsonEncode(obj[k] ?? []);
+          final row = <String>[];
+          for (final k in keys) {
+            if (k == "steps") {
+              dynamic stepsRaw = obj[k];
+              List stepsList = [];
+              if (stepsRaw is String) {
+                try {
+                  stepsList = jsonDecode(stepsRaw) as List;
+                } catch (_) {
+                  stepsList = [];
+                }
+              } else if (stepsRaw is List) {
+                stepsList = stepsRaw;
               }
-              return (obj[k] ?? '').toString();
-            }).toList(),
-          );
+              final buffer = StringBuffer();
+              for (int i = 0; i < stepsList.length; i++) {
+                final step = stepsList[i];
+                final action = step['action'] ?? '';
+                final data = step['data'] ?? '';
+                final expected = step['expected'] ?? '';
+                buffer.writeln('${i + 1}. $action');
+                if (data.isNotEmpty) buffer.writeln('   Data: $data');
+                if (expected.isNotEmpty)
+                  buffer.writeln('   Expected: $expected');
+              }
+              row.add(buffer.toString().trim());
+            } else {
+              row.add((obj[k] ?? '').toString());
+            }
+          }
+          rows.add(row);
         }
         return rows;
       case "pdf":
@@ -143,6 +167,88 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     return _controllers
         .map((row) => row.map((ctrl) => ctrl.text).toList())
         .toList();
+  }
+
+  List<TestCaseModel> _updateOriginalCasesFromEditedData(
+    List<List<String>> editedData,
+  ) {
+    if (editedData.length <= 1) return widget.cases;
+    final headers = editedData.first;
+    final updatedCases = List<TestCaseModel>.from(widget.cases);
+    for (int rowIdx = 0; rowIdx < editedData.length - 1; rowIdx++) {
+      if (rowIdx >= updatedCases.length) break;
+      final row = editedData[rowIdx + 1];
+      final tc = updatedCases[rowIdx];
+      for (
+        int colIdx = 0;
+        colIdx < headers.length && colIdx < row.length;
+        colIdx++
+      ) {
+        final header = headers[colIdx].toLowerCase();
+        final newValue = row[colIdx];
+        if (newValue == _data[rowIdx + 1][colIdx]) continue;
+        switch (header) {
+          case "id":
+          case "issueid":
+            tc.id = newValue;
+            break;
+          case "title":
+          case "summary":
+            tc.title = newValue;
+            break;
+          case "module":
+            tc.module = newValue;
+            break;
+          case "feature":
+            tc.feature = newValue;
+            break;
+          case "platform":
+            tc.platform = newValue;
+            break;
+          case "priority":
+            tc.priority = newValue;
+            break;
+          case "type":
+          case "testtype":
+            tc.type = newValue;
+            break;
+          case "preconditions":
+          case "precondition":
+          case "description":
+            tc.preconditions = newValue
+                .split('\n')
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+            break;
+          case "expected result":
+            tc.expectedResult = newValue;
+            break;
+          case "actual result":
+          case "actual":
+            tc.actualResult = newValue;
+            break;
+          case "status":
+            tc.status = newValue;
+            break;
+          default:
+            break;
+        }
+      }
+    }
+    return updatedCases;
+  }
+
+  void _performSave() {
+    final editedData = _collectEditedData();
+    final updatedCases = _updateOriginalCasesFromEditedData(editedData);
+    widget.onSave(updatedCases);
+  }
+
+  void _performShare() {
+    final editedData = _collectEditedData();
+    final updatedCases = _updateOriginalCasesFromEditedData(editedData);
+    widget.onShare(updatedCases);
   }
 
   @override
@@ -189,7 +295,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                   width: _totalWidth(headers.length),
                   child: Column(
                     children: [
-                      // Header row
                       Row(
                         children: List.generate(headers.length, (col) {
                           return Container(
@@ -214,7 +319,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                           );
                         }),
                       ),
-                      // Data rows
                       Expanded(
                         child: ListView.builder(
                           itemCount: rowCount,
@@ -280,10 +384,18 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    widget.onConfirm(_collectEditedData());
-                  },
+                  onPressed: _performSave,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                  ),
+                  child: const Text(
+                    "Save",
+                    style: TextStyle(color: Colors.black),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: _performShare,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accent,
                   ),

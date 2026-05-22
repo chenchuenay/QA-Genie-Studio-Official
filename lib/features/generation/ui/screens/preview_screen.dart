@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/constants.dart';
 import 'package:qa_genie/core/error/ui_error_store.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
-
 import 'package:qa_genie/data/models/test_case_model.dart';
 import 'package:qa_genie/presentation/widgets/ad_dialog.dart';
 import 'package:qa_genie/domain/usecases/get_history_use_case.dart';
@@ -41,6 +40,7 @@ class _PreviewScreenState extends State<PreviewScreen>
   @override
   void initState() {
     super.initState();
+    print('PREVIEW RUNTIME COUNT: ${widget.testCases.length}');
     WidgetsBinding.instance.addObserver(this);
     originalData = widget.testCases.map((e) => e.copy()).toList();
     workingData = widget.testCases.map((e) => e.copy()).toList();
@@ -98,7 +98,8 @@ class _PreviewScreenState extends State<PreviewScreen>
     }
   }
 
-  Future<void> _export(String type) async {
+  // Single _export method with optional updatedCases parameter
+  Future<void> _export(String type, [List<TestCaseModel>? updatedCases]) async {
     await _autoSave();
     final pro = await UsageManager.isPro();
     if (!pro) {
@@ -112,6 +113,15 @@ class _PreviewScreenState extends State<PreviewScreen>
       }
     }
     try {
+      // If we have updated cases from the preview, persist them first
+      if (updatedCases != null) {
+        setState(() {
+          workingData = updatedCases;
+          originalData = updatedCases.map((e) => e.copy()).toList();
+          _hasUnsaved = false;
+        });
+        await _saveUseCase.update(suiteId: widget.suiteId, cases: updatedCases);
+      }
       print('EXPORT: Starting $type with ${originalData.length} cases');
       print('EXPORT: actual cases count = ${originalData.length}');
       await _exportUseCase.execute(
@@ -159,9 +169,40 @@ class _PreviewScreenState extends State<PreviewScreen>
         cases: workingData,
         moduleName: widget.moduleName,
         featureName: widget.feature,
-        onExport: (type, {editedData}) async {
-          Navigator.pop(context);
-          await _export(type);
+        onSave: (updatedCases) async {
+          // Save changes without exporting
+          setState(() {
+            workingData = updatedCases;
+            originalData = updatedCases.map((e) => e.copy()).toList();
+            _hasUnsaved = false;
+          });
+          await _saveUseCase.update(
+            suiteId: widget.suiteId,
+            cases: updatedCases,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Changes saved"),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          }
+          Navigator.pop(context); // close the bottom sheet
+        },
+        onExport: (type, updatedCases) async {
+          // Save changes, then export
+          setState(() {
+            workingData = updatedCases;
+            originalData = updatedCases.map((e) => e.copy()).toList();
+            _hasUnsaved = false;
+          });
+          await _saveUseCase.update(
+            suiteId: widget.suiteId,
+            cases: updatedCases,
+          );
+          Navigator.pop(context); // close the bottom sheet
+          await _export(type, updatedCases);
         },
       ),
     );
@@ -319,6 +360,16 @@ class _PreviewScreenState extends State<PreviewScreen>
                   ),
                 ],
               ),
+            ),
+            Builder(
+              builder: (context) {
+                final displayedCount = originalData.length;
+                assert(
+                  displayedCount <= 16,
+                  'HEADER DISPLAY COUNT VIOLATION: $displayedCount',
+                );
+                return const SizedBox.shrink();
+              },
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

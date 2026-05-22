@@ -79,6 +79,11 @@ class DumpWriter {
     return writePipeline(content, LoggingConfig.pipelineFilePath('pro'));
   }
 
+  static Future<bool> writeUnifiedDump(String content) async {
+    // During tests or core-mode, use core path.
+    return writePipeline(content, LoggingConfig.pipelineFilePath('core'));
+  }
+
   static Future<void> appendCoreAnalytical(String content) async {
     return appendAnalytical(content, LoggingConfig.analyticalFilePath('core'));
   }

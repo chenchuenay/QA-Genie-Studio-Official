@@ -1,4 +1,9 @@
-import 'dart:io';
+import 'package:qa_genie/core/validators/structural_case_validator.dart';
+import 'package:qa_genie/engine/models/generation_complexity_profile.dart';
+import 'package:qa_genie/core/utils/token_budget_calculator.dart';
+import 'package:qa_genie/core/debug/generation_forensic_recorder.dart';
+import 'package:qa_genie/engine/humanization/qa_realism_enforcer.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'dart:math';
 import 'package:qa_genie/engine/platform_rules.dart';
 import 'package:qa_genie/engine/generation_mode.dart';
@@ -17,15 +22,12 @@ import 'package:qa_genie/engine/deterministic_repair.dart';
 import 'package:qa_genie/engine/qa_heuristics_engine.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/core/logging/logging_config.dart';
-import 'package:qa_genie/core/logging/dump_formatter.dart';
 import 'package:qa_genie/core/utils/test_data_factory.dart';
-import 'package:qa_genie/core/logging/telemetry_models.dart';
 import 'package:qa_genie/core/debug/pipeline_debug_store.dart';
-import 'package:qa_genie/core/logging/telemetry_collector.dart';
 import 'package:qa_genie/core/logging/analytical_formatter.dart';
-import 'package:qa_genie/core/network/providers/api_client.dart';
 import 'package:qa_genie/engine/fallback/fallback_generator.dart';
-import 'package:qa_genie/data/datasources/remote/generation_api.dart';
+import 'package:qa_genie/core/prompts/system_prompt.dart';
+import 'package:qa_genie/core/network/response_parser.dart';
 import 'package:qa_genie/core/network/providers/provider_factory.dart';
 
 /// Exported-case lineage tally (canonical [CaseSource] only).
@@ -74,8 +76,6 @@ class _PipelineCounters {
 class GenerationService {
   static const bool bypassPipeline = false;
 
-  final GenerationApi _api = GenerationApi(ApiClient(ProviderFactory.create()));
-  final TelemetryCollector _telemetry = TelemetryCollector();
   bool _isGenerating = false;
   static GenerationMetrics _lastMetrics = const GenerationMetrics();
 
@@ -189,7 +189,11 @@ class GenerationService {
     int score = 0;
     if (tc.title.trim().isNotEmpty && !tc.title.contains(RegExp(r'^\d+$')))
       score += 1;
-    if (tc.steps.length >= 3) score += 1;
+    // Score based on meaningful content
+    final meaningfulCount = tc.steps
+        .where(QaHeuristicsEngine.isMeaningfulStep)
+        .length;
+    if (meaningfulCount >= 3) score += 1;
     if (tc.steps.any(
       (s) =>
           s.data.contains('@') &&
@@ -236,11 +240,6 @@ class GenerationService {
         '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(10000)}';
     UiErrorStore().startOperation(operationId);
     UiErrorStore().clear();
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.clear();
-      } catch (_) {}
-    }
 
     try {
       final List<TestCaseModel> generatedCases = await _performGeneration(
@@ -288,26 +287,8 @@ class GenerationService {
       feature,
       domain,
     );
-    final targetCount = maxCases > 10 ? 20 : 10;
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.module = module;
-        _telemetry.feature = feature;
-        _telemetry.platform = platform;
-        _telemetry.constraints = notes ?? '';
-
-        _telemetry.requestedCount = maxCases;
-
-        ProviderFactory.create();
-
-        _telemetry.startSession(
-          targetCount == 20 ? 'pro' : 'core',
-          ProviderFactory.activeProvider,
-          ProviderFactory.activeModel,
-        );
-      } catch (_) {}
-    }
-    final isProMode = targetCount == 20;
+    final targetCount = maxCases > 8 ? 16 : 8;
+    final isProMode = targetCount == 16;
     final planner = ScenarioPlanner(
       module: module,
       feature: feature,
@@ -322,13 +303,14 @@ class GenerationService {
     final pipelineLog = PipelineLogger(
       isProMode ? PipelineMode.pro : PipelineMode.core,
     );
-    pipelineLog.operationId = operationId; // NEW
+    pipelineLog.operationId = operationId;
     pipelineLog.module = module;
     pipelineLog.feature = feature;
     pipelineLog.platform = platform;
     pipelineLog.constraints = notes ?? '';
     pipelineLog.requestedCount = targetCount;
     PipelineDebugStore.resetAll();
+    
     promptStopwatch.start();
     final prompt = _buildPromptStage(
       skeletons: skeletons,
@@ -340,29 +322,11 @@ class GenerationService {
     pipelineLog.finalApiPrompt = prompt;
     promptStopwatch.stop();
 
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.recordPrompt(
-          prompt,
-
-          promptCharacters: prompt.length,
-
-          promptTokenEstimate: prompt.length ~/ 4,
-        );
-
-        _telemetry.updateGenerationState('prompt_built');
-      } catch (_) {}
-    }
     PipelineDebugStore.lastFinalPrompt = prompt;
 
     // --- Single provider call: parse + transport errors fold into catch path. ---
     apiStopwatch.start();
 
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.updateGenerationState('request_sent');
-      } catch (_) {}
-    }
     List<TestCaseModel> cases = await _aiGenerationStage(
       prompt: prompt,
       module: module,
@@ -387,14 +351,19 @@ class GenerationService {
       apiStopwatch: apiStopwatch,
     );
 
+    cases = _semanticRecoveryStage(
+      cases: cases,
+      module: module,
+      feature: feature,
+      platform: platform,
+      inferredDomain: inferredDomain,
+      pipelineLog: pipelineLog,
+      c: c,
+    );
+
     // Baseline BEFORE quality rejection (historic `filteredCount` semantics).
     parseStopwatch.stop();
 
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.updateGenerationState('parsed');
-      } catch (_) {}
-    }
     final beforeFilter = cases.length;
 
     // COUNT RISK: quality + platform filters can shrink; empty triggers full fallback.
@@ -412,11 +381,10 @@ class GenerationService {
     );
     validationStopwatch.stop();
 
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.updateGenerationState('validated');
-      } catch (_) {}
+    if (cases.length > targetCount) {
+      cases = cases.take(targetCount).toList();
     }
+
     final platformFiltered = cases
         .where((tc) => !_violatesPlatform(tc, platform))
         .toList();
@@ -427,10 +395,16 @@ class GenerationService {
         ? beforeFilter - cases.length
         : 0;
     c.aiAccepted = cases.length;
+    
+    final hardLimit = isProMode ? 16 : 8;
+    if (cases.length > hardLimit) {
+      cases = cases.take(hardLimit).toList();
+    }
+    
     pipelineLog.acceptedCases = List.from(cases);
 
     if (bypassPipeline) {
-      return _finalInvariantStage(
+      return await _finalInvariantStage(
         cases: cases,
         targetCount: targetCount,
         module: module,
@@ -448,20 +422,14 @@ class GenerationService {
     final dedupResult = _deduplicationStage(
       cases: cases,
       isProMode: isProMode,
+      module: module,
+      feature: feature,
+      platform: platform,
+      inferredDomain: inferredDomain,
       pipelineLog: pipelineLog,
       c: c,
     );
     cases = dedupResult.cases;
-
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.recordDedupStats(
-          aiInputCount: dedupResult.aiInputCount,
-          duplicatesRemoved: c.duplicatesRemovedCount,
-          finalOutputCount: cases.length,
-        );
-      } catch (_) {}
-    }
 
     // COUNT RISK: repair output length vs maxCases; post-repair rejection filter shrinks.
     repairStopwatch.start();
@@ -477,20 +445,27 @@ class GenerationService {
       c: c,
     );
 
+    if (cases.length > targetCount) {
+      cases = cases.take(targetCount).toList();
+    }
+    
     // DUPLICATE RISK: second intent pass + structural hash uniq (may noop if empty).
     repairStopwatch.stop();
 
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.updateGenerationState('repaired');
-      } catch (_) {}
-    }
     cases = _deduplicateAfterRepairStage(
       cases: cases,
+      module: module,
+      feature: feature,
+      platform: platform,
+      inferredDomain: inferredDomain,
       pipelineLog: pipelineLog,
       c: c,
     );
 
+    if (cases.length > targetCount) {
+      cases = cases.take(targetCount).toList();
+    }
+    
     // COUNT RISK / FALLBACK: gap fill expands toward target via fallback + emergency.
     // Only invocation of `_fillCanonicalGaps` remains here (aside from internal calls).
     fallbackStopwatch.start();
@@ -504,18 +479,17 @@ class GenerationService {
       inferredDomain: inferredDomain,
       c: c,
     );
+    if (cases.length > targetCount) {
+      cases = cases.take(targetCount).toList();
+    }
+    
     if (cases.length > beforeGapFill) {
       c.fallbackUsed = true;
       c.repairedCount += cases.length - beforeGapFill;
     }
     fallbackStopwatch.stop();
 
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.updateGenerationState('fallback_completed');
-      } catch (_) {}
-    }
-    final finalized = _finalInvariantStage(
+    final finalized = await _finalInvariantStage(
       cases: cases,
       targetCount: targetCount,
       module: module,
@@ -528,29 +502,10 @@ class GenerationService {
       counters: c,
     );
 
-    final fallbackCount = finalized
-        .where((e) => e.source == CaseSource.fallback)
-        .length;
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.fallbackTriggered = fallbackCount > 0;
-        _telemetry.fallbackReason = fallbackCount > 0
-            ? 'partial_pipeline_recovery'
-            : '';
-        _telemetry.fallbackGeneratedCases = fallbackCount;
-      } catch (_) {}
-    }
+    final finalLimit = isProMode ? 16 : 8;
+    final casesToReturn = finalized.take(finalLimit).toList();
 
-    final repairedCount = finalized
-        .where((e) => e.source == CaseSource.repairedAi)
-        .length;
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.repairedCases = repairedCount;
-      } catch (_) {}
-    }
-
-    final lineage = _finalSuiteOriginTally(finalized);
+    final lineage = _finalSuiteOriginTally(casesToReturn);
 
     final metrics = GenerationMetrics(
       aiGenerated: c.aiGenerated,
@@ -564,13 +519,7 @@ class GenerationService {
       finalDeterministicOriginCount: lineage.detRepair,
       fallbackInjectedCount: lineage.fallback,
     );
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.recordFinalCases(finalized);
-
-        _telemetry.updateGenerationState('finalized');
-      } catch (_) {}
-    }
+    
     _lastMetrics = metrics;
     if (c.aiFailureReason != null) {
       _lastWarning =
@@ -583,50 +532,22 @@ class GenerationService {
     }
     totalStopwatch.stop();
 
-    if (LoggingConfig.forensicLogging) {
-      try {
-        _telemetry.recordPerformanceTrace(
-          PerformanceTrace(
-            promptBuildMs: promptStopwatch.elapsedMilliseconds,
-
-            apiCallMs: apiStopwatch.elapsedMilliseconds,
-
-            parseMs: parseStopwatch.elapsedMilliseconds,
-
-            validationMs: validationStopwatch.elapsedMilliseconds,
-
-            repairMs: repairStopwatch.elapsedMilliseconds,
-
-            fallbackMs: fallbackStopwatch.elapsedMilliseconds,
-
-            totalMs: totalStopwatch.elapsedMilliseconds,
-          ),
-        );
-      } catch (_) {}
-    }
     print('[QA Genie Metrics] $metrics');
     if (LoggingConfig.forensicLogging) {
       try {
-        final snapshot = _telemetry.freeze();
-
-        final pipelineDump = DumpFormatter.build(snapshot);
-
-        final analyticalDump = AnalyticalFormatter.buildAnalyticalDump(
-          snapshot,
-        );
-
-        if (targetCount > 10) {
-          await DumpWriter.writeProPipeline(pipelineDump);
-
+        final analyticalDump = AnalyticalFormatter.buildAnalyticalDump(casesToReturn);
+        if (isProMode) {
           await DumpWriter.appendProAnalytical(analyticalDump);
         } else {
-          await DumpWriter.writeCorePipeline(pipelineDump);
-
           await DumpWriter.appendCoreAnalytical(analyticalDump);
         }
       } catch (_) {}
     }
-    return finalized;
+    assert(
+      casesToReturn.length <= (isProMode ? 16 : 8),
+      'FINAL CASE LIMIT VIOLATION: ${casesToReturn.length}',
+    );
+    return casesToReturn;
   }
 
   /// Builds the single API payload for this generation (no network I/O).
@@ -660,28 +581,25 @@ class GenerationService {
 
       c.aiCalls++;
 
-      final cases = await _api.generate(prompt);
+      final isPro = await UsageManager.isPro();
+      
+      final profile = GenerationComplexityProfile(
+        module: module,
+        feature: feature,
+        platform: platform,
+        requestedCases: maxCases,
+        isPro: isPro,
+        intents: [],
+      );
+
+      final maxTokens = TokenBudgetCalculator.calculate(profile);
+
+      // Using local provider directly instead of wrapped API
+      final provider = ProviderFactory.create();
+      final rawResponse = await provider.generate(prompt, maxTokens: maxTokens);
       apiStopwatch.stop();
 
-      if (LoggingConfig.forensicLogging) {
-        try {
-          _telemetry.recordRawResponse(PipelineDebugStore.lastRawResponse);
-
-          _telemetry.recordNetworkTrace(
-            NetworkTrace(
-              statusCode: 200,
-              durationMs: apiStopwatch.elapsedMilliseconds,
-              internetAvailable: true,
-              socketError: false,
-              tlsError: false,
-              retryCount: 0,
-              errorMessage: null,
-            ),
-          );
-
-          _telemetry.updateGenerationState('response_received');
-        } catch (_) {}
-      }
+      final cases = ResponseParser.parseArray(rawResponse);
 
       if (cases.isEmpty) {
         throw Exception('AI returned zero test cases');
@@ -691,43 +609,10 @@ class GenerationService {
       pipelineLog.aiGenerated = cases.length;
       c.aiGenerated = cases.length;
 
-      if (LoggingConfig.forensicLogging) {
-        try {
-          _telemetry.parserTrace = ParserTrace(
-            parseSuccess: cases.isNotEmpty,
-            parsedCaseCount: cases.length,
-            malformedBlocks: 0,
-            parserFailures: [],
-          );
-        } catch (_) {}
-      }
-
       return cases;
     } catch (e, stack) {
       final aiFailureReason = e.toString();
 
-      try {
-        _telemetry.recordFallback(triggered: true, reason: aiFailureReason);
-
-        _telemetry.recordRawErrorBody(e.toString());
-
-        _telemetry.updateGenerationState('fallback');
-      } catch (_) {}
-      if (LoggingConfig.forensicLogging) {
-        try {
-          _telemetry.recordNetworkTrace(
-            NetworkTrace(
-              statusCode: -1,
-              durationMs: apiStopwatch.elapsedMilliseconds,
-              internetAvailable: true,
-              socketError: e is SocketException,
-              tlsError: false,
-              retryCount: 0,
-              errorMessage: e.toString(),
-            ),
-          );
-        } catch (_) {}
-      }
       c.aiFailureReason = aiFailureReason;
       pipelineLog.recordParseFailure(aiFailureReason);
 
@@ -766,8 +651,11 @@ class GenerationService {
     required _PipelineCounters c,
     required Stopwatch apiStopwatch,
   }) {
-    // COUNT SHRINK: banned-phrase garbage filter (keeps prior list when filter empties).
-    final filteredGarbage = cases.where((tc) => !_containsGarbage(tc)).toList();
+    // COUNT SHRINK: only discard unrecoverable transport/template artifacts here.
+    // Semantically weak wording is repaired in-place by `_semanticRecoveryStage`.
+    final filteredGarbage = cases
+        .where((tc) => !_containsUnrecoverableGarbage(tc))
+        .toList();
     var next = filteredGarbage.isNotEmpty
         ? filteredGarbage
         : List<TestCaseModel>.from(cases);
@@ -840,6 +728,478 @@ class GenerationService {
     return next;
   }
 
+  bool _containsUnrecoverableGarbage(TestCaseModel tc) {
+    final combined =
+        (tc.title +
+                ' ' +
+                tc.expectedResult +
+                ' ' +
+                tc.steps
+                    .map((s) => '${s.action} ${s.data} ${s.expected}')
+                    .join(' ') +
+                ' ' +
+                tc.preconditions.join(' '))
+            .toLowerCase();
+
+    const hardGarbage = [
+      '.repeat(',
+      'replace("',
+      'lorem ipsum',
+      'placeholder',
+      'dummy data',
+      'password123',
+      'admin123',
+      'valid_input',
+    ];
+
+    return hardGarbage.any(combined.contains);
+  }
+
+  List<TestCaseModel> _semanticRecoveryStage({
+    required List<TestCaseModel> cases,
+    required String module,
+    required String feature,
+    required String platform,
+    required String inferredDomain,
+    required PipelineLogger pipelineLog,
+    required _PipelineCounters c,
+  }) {
+    final recovered = <TestCaseModel>[];
+
+    for (var i = 0; i < cases.length; i++) {
+      final tc = cases[i];
+      final beforeScore = QaHeuristicsEngine.semanticScore(tc);
+      final beforeRejection = _canonicalRejectionReason(tc, platform);
+      final before = _semanticSnapshot(tc);
+
+      final actions = _repairSemanticCase(
+        tc,
+        module: module,
+        feature: feature,
+        platform: platform,
+        domain: inferredDomain,
+        seed: i,
+      );
+
+      final afterScore = QaHeuristicsEngine.semanticScore(tc);
+      final after = _semanticSnapshot(tc);
+
+      if (actions.isNotEmpty && before != after) {
+        c.repairedCount++;
+        pipelineLog.recordRepairTransform(
+          tc.id.isNotEmpty ? tc.id : tc.title,
+          before,
+          after,
+          'semantic_recovery',
+          [
+            'semantic_score $beforeScore->$afterScore',
+            if (beforeRejection != null)
+              'pre_repair_rejection: $beforeRejection',
+            ...actions,
+          ],
+        );
+      }
+
+      recovered.add(tc);
+    }
+
+    return recovered;
+  }
+
+  List<String> _repairSemanticCase(
+    TestCaseModel tc, {
+    required String module,
+    required String feature,
+    required String platform,
+    required String domain,
+    required int seed,
+  }) {
+    final actions = <String>[];
+    final category = _canonicalCategory(tc);
+    final smoothFeature = _semanticSubject(module, feature);
+
+    if (_isWeakSemanticTitle(tc.title)) {
+      tc.title = _semanticTitle(
+        category: category,
+        feature: smoothFeature,
+        platform: platform,
+        seed: seed,
+      );
+      actions.add('rewrote weak title');
+    }
+
+    if (tc.preconditions.isEmpty ||
+        tc.preconditions.every((p) => p.trim().length < 12)) {
+      tc.preconditions = [
+        'The $smoothFeature workflow is available in the $platform QA environment.',
+      ];
+      actions.add('recovered contextual preconditions');
+    }
+
+    final dataHint = _semanticDataHint(
+      tc,
+      category,
+      platform,
+      smoothFeature,
+      seed,
+    );
+    final repairedSteps = _semanticSteps(
+      category: category,
+      platform: platform,
+      feature: smoothFeature,
+      dataHint: dataHint,
+      seed: seed,
+    );
+
+    for (var i = 0; i < tc.steps.length; i++) {
+      final fallback = repairedSteps[i % repairedSteps.length];
+      final step = tc.steps[i];
+      var changed = false;
+
+      if (_isWeakStepAction(step.action)) {
+        step.action = fallback.action;
+        changed = true;
+      }
+
+      if (step.data.trim().isEmpty && fallback.data.trim().isNotEmpty) {
+        step.data = fallback.data;
+        changed = true;
+      }
+
+      if (_isWeakStepExpected(step.expected)) {
+        step.expected = fallback.expected;
+        changed = true;
+      }
+
+      if (changed) {
+        actions.add('repaired step ${i + 1}');
+      }
+    }
+
+    while (tc.steps.length < 3) {
+      final fallback = repairedSteps[tc.steps.length % repairedSteps.length];
+      tc.steps.add(
+        TestStep(
+          action: fallback.action,
+          data: fallback.data,
+          expected: fallback.expected,
+        ),
+      );
+      actions.add('added executable step ${tc.steps.length}');
+    }
+
+    if (tc.expectedResult.trim().length < 60 ||
+        QaHeuristicsEngine.hasWeakExpectedResult(tc.expectedResult) ||
+        _hasSemanticMismatch(tc)) {
+      tc.expectedResult = QaHeuristicsEngine.expectedResult(
+        platform: platform,
+        category: category,
+        module: module,
+        feature: feature,
+        title: tc.title,
+        domain: domain,
+      );
+      actions.add('rewrote weak expected result');
+    }
+
+    _normalizeCanonicalCase(
+      tc,
+      module: module,
+      feature: feature,
+      platform: platform,
+      domain: domain,
+    );
+
+    return actions;
+  }
+
+  String _semanticSubject(String module, String feature) {
+    final subject = _smooth(feature).trim().isNotEmpty
+        ? _smooth(feature)
+        : _smooth(module);
+    return subject.trim().isNotEmpty ? subject.trim() : 'target feature';
+  }
+
+  bool _isWeakSemanticTitle(String title) {
+    final text = title.toLowerCase().trim();
+    if (text.length < 15) return true;
+
+    const weakTitles = [
+      'workflow stability',
+      'default stability',
+      'stability variant',
+      'verify system',
+      'perform action',
+      'check functionality',
+      'scenario 1',
+      'scenario 2',
+    ];
+
+    return weakTitles.any(text.contains);
+  }
+
+  String _semanticTitle({
+    required String category,
+    required String feature,
+    required String platform,
+    required int seed,
+  }) {
+    final suffix = seed > 0 ? ' path ${seed + 1}' : '';
+    switch (category) {
+      case 'security':
+        return 'Verify $feature blocks unsafe input without exposing protected data$suffix';
+      case 'negative':
+        return 'Verify $feature rejects invalid input while preserving user state$suffix';
+      case 'validation':
+        return 'Verify $feature enforces required field validation before submission$suffix';
+      case 'boundary':
+        return 'Verify $feature enforces input limits without data loss$suffix';
+      case 'session':
+        return 'Verify $feature maintains the correct session state across navigation$suffix';
+      case 'usability':
+        return 'Verify $feature supports accessible completion with visible feedback$suffix';
+      case 'network_behavior':
+        return 'Verify $feature handles interrupted connectivity with recoverable state$suffix';
+      default:
+        return 'Verify $feature completes the $platform workflow with observable confirmation$suffix';
+    }
+  }
+
+  bool _isWeakStepAction(String action) {
+    final text = action.toLowerCase().trim();
+    if (text.length < 8) return true;
+
+    const weakActions = [
+      'open app',
+      'click button',
+      'submit form',
+      'perform action',
+      'check result',
+      'verify success',
+      'inspect state',
+      'observe page',
+      'perform primary',
+      'enter details',
+    ];
+
+    return weakActions.any(text.contains);
+  }
+
+  bool _isWeakStepExpected(String expected) {
+    final text = expected.toLowerCase().trim();
+    if (text.length < 35) return true;
+    return QaHeuristicsEngine.hasWeakExpectedResult(expected);
+  }
+
+  String _semanticDataHint(
+    TestCaseModel tc,
+    String category,
+    String platform,
+    String feature,
+    int seed,
+  ) {
+    for (final step in tc.steps) {
+      final value = step.data.trim();
+      if (value.isNotEmpty &&
+          !_bannedPhrases.any(value.toLowerCase().contains)) {
+        return value;
+      }
+    }
+
+    if (platform == 'API') {
+      return '{"email":"${TestDataFactory.validEmail('semantic-$seed')}","requestId":"qa-$seed"}';
+    }
+
+    if (category == 'security') {
+      return TestDataFactory.xssPayload();
+    }
+
+    if (category == 'negative' || category == 'validation') {
+      return TestDataFactory.invalidEmail('semantic-$seed');
+    }
+
+    if (category == 'boundary') {
+      return 'QA-${feature.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')}-$seed-${''.padRight(64, 'X')}';
+    }
+
+    return TestDataFactory.validEmail('semantic-$seed');
+  }
+
+  List<TestStep> _semanticSteps({
+    required String category,
+    required String platform,
+    required String feature,
+    required String dataHint,
+    required int seed,
+  }) {
+    if (platform == 'API') {
+      final endpoint = PlatformRules.apiEndpoint(feature);
+      return [
+        TestStep(
+          action: 'Send the prepared request to $endpoint',
+          data: dataHint,
+          expected:
+              'The service returns a documented response code and a parseable response body for the submitted request.',
+        ),
+        TestStep(
+          action: 'Validate the response fields and error messaging',
+          data: '',
+          expected:
+              'The response includes the required contract fields and communicates any validation failure without internal details.',
+        ),
+        TestStep(
+          action: 'Verify downstream state after the API operation',
+          data: '',
+          expected:
+              'The backend state matches the accepted or rejected request outcome and no unintended record is created.',
+        ),
+      ];
+    }
+
+    return [
+      TestStep(
+        action: 'Open the $feature workflow in a clean QA session',
+        data: '',
+        expected:
+            'The workflow loads with the relevant controls visible and no stale user input carried from a previous run.',
+      ),
+      TestStep(
+        action: _semanticInputAction(category, feature),
+        data: dataHint,
+        expected:
+            'The interface accepts the entered value or marks the affected field with an observable validation state.',
+      ),
+      TestStep(
+        action: _semanticSubmitAction(platform, feature, seed),
+        data: '',
+        expected:
+            'The workflow displays a clear completion, rejection, or recovery state that matches the scenario intent.',
+      ),
+    ];
+  }
+
+  String _semanticInputAction(String category, String feature) {
+    switch (category) {
+      case 'security':
+        return 'Enter the unsafe payload into the $feature input field';
+      case 'negative':
+      case 'validation':
+        return 'Enter invalid values into the required $feature fields';
+      case 'boundary':
+        return 'Paste the boundary-length value into the $feature input field';
+      default:
+        return 'Enter valid values into the $feature input fields';
+    }
+  }
+
+  String _semanticSubmitAction(String platform, String feature, int seed) {
+    if (platform == 'Mobile') {
+      return seed.isEven
+          ? 'Tap the primary $feature action control'
+          : 'Confirm the $feature action from the mobile screen';
+    }
+    return seed.isEven
+        ? 'Submit the $feature workflow for processing'
+        : 'Activate the primary $feature confirmation control';
+  }
+
+  String _semanticSnapshot(TestCaseModel tc) {
+    return [
+      'title=${tc.title}',
+      'type=${tc.type}',
+      'expected=${tc.expectedResult}',
+      'steps=${tc.steps.map((s) => '${s.action}|${s.data}|${s.expected}').join(' :: ')}',
+    ].join('\n');
+  }
+
+  List<String> _repairDuplicateIntent(
+    TestCaseModel tc, {
+    required String module,
+    required String feature,
+    required String platform,
+    required String domain,
+    required int seed,
+  }) {
+    final actions = <String>[];
+    final category = _canonicalCategory(tc);
+    final smoothFeature = _semanticSubject(module, feature);
+    final variant = _semanticVariant(category, seed);
+
+    tc.title =
+        '${_semanticTitle(category: category, feature: smoothFeature, platform: platform, seed: seed)} using $variant';
+    actions.add('rewrote duplicate title with variant focus: $variant');
+
+    final dataHint = _semanticDataHint(
+      tc,
+      category,
+      platform,
+      smoothFeature,
+      seed,
+    );
+    final steps = _semanticSteps(
+      category: category,
+      platform: platform,
+      feature: smoothFeature,
+      dataHint: dataHint,
+      seed: seed,
+    );
+
+    tc.steps = steps;
+    actions.add('rebuilt duplicate steps around variant focus');
+
+    tc.expectedResult = QaHeuristicsEngine.expectedResult(
+      platform: platform,
+      category: category,
+      module: module,
+      feature: feature,
+      title: tc.title,
+      domain: domain,
+    );
+    actions.add('rebuilt duplicate expected result');
+
+    _normalizeCanonicalCase(
+      tc,
+      module: module,
+      feature: feature,
+      platform: platform,
+      domain: domain,
+    );
+
+    return actions;
+  }
+
+  String _semanticVariant(String category, int seed) {
+    final variants = switch (category) {
+      'security' => [
+        'script payload coverage',
+        'unauthorized session coverage',
+        'sensitive data exposure coverage',
+      ],
+      'validation' => [
+        'missing required value coverage',
+        'invalid format coverage',
+        'mixed valid and invalid field coverage',
+      ],
+      'boundary' => [
+        'maximum length coverage',
+        'minimum value coverage',
+        'overflow input coverage',
+      ],
+      'session' => [
+        'refresh state coverage',
+        'logout state coverage',
+        'concurrent session coverage',
+      ],
+      _ => [
+        'valid input coverage',
+        'invalid input coverage',
+        'state preservation coverage',
+      ],
+    };
+
+    return variants[seed % variants.length];
+  }
+
   List<TestCaseModel> _qualityValidationStage({
     required List<TestCaseModel> cases,
     required String platform,
@@ -852,9 +1212,13 @@ class GenerationService {
   }) {
     final qualityFiltered = cases.where((tc) {
       final score = _qualityScore(tc);
+      final semanticScore = QaHeuristicsEngine.semanticScore(tc);
       final canonicalRejection = _canonicalRejectionReason(tc, platform);
-      if (score >= 3 && canonicalRejection == null) {
-        pipelineLog.recordAcceptance(tc.title, 'quality score ok ($score)');
+      if ((score >= 3 || semanticScore >= 3) && canonicalRejection == null) {
+        pipelineLog.recordAcceptance(
+          tc.title,
+          'quality score ok ($score), semantic score ok ($semanticScore)',
+        );
         return true;
       }
       pipelineLog.recordRejection(
@@ -901,11 +1265,13 @@ class GenerationService {
   ({List<TestCaseModel> cases, int aiInputCount}) _deduplicationStage({
     required List<TestCaseModel> cases,
     required bool isProMode,
+    required String module,
+    required String feature,
+    required String platform,
+    required String inferredDomain,
     required PipelineLogger pipelineLog,
     required _PipelineCounters c,
   }) {
-    cases = _rebalancePriorities(cases);
-
     final seenTitles = <String>{};
     final seenIntents = <String>{};
     final seenCategories = <String>{};
@@ -915,11 +1281,54 @@ class GenerationService {
     final requiredVerbs = 12;
     final actionVerbs = <String>{};
 
-    final result = cases.where((tc) {
+    final result = <TestCaseModel>[];
+    var duplicateAttempts = 0;
+
+    for (final tc in cases) {
       final lower = tc.title.trim().toLowerCase();
       final intent = _intentSignature(tc);
       if (seenTitles.contains(lower) || seenIntents.contains(intent)) {
-        return false;
+        final seed = beforeDedup + duplicateAttempts++;
+        final before = _semanticSnapshot(tc);
+        final actions = _repairDuplicateIntent(
+          tc,
+          module: module,
+          feature: feature,
+          platform: platform,
+          domain: inferredDomain,
+          seed: seed,
+        );
+        final repairedLower = tc.title.trim().toLowerCase();
+        final repairedIntent = _intentSignature(tc);
+
+        if (!seenTitles.contains(repairedLower) &&
+            !seenIntents.contains(repairedIntent) &&
+            _canonicalRejectionReason(tc, platform) == null) {
+          c.repairedCount++;
+          pipelineLog.recordDuplicateCluster([
+            lower,
+            repairedLower,
+          ], 'duplicate intent repaired in place');
+          pipelineLog.recordRepairTransform(
+            tc.id.isNotEmpty ? tc.id : tc.title,
+            before,
+            _semanticSnapshot(tc),
+            'duplicate_intent_recovery',
+            actions,
+          );
+          seenTitles.add(repairedLower);
+          seenIntents.add(repairedIntent);
+          for (final s in tc.steps) {
+            if (s.action.isNotEmpty) {
+              actionVerbs.add(s.action.split(' ').first.toLowerCase());
+            }
+          }
+          if (tc.type.isNotEmpty) {
+            seenCategories.add(tc.type);
+          }
+          result.add(tc);
+        }
+        continue;
       }
       seenTitles.add(lower);
       seenIntents.add(intent);
@@ -934,8 +1343,8 @@ class GenerationService {
         seenCategories.add(tc.type);
       }
 
-      return true;
-    }).toList();
+      result.add(tc);
+    }
     c.duplicatesRemovedCount += beforeDedup - result.length;
     pipelineLog.afterDedup = List.from(result);
 
@@ -1001,6 +1410,10 @@ class GenerationService {
 
   List<TestCaseModel> _deduplicateAfterRepairStage({
     required List<TestCaseModel> cases,
+    required String module,
+    required String feature,
+    required String platform,
+    required String inferredDomain,
     required PipelineLogger pipelineLog,
     required _PipelineCounters c,
   }) {
@@ -1009,16 +1422,50 @@ class GenerationService {
     final beforeFinalDedup = List<TestCaseModel>.from(cases);
 
     final finalDeduped = <TestCaseModel>[];
+    var duplicateAttempts = 0;
     for (final tc in cases) {
       final lower = tc.title.trim().toLowerCase();
       final intent = _intentSignature(tc);
 
       if (seenFinal.contains(lower) || seenFinalIntents.contains(intent)) {
-        c.postRepairDuplicatesRemoved++;
-        pipelineLog.recordRejection(
-          tc.title,
-          'post-repair dedup removed duplicate title/intent',
+        final seed =
+            beforeFinalDedup.length +
+            c.postRepairDuplicatesRemoved +
+            duplicateAttempts++;
+        final before = _semanticSnapshot(tc);
+        final actions = _repairDuplicateIntent(
+          tc,
+          module: module,
+          feature: feature,
+          platform: platform,
+          domain: inferredDomain,
+          seed: seed,
         );
+        final repairedLower = tc.title.trim().toLowerCase();
+        final repairedIntent = _intentSignature(tc);
+
+        if (seenFinal.contains(repairedLower) ||
+            seenFinalIntents.contains(repairedIntent) ||
+            _canonicalRejectionReason(tc, platform) != null) {
+          c.postRepairDuplicatesRemoved++;
+          pipelineLog.recordRejection(
+            tc.title,
+            'post-repair dedup removed duplicate title/intent',
+          );
+          continue;
+        }
+
+        c.repairedCount++;
+        pipelineLog.recordRepairTransform(
+          tc.id.isNotEmpty ? tc.id : tc.title,
+          before,
+          _semanticSnapshot(tc),
+          'post_repair_duplicate_intent_recovery',
+          actions,
+        );
+        seenFinal.add(repairedLower);
+        seenFinalIntents.add(repairedIntent);
+        finalDeduped.add(tc);
         continue;
       }
 
@@ -1095,7 +1542,7 @@ class GenerationService {
   /// **Sole export invariant gate:** enforces `[0, targetCount]` truncation, assigns the
   /// authoritative export identifiers, persists pipeline debug (`bypassPipeline` uses
   /// [IdGenerator] IDs without the late normalization applied to shipped runs).
-  List<TestCaseModel> _finalInvariantStage({
+  Future<List<TestCaseModel>> _finalInvariantStage({
     required List<TestCaseModel> cases,
     required int targetCount,
     required String module,
@@ -1106,12 +1553,13 @@ class GenerationService {
     required int startIndex,
     required PipelineLogger pipelineLog,
     _PipelineCounters? counters,
-  }) {
+  }) async {
     if (bypassPipeline) {
       // IDs run over the ENTIRE staged list before logging / truncation (historic behavior).
       for (int i = 0; i < cases.length; i++) {
         cases[i].id = IdGenerator.generate(module, feature, startIndex + i);
       }
+      _compressFinalExpectedText(cases);
       pipelineLog.finalCases = List.from(cases);
       pipelineLog.rawAiResponse = PipelineDebugStore.lastRawResponse;
       pipelineLog.cleanedAiResponse = PipelineDebugStore.lastCleanedResponse;
@@ -1120,21 +1568,66 @@ class GenerationService {
       return cases.take(targetCount).toList();
     }
 
-    var next = cases.take(targetCount).toList();
+    // QUALITY-AWARE PRIORITY ENFORCEMENT & MINIMAL EMERGENCY FILL
+    var next = _enforcePriorityDistribution(
+      cases,
+      targetCount,
+      module,
+      feature,
+      platform,
+      inferredDomain,
+    );
 
     final c = counters!;
 
     for (int i = 0; i < next.length; i++) {
+      final tc = next[i];
+      final originalTitle = tc.title;
+      final originalExpected = tc.expectedResult;
+
+      tc.title = QaRealismEnforcer.humanizeTitle(tc.title, '$module $feature');
+      tc.expectedResult = QaRealismEnforcer.humanizeExpectedResult(
+        tc.expectedResult, 
+        '$module $feature',
+        intent: tc.intent,
+        platform: platform,
+      );
+
+      if (tc.title != originalTitle || tc.expectedResult != originalExpected) {
+        PipelineDebugStore.realismInjections.add({
+          'id': tc.id,
+          'before': {
+            'title': originalTitle,
+            'expectedResult': originalExpected,
+          },
+          'after': {
+            'title': tc.title,
+            'expectedResult': tc.expectedResult,
+          },
+        });
+      }
+
+      for (final s in tc.steps) {
+        s.expected = QaRealismEnforcer.humanizeStepExpectation(s.expected, '$module $feature');
+      }
+
       _normalizeCanonicalCase(
-        next[i],
+        tc,
         module: module,
         feature: feature,
         platform: platform,
         domain: inferredDomain,
       );
+      
+      // ABSOLUTE FINAL STEP: SEQUENTIAL ID ASSIGNMENT
       next[i].id =
           'TC_${module.toUpperCase().replaceAll(RegExp(r"[^A-Z0-9]+"), "_")}_${(i + 1).toString().padLeft(3, '0')}';
     }
+
+    _compressFinalExpectedText(next);
+    
+    // Final user-visible objects
+    PipelineDebugStore.finalObjects = next.map((e) => e.toJson()).toList();
 
     pipelineLog.aiFailure = c.aiFailureReason != null;
     pipelineLog.finalCases = List.from(next);
@@ -1149,6 +1642,30 @@ class GenerationService {
     pipelineLog.finalApiPrompt = PipelineDebugStore.lastFinalPrompt;
 
     pipelineLog.writeToDisk().catchError((_) {});
+
+    final beforeValidation = next.length;
+    next = next.where((tc) => StructuralCaseValidator.isValid(tc.toJson())).toList();
+    PipelineDebugStore.invalidCasesDropped = beforeValidation - next.length;
+
+    final realismScore = QaRealismEnforcer.validateSuite(next, platform);
+    print('PRODUCTION REALISM SCORE: $realismScore');
+
+    // Deterministic Forensic Recording
+    final tier = targetCount > 8 ? 'pro' : 'core';
+    
+    final lineage = _finalSuiteOriginTally(next);
+    PipelineDebugStore.finalAiCases = lineage.ai;
+    PipelineDebugStore.finalFallbackCases = lineage.fallback;
+    PipelineDebugStore.cleanerRepairCount = lineage.detRepair;
+
+    final forensics = GenerationForensicRecorder.captureCurrentForensics(
+      realismScore: realismScore,
+      tier: tier,
+      platform: platform,
+    );
+    
+    await GenerationForensicRecorder.recordPipelineLog(tier).catchError((_) {});
+    await GenerationForensicRecorder.recordAnalyticalLog(tier, forensics).catchError((_) {});
 
     return next.take(targetCount).toList();
   }
@@ -1196,16 +1713,20 @@ class GenerationService {
     required String platform,
     required String domain,
   }) {
-    tc.module = tc.module.trim().isNotEmpty ? tc.module.trim() : module;
-    tc.feature = tc.feature.trim().isNotEmpty ? tc.feature.trim() : feature;
-    tc.platform = platform;
+    // Phase H: Keep metadata pruned
+    tc.module = '';
+    tc.feature = '';
+    tc.platform = '';
     tc.actualResult = '';
-    tc.status = tc.status.trim().isEmpty ? 'Not Executed' : tc.status.trim();
-    if (tc.status.toLowerCase() == 'draft') tc.status = 'Not Executed';
+    tc.status = '';
 
     final category = _canonicalCategory(tc);
     tc.type = _categoryToType(category);
-    tc.priority = _riskPriority(tc, module, feature, platform, domain);
+    
+    // Only infer priority if not already explicitly set to a valid value
+    if (!['High', 'Medium', 'Low'].contains(tc.priority)) {
+      tc.priority = _riskPriority(tc, module, feature, platform, domain);
+    }
 
     final smoothFeature = _smooth(feature);
     final genericPreconditions = {
@@ -1232,14 +1753,12 @@ class GenerationService {
       }
     }
 
-    while (tc.steps.length < 3) {
-      final slot = tc.steps.length + 1;
+    if (tc.steps.isEmpty) {
       tc.steps.add(
         TestStep(
-          action:
-              'Inspect visible $smoothFeature state at checkpoint $slot and capture concrete observable evidence',
+          action: 'Perform the primary $smoothFeature action for this scenario',
           data: '',
-          expected: _distinctPaddedExpectation(category, smoothFeature, slot),
+          expected: 'The system responds with the expected business outcome',
         ),
       );
     }
@@ -1256,15 +1775,6 @@ class GenerationService {
         domain: domain,
       );
     }
-  }
-
-  String _distinctPaddedExpectation(
-    String category,
-    String feature,
-    int checkpoint,
-  ) {
-    final base = _stepExpectedForCategory(category, feature);
-    return '$base (verification focus $checkpoint).';
   }
 
   String _canonicalCategory(TestCaseModel tc) {
@@ -1438,9 +1948,10 @@ class GenerationService {
       addIfUsable(tc);
     }
 
-    if (result.length < targetCount) {
+    final missing = targetCount - result.length;
+    if (missing > 0) {
       final fallback = FallbackGenerator.generate(
-        count: targetCount + 12,
+        count: missing,
         module: module,
         feature: feature,
         platform: platform,
@@ -1462,13 +1973,168 @@ class GenerationService {
     return result.take(targetCount).toList();
   }
 
+  List<TestCaseModel> _enforcePriorityDistribution(
+    List<TestCaseModel> cases,
+    int targetCount,
+    String module,
+    String feature,
+    String platform,
+    String domain,
+  ) {
+    // -------------------------------
+    // TARGET DISTRIBUTION
+    // -------------------------------
+    final lowTarget = (targetCount * 0.7).round();
+    final mediumTarget = (targetCount * 0.2).round();
+    final highTarget = targetCount - lowTarget - mediumTarget;
+
+    // -------------------------------
+    // BUCKETS
+    // -------------------------------
+    final low = <TestCaseModel>[];
+    final medium = <TestCaseModel>[];
+    final high = <TestCaseModel>[];
+    final unknown = <TestCaseModel>[];
+
+    for (final tc in cases) {
+      final p = tc.priority.trim().toLowerCase();
+      switch (p) {
+        case 'low':
+          low.add(tc);
+          break;
+        case 'medium':
+          medium.add(tc);
+          break;
+        case 'high':
+          high.add(tc);
+          break;
+        default:
+          unknown.add(tc);
+      }
+    }
+
+    // -------------------------------
+    // NORMALIZE UNKNOWN PRIORITIES
+    // -------------------------------
+    for (final tc in unknown) {
+      medium.add(tc.copyWith(priority: 'Medium'));
+    }
+
+    // -------------------------------
+    // QUALITY SORT
+    // IMPORTANT:
+    // Highest quality survives trimming
+    // -------------------------------
+    int score(TestCaseModel tc) {
+      int s = 0;
+      if (tc.steps.length >= 3) s += 2;
+      if (tc.expectedResult.trim().isNotEmpty) s += 2;
+      if (tc.title.length > 15) s += 1;
+      if (tc.preconditions.isNotEmpty) s += 1;
+      if (tc.type.toLowerCase().contains('positive')) s += 2;
+      if (tc.type.toLowerCase().contains('validation')) s += 1;
+      return s;
+    }
+
+    void sortBucket(List<TestCaseModel> bucket) {
+      bucket.sort((a, b) => score(b).compareTo(score(a)));
+    }
+
+    sortBucket(low);
+    sortBucket(medium);
+    sortBucket(high);
+
+    // -------------------------------
+    // SOFT TOLERANCE
+    // Prevents fake forced balancing
+    // -------------------------------
+    final lowMin = lowTarget - 1;
+    final mediumMin = mediumTarget - 1;
+    final highMin = highTarget - 1;
+
+    // -------------------------------
+    // EMERGENCY GENERATOR
+    // ONLY used when severely missing
+    // -------------------------------
+    TestCaseModel generateCase(
+      String priority,
+      String category,
+    ) {
+      return _emergencyCase(
+        module,
+        feature,
+        platform,
+        domain,
+        cases.length + Random().nextInt(999),
+        priority: priority,
+        forcedCategory: category,
+      );
+    }
+
+    // -------------------------------
+    // CRITICAL GAP FILL ONLY
+    // -------------------------------
+    while (low.length < lowMin) {
+      low.add(generateCase('Low', 'positive'));
+    }
+    while (medium.length < mediumMin) {
+      medium.add(generateCase('Medium', 'negative'));
+    }
+    while (high.length < highMin) {
+      high.add(generateCase('High', 'boundary'));
+    }
+
+    // -------------------------------
+    // BUILD FINAL LIST
+    // -------------------------------
+    final result = <TestCaseModel>[];
+    result.addAll(low.take(lowTarget));
+    result.addAll(medium.take(mediumTarget));
+    result.addAll(high.take(highTarget));
+
+    // -------------------------------
+    // FILL REMAINING SLOTS
+    // WITH BEST LEFTOVER CASES
+    // -------------------------------
+    final leftovers = <TestCaseModel>[
+      ...low.skip(lowTarget),
+      ...medium.skip(mediumTarget),
+      ...high.skip(highTarget),
+    ];
+    sortBucket(leftovers);
+
+    for (final tc in leftovers) {
+      if (result.length >= targetCount) break;
+      result.add(tc);
+    }
+
+    // -------------------------------
+    // FINAL HARD GUARANTEE
+    // ALWAYS EXACTLY 8 / 16
+    // -------------------------------
+    while (result.length < targetCount) {
+      result.add(
+        generateCase('Medium', 'negative'),
+      );
+    }
+
+    // -------------------------------
+    // FINAL QUALITY SORT
+    // -------------------------------
+    sortBucket(result);
+
+    return result.take(targetCount).toList();
+  }
+
   TestCaseModel _emergencyCase(
     String module,
     String feature,
     String platform,
     String domain,
-    int index,
-  ) {
+    int index, {
+    String? priority,
+    String? forcedCategory,
+  }) {
     final templates = <String, Map<String, dynamic>>{};
     final smoothFeature = _smooth(feature);
 
@@ -1634,7 +2300,7 @@ class GenerationService {
 
     final titleRaw = tpl['title'] as String;
     final title = '$titleRaw (recovery ${index + 1})';
-    final category = tpl['category'] as String;
+    final category = forcedCategory ?? (tpl['category'] as String);
     final rawData = (tpl['data'] as String);
     final data = rawData.isNotEmpty
         ? rawData
@@ -1663,7 +2329,7 @@ class GenerationService {
 
     final steps = _buildEmergencySteps(platform, smoothFeature, data, index);
 
-    return TestCaseModel(
+    final tc = TestCaseModel(
       source: CaseSource.fallback,
       title: title,
       module: module,
@@ -1672,16 +2338,14 @@ class GenerationService {
       preconditions: preconditions.map((e) => _cleanGeneratedText(e)).toList(),
       steps: steps,
       expectedResult: _smartExpectedResult(title, expected),
-      priority: QaHeuristicsEngine.priorityFor(
-        category: category,
-        module: module,
-        feature: feature,
-        title: title,
-        platform: platform,
-        domain: domain,
-      ),
+      priority: 'Medium', // Placeholder
       type: _categoryToType(category),
     );
+
+    final finalPriority =
+        priority ?? _riskPriority(tc, module, feature, platform, domain);
+
+    return tc.copyWith(priority: finalPriority);
   }
 
   List<TestStep> _buildEmergencySteps(
@@ -1846,35 +2510,51 @@ class GenerationService {
 
     sb.writeln('(Prompt centralized in system_prompt.dart) v$PROMPT_VERSION');
     sb.writeln('Module: $module | Feature: $feature | Platform: $platform');
-    sb.writeln(
-      'Return exactly ${skeletons.length} JSON objects in the same order as these fixed scenario contracts. Do not rename a scenario into a different intent.',
-    );
+    sb.writeln('Return up to ${skeletons.length} ordered JSON cases.');
+    sb.writeln('Preserve scenario intent.');
 
     for (final sk in skeletons) {
       sb.writeln('- ${sk['title']} (${sk['category']}, type: ${sk['type']})');
     }
-    String platformRules;
-    switch (platform) {
-      case 'Web':
-        platformRules =
-            "Use ONLY application UI terminology: click, navigate, redirect, cookie, session, refresh. Never mention JWT, API, payload, headers.";
-        break;
-      case 'Mobile':
-        platformRules =
-            "Use ONLY mobile terminology: tap, swipe, rotate, biometric, permission. Never mention hover, right click, cookie, application refresh.";
-        break;
-      case 'API':
-        platformRules =
-            "Use ONLY API terminology: POST, GET, endpoint, payload, status code, header. Never mention click, navigate screen, tap screen.";
-        break;
-      default:
-        platformRules = '';
-    }
-    sb.writeln(platformRules);
-    sb.write(
-      'JSON: [{"title":"...", "module":"$module", "feature":"$feature", "platform":"$platform", "priority":"High", "type":"FUNCTIONAL", "preconditions":["..."], "steps":[{"action":"","data":"","expected":""}], "expectedResult":"...", "actualResult":"", "status":"Not Executed"}]',
-    );
+    sb.writeln(SystemPrompt.platformRules(platform));
+
     return sb.toString();
+  }
+
+  void _compressFinalExpectedText(List<TestCaseModel> cases) {
+    for (final tc in cases) {
+      tc.expectedResult = compressExpected(tc.expectedResult);
+      for (final step in tc.steps) {
+        step.action = _cleanFinalActionText(step.action);
+        step.expected = compressExpected(step.expected);
+      }
+    }
+  }
+
+  String _cleanFinalActionText(String text) {
+    return text
+        .replaceAll(RegExp(r'\b[Ii]nspect\b'), 'Review')
+        .replaceAll(RegExp(r'\b[Oo]bserve\b'), 'Confirm')
+        .replaceAll(RegExp(r'\b[Pp]erform action\b'), 'Complete workflow')
+        .replaceAll(RegExp(r'\b[Cc]heck result\b'), 'Validate outcome')
+        .replaceAll(RegExp(r'\b[Vv]erify system\b'), 'Validate workflow')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  String compressExpected(String text) {
+    return text
+        .replaceAll(RegExp(r'\b[Tt]he system\b'), '')
+        .replaceAll(RegExp(r'\b[Tt]he application\b'), '')
+        .replaceAll('displays', 'shows')
+        .replaceAll('successfully', '')
+        .replaceAll('is redirected to', 'redirects to')
+        .replaceAll('The user', '')
+        .replaceAll('user is', '')
+        .replaceAll('validation message', 'error')
+        .replaceAll('error message', 'error')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   String _cleanGeneratedText(String value) {
@@ -1884,35 +2564,25 @@ class GenerationService {
         .replaceAll(' .', '.')
         .trim();
   }
-}
 
-String _smartExpectedResult(String title, String expected) {
-  final lower = title.toLowerCase();
+  String _smartExpectedResult(String title, String expected) {
+    final lower = title.toLowerCase();
 
-  final isNegative = [
-    "invalid",
-    "expired",
-    "unauthorized",
-    "malformed",
-    "blocked",
-    "rate limit",
-    "reject",
-    "denied",
-  ].any(lower.contains);
+    final isNegative = [
+      "invalid",
+      "expired",
+      "unauthorized",
+      "malformed",
+      "blocked",
+      "rate limit",
+      "reject",
+      "denied",
+    ].any(lower.contains);
 
-  if (isNegative) {
-    return "The request is rejected securely, validation rules are enforced correctly, and no unintended backend state changes occur.";
+    if (isNegative) {
+      return "The request is rejected securely, validation rules are enforced correctly, and no unintended backend state changes occur.";
+    }
+
+    return expected;
   }
-
-  return expected;
-}
-
-List<TestCaseModel> _rebalancePriorities(List<TestCaseModel> cases) {
-  for (int i = 0; i < cases.length; i++) {
-    final priority = i % 5 == 0 ? 'Low' : (i % 2 == 0 ? 'Medium' : 'High');
-
-    cases[i].priority = priority;
-  }
-
-  return cases;
 }

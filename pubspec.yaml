@@ -1,7 +1,7 @@
 name: qa_genie
 description: "QA Genie – AI-powered test flow generator"
 publish_to: "none"
-version: 1.2.129
+version: 1.2.131
 
 environment:
   sdk: ^3.11.0

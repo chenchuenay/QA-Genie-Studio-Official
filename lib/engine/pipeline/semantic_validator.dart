@@ -1,6 +1,5 @@
 import 'package:qa_genie/core/utils/stable_hash.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
-import 'package:qa_genie/engine/pipeline/generation_context.dart';
 
 class SemanticValidationResult {
   final List<WorkingCase> validCases;
@@ -16,8 +15,8 @@ class SemanticValidator {
   static final RegExp _alphaNumericPattern = RegExp(r'[^a-z0-9 ]');
 
   SemanticValidationResult validate(
-    GenerationContext context,
     List<WorkingCase> cases,
+    Function(RejectedCaseInfo) logRejected,
   ) {
     final valid = <WorkingCase>[];
     final rejected = <int, String>{};
@@ -37,7 +36,7 @@ class SemanticValidator {
         valid.add(tc.copy());
       } else {
         rejected[index] = reason;
-        context.logRejected(
+        logRejected(
           RejectedCaseInfo(
             title: tc.title,
             reason: reason,

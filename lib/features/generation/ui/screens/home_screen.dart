@@ -35,8 +35,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final formKey = GlobalKey<FormState>();
   final gen = GenerateTestCasesUseCase(), save = SaveTestSuiteUseCase();
   bool _isPro = false;
-  int _freeRemaining = 3;
-  int _proRemaining = 20;
+  int _freeRemaining = 6;
+  int _proRemaining = 15;
 
   late AnimationController _dotCtrl;
   late List<Animation<double>> _dotAnims;
@@ -98,10 +98,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     String genHint;
     if (_isPro) {
       genHint =
-          "Generates up to 20 test cases per batch (${_proRemaining}/20 left)";
+          "Generates up to 16 test cases per batch (${_proRemaining}/15 left)";
     } else if (_freeRemaining > 0) {
       genHint =
-          "Generates up to 10 test cases per batch (${_freeRemaining} free left)";
+          "Generates up to 8 test cases per batch (${_freeRemaining} free left)";
     } else {
       genHint = "Watch an ad to generate more";
     }
@@ -566,7 +566,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         platform: p,
         notes: n,
       );
-      final cases = result.cases;
+      final isPro = await UsageManager.isPro();
+      final targetLimit = isPro ? 16 : 8;
+      final cases = result.cases.take(targetLimit).toList();
+      
       final suiteId = await save.execute(
         module: m,
         feature: f,
@@ -591,6 +594,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           showSnackBar: true,
         );
       }
+      
+      print('FINAL CASE DATA START');
+      for (final tc in cases.take(3)) {
+        final data = tc.steps.map((s) => s.data).join(', ');
+        print('Case Data: $data');
+      }
+      print('FINAL CASE DATA END');
+
       if (mounted)
         Navigator.push(
           context,

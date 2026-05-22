@@ -1,8 +1,9 @@
-import 'package:qa_genie/core/utils/priority_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/constants.dart';
-import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/domain/enums/case_source.dart';
+import 'package:qa_genie/core/utils/priority_utils.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/core/database/database_service.dart';
 
 class MasterTable extends StatefulWidget {
   final List<TestCaseModel> testCases;
@@ -51,10 +52,10 @@ class _MasterTableState extends State<MasterTable> {
       bottom: BorderSide(color: _fieldBorder.withOpacity(0.45), width: 1.2),
     ),
   );
-
   @override
   void initState() {
     super.initState();
+    print('MASTER TABLE RUNTIME COUNT: ${widget.testCases.length}');
     _initControllers();
   }
 
@@ -249,39 +250,83 @@ class _MasterTableState extends State<MasterTable> {
       width: colWidths[0],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: widget.isEditable
-            ? Container(
-                decoration: _fieldDecoration,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: TextField(
-                  controller: idCtrls[i],
-                  style: const TextStyle(
-                    color: _cyanColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+        child: Column(
+          children: [
+            widget.isEditable
+                ? Container(
+                    decoration: _fieldDecoration,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    child: TextField(
+                      controller: idCtrls[i],
+                      style: const TextStyle(
+                        color: _cyanColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (v) {
+                        tc.id = v;
+                        _editted();
+                      },
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      idCtrls[i].text,
+                      style: const TextStyle(
+                        color: _cyanColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  onChanged: (v) {
-                    tc.id = v;
-                    _editted();
-                  },
-                ),
-              )
-            : Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  idCtrls[i].text,
-                  style: const TextStyle(
-                    color: _cyanColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+            const SizedBox(height: 4),
+            _sourceBadge(tc.source),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sourceBadge(CaseSource source) {
+    String label = 'UNK';
+    Color color = Colors.grey;
+    switch (source) {
+      case CaseSource.ai:
+        label = 'AI';
+        color = Colors.blue;
+        break;
+      case CaseSource.repairedAi:
+        label = 'REP';
+        color = Colors.orange;
+        break;
+      case CaseSource.fallback:
+        label = 'FB';
+        color = Colors.red;
+        break;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 8,
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -392,11 +437,15 @@ class _MasterTableState extends State<MasterTable> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String?>(
-                    value: displayValue,
+                    value: options.toSet().contains(displayValue)
+                        ? displayValue
+                        : options.first,
                     dropdownColor: const Color(0xFF1E1E2E),
                     style: const TextStyle(color: _textPrimary, fontSize: 12),
                     isExpanded: true,
                     items: options
+                        .toSet()
+                        .toList()
                         .map(
                           (e) => DropdownMenuItem<String?>(
                             value: e,

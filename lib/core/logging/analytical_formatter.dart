@@ -1,84 +1,33 @@
-import 'telemetry_snapshot.dart';
+import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/domain/enums/case_source.dart';
 
 class AnalyticalFormatter {
-  static String buildAnalyticalDump(TelemetrySnapshot s) {
+  static String buildAnalyticalDump(List<TestCaseModel> cases) {
     final b = StringBuffer();
-    final timestamp = s.timestamp.toLocal();
-    final tzOffset = timestamp.timeZoneOffset;
-    final tzSign = tzOffset.isNegative ? '-' : '+';
-    final tzHours = tzOffset.inHours.abs().toString().padLeft(2, '0');
-    final tzMinutes = (tzOffset.inMinutes.abs() % 60).toString().padLeft(2, '0');
-    final tzString = '($tzSign$tzHours:$tzMinutes)';
+    
+    final ai = cases.where((c) => c.source == CaseSource.ai).length;
+    final repaired = cases.where((c) => c.source == CaseSource.repairedAi).length;
+    final fallback = cases.where((c) => c.source == CaseSource.fallback).length;
 
     b.writeln('[SESSION]');
-    b.writeln('id=${s.sessionId}');
-    b.writeln('timestamp=${timestamp.toIso8601String()}$tzString');
-    b.writeln('mode=${s.mode}');
-    b.writeln('provider=${s.provider}');
-    b.writeln('model=${s.model}');
-    b.writeln('status=${s.sessionCompleted ? "success" : "failure"}');
-    b.writeln('duration=${s.totalDurationMs}ms');
-    b.writeln();
-
-    b.writeln('[NETWORK]');
-    if (s.networkTrace != null) {
-      final n = s.networkTrace!;
-      b.writeln('status=${n.statusCode}');
-      b.writeln('latency=${n.durationMs}ms');
-      b.writeln('timeout=${n.statusCode == 408}'); // Simple timeout check
-      b.writeln('internet=${n.internetAvailable}');
-    } else {
-      b.writeln('trace=none');
-    }
+    b.writeln('timestamp=${DateTime.now().toUtc().toIso8601String()}');
+    b.writeln('status=success');
+    b.writeln('total=${cases.length}');
     b.writeln();
 
     b.writeln('[PIPELINE]');
-    if (s.parserTrace != null) {
-      b.writeln('parsed=${s.parserTrace!.parsedCaseCount}');
-    } else {
-      b.writeln('parsed=0');
-    }
-    b.writeln('validated=${s.finalCasesJson.length}'); // final count is validated
-    b.writeln('repairs=${s.repairedCases}');
-    b.writeln('fallback_cases=${s.fallbackGeneratedCases}');
-    b.writeln('duplicates_removed=${s.dedupTrace?.duplicatesRemoved ?? 0}');
+    b.writeln('ai_cases=$ai');
+    b.writeln('repaired_cases=$repaired');
+    b.writeln('fallback_cases=$fallback');
     b.writeln();
 
-    b.writeln('[FALLBACK]');
-    b.writeln('cases=${s.fallbackGeneratedCases}');
-    b.writeln('reason=${s.fallbackReason}');
-    b.writeln();
-
-    b.writeln('[PERFORMANCE]');
-    if (s.performanceTrace != null) {
-      final p = s.performanceTrace!;
-      b.writeln('prompt_ms=${p.promptBuildMs}ms');
-      b.writeln('api_ms=${p.apiCallMs}ms');
-      b.writeln('parse_ms=${p.parseMs}ms');
-      b.writeln('repair_ms=${p.repairMs}ms');
-      b.writeln('total_ms=${p.totalMs}ms');
-    } else {
-      b.writeln('trace=none');
-    }
-    b.writeln();
-
-    b.writeln('[TOKENS]');
-    b.writeln('prompt=${s.promptTokensEstimate}');
-    b.writeln('completion=${s.responseTokensEstimate}');
-    b.writeln('total=${s.promptTokensEstimate + s.responseTokensEstimate}');
-    b.writeln();
-
-    b.writeln('[ERRORS]');
-    b.writeln('provider=${s.errorRegistry.providerErrors}');
-    b.writeln('parser=${s.errorRegistry.parserErrors}');
-    b.writeln('validator=${s.errorRegistry.validatorErrors}');
-    b.writeln('repair=${s.errorRegistry.repairErrors}');
-    b.writeln('ui=${s.errorRegistry.uiErrors}');
-    b.writeln('export=${s.errorRegistry.exportErrors}');
-    b.writeln();
-
-    b.writeln('[STATE]');
-    b.writeln(s.stateTransitions.join('→'));
+    b.writeln('[PRIORITIES]');
+    final high = cases.where((c) => c.priority == 'High').length;
+    final medium = cases.where((c) => c.priority == 'Medium').length;
+    final low = cases.where((c) => c.priority == 'Low').length;
+    b.writeln('high=$high');
+    b.writeln('medium=$medium');
+    b.writeln('low=$low');
     b.writeln();
 
     return b.toString();
