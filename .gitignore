@@ -1,42 +1,92 @@
-# macOS
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
 .DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+*.orig
+*.pid
+*.lock-wscript
 
-# Flutter
-build/
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+android/.idea/
+android/*.iml
+android/local.properties
+
+# VS Code
+.vscode/
+
+# Flutter/Dart/Pub
+**/doc/api/
+.dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
+.pub-cache/
 .pub/
+build/
+*.lock
+.flutter-devtools
 
-# Dart / Flutter generated
-.dart_tool/
+# Symbolication related
+app.*.symbols
+*.mSYM
 
-# Firebase / cache
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# iOS
+ios/.generated/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+
+# Firebase emulators & debug logs
 firebase-debug.log
 firebase-debug.*.log
 .firebase/
 .cache/
 
-# Environment
-.env
-
-# IDE
-.vscode/
-
-# QA Genie forensic outputs
-cache/
-tests/test_results/
-test/forensic_tests/test_results
-
-# Temporary project snapshots
+# Project-specific temporary folders you accumulated
 project_snapshot/
 backups/
 
-# Generated code
+# Generated code & test artifacts
 *.g.dart
 *.freezed.dart
+test_results/
+.env
 
-# APK / release artifacts
-*.apk
-*.aab
-*.ipa.env.*
+# User's additional ignores
+.git.corrupt/
+android/build/
+android/gradle/.DS_Store
+lib/app/.DS_Store
+lib/legacy/
+linux/
+macos/
+windows/
+
+# Other
+*.bak
+*.swp
+*~
+.DS_Store
