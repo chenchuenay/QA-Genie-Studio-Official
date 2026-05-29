@@ -1,4 +1,21 @@
-import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/data/repositories/suite_repository.dart';
+import 'package:qa_genie/domain/entities/finalized_test_case.dart';
+
 class GetHistoryUseCase {
-  Future<List<Map<String,dynamic>>> execute() async => await DatabaseService.getAllSuites();
+  final SuiteRepository _repository;
+
+  const GetHistoryUseCase({required SuiteRepository repository})
+    : _repository = repository;
+
+  Future<List<Map<String, dynamic>>> getAllSuites() async {
+    return _repository.getAllSuites();
+  }
+
+  Future<List<FinalizedTestCase>> getTestCases(int suiteId) async {
+    return _repository.getTestCases(suiteId);
+  }
+
+  Future<void> deleteSuite(int suiteId) async {
+    await _repository.deleteSuite(suiteId);
+  }
 }

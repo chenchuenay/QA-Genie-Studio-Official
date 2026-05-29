@@ -1,19 +1,42 @@
-# Firebase emulators & debug logs
+# macOS
+.DS_Store
+
+# Flutter
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+
+# Dart / Flutter generated
+.dart_tool/
+
+# Firebase / cache
 firebase-debug.log
 firebase-debug.*.log
 .firebase/
 .cache/
 
-# VS Code (if you ever switch from your current editor)
+# Environment
+.env
+
+# IDE
 .vscode/
 
-# Project-specific temporary folders you accumulated
+# QA Genie forensic outputs
+cache/
+tests/test_results/
+test/forensic_tests/test_results
+
+# Temporary project snapshots
 project_snapshot/
 backups/
 
-# Generated code & test artifacts
+# Generated code
 *.g.dart
 *.freezed.dart
-test_results/
-.dart_tool/
-.env
+
+# APK / release artifacts
+*.apk
+*.aab
+*.ipa.env.*

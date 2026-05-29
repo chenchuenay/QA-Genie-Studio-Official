@@ -1,24 +1,53 @@
 import 'dart:convert';
-import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/core/error/exceptions.dart';
+import 'package:qa_genie/features/export/writers/file_writer.dart';
+import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
-import '../writers/file_writer.dart';
 
+// ============================================================
+// FILE: lib/features/export/adapters/json_adapter.dart
+// ============================================================
+
+/// ===============================================================
+///
+/// JSON ADAPTER
+///
+/// PURPOSE:
+/// - Xray-compatible export
+/// - Deterministic schema-safe JSON
+///
+/// ARCHITECTURAL ROLE:
+/// - Pure reader of FinalizedTestCase.
+/// - Guarantees invariant field ordering via ExportMapper.
+///
+/// ===============================================================
 class JsonAdapter {
-  // Steps are preserved in the order returned by the API.
-  // No re-sorting is performed, ensuring consistency across all export formats.
+  const JsonAdapter._();
+
+  // ============================================================
+  // EXPORT
+  // ============================================================
 
   static Future<void> export(
-    List<TestCaseModel> cases, {
+    List<FinalizedTestCase> cases, {
     required String fileName,
     required String moduleName,
     required String featureName,
   }) async {
-    final data = ExportMapper.toXray(
-      cases.map((tc) => tc.copy()).toList(),
-      moduleName: moduleName,
-      featureName: featureName,
-    );
-    final jsonString = const JsonEncoder.withIndent('  ').convert(data);
-    await FileWriter.writeAndShare(jsonString, fileName, extension: 'json');
+    try {
+      /// Forensic logic: Direct consumption of FinalizedTestCase to ensure
+      /// session edits (actualResult/status) are reflected instantly.
+      final data = ExportMapper.toXray(
+        cases,
+        moduleName: moduleName,
+        featureName: featureName,
+      );
+
+      final jsonString = const JsonEncoder.withIndent('  ').convert(data);
+
+      await FileWriter.writeAndShare(jsonString, fileName, extension: 'json');
+    } catch (e) {
+      throw ExportException('JSON export failed: $e');
+    }
   }
 }

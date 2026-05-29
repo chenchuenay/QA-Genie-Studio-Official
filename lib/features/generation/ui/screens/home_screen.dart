@@ -1,25 +1,33 @@
-import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import 'package:qa_genie/app/theme/constants.dart';
-import 'package:qa_genie/app/config/app_config.dart';
+import 'package:flutter/services.dart';
+import 'package:qa_genie/app/theme/app_theme.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
-import 'package:qa_genie/core/error/ui_error_store.dart';
+import 'package:qa_genie/data/dto/generation_dto.dart';
+import 'package:qa_genie/shared/dialogs/ad_dialog.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
-import 'package:qa_genie/presentation/widgets/ad_dialog.dart';
+import 'package:qa_genie/app/startup/app_dependencies.dart';
+import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/features/beta/logic/beta_manager.dart';
+import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
+import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/features/monetization/ads/ad_service.dart';
-import 'package:qa_genie/domain/usecases/save_test_suite_use_case.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/screens/preview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  static final constraintsKey = GlobalKey();
   const HomeScreen({super.key});
 
+  static final constraintsKey = GlobalKey();
+
   static final moduleKey = GlobalKey();
+
   static final featureKey = GlobalKey();
+
   static final platformKey = GlobalKey();
+
   static final generateKey = GlobalKey();
 
   @override
@@ -27,91 +35,115 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  final mCtrl = TextEditingController(),
-      fCtrl = TextEditingController(),
-      cCtrl = TextEditingController();
-  String platform = "Web";
-  bool loading = false;
-  final formKey = GlobalKey<FormState>();
-  final gen = GenerateTestCasesUseCase(), save = SaveTestSuiteUseCase();
-  bool _isPro = false;
-  int _freeRemaining = 6;
-  int _proRemaining = 15;
+  final TextEditingController mCtrl = TextEditingController();
 
-  late AnimationController _dotCtrl;
-  late List<Animation<double>> _dotAnims;
+  final TextEditingController fCtrl = TextEditingController();
+
+  final TextEditingController cCtrl = TextEditingController();
+
+  final GlobalKey<FormState> formKey = GlobalKey<FormState>();
+
+  final GenerateTestCasesUseCase _generateUseCase =
+      AppDependencies.generateTestCasesUseCase;
+
+  final SaveSuiteUseCase _saveSuiteUseCase = AppDependencies.saveSuiteUseCase;
+
+  late final AnimationController _dotCtrl;
+
+  late final List<Animation<double>> _dotAnims;
+
+  String platform = 'Web';
+
+  bool loading = false;
+
+  bool _isPro = false;
+
+  int _freeRemaining = 1;
+
+  int _rewardedRemaining = 5;
+
+  int _proRemaining = 15;
 
   @override
   void initState() {
     super.initState();
-    _dotCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-    _dotAnims = [
-      Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-          parent: _dotCtrl,
-          curve: const Interval(0.0, 0.4, curve: Curves.easeInOut),
-        ),
-      ),
-      Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-          parent: _dotCtrl,
-          curve: const Interval(0.2, 0.6, curve: Curves.easeInOut),
-        ),
-      ),
-      Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-          parent: _dotCtrl,
-          curve: const Interval(0.4, 0.8, curve: Curves.easeInOut),
-        ),
-      ),
-    ];
-    _dotCtrl.repeat();
+
+    _initializeDots();
+
     _refreshStatus();
   }
 
   @override
   void dispose() {
     mCtrl.dispose();
+
     fCtrl.dispose();
+
     cCtrl.dispose();
+
     _dotCtrl.dispose();
+
     super.dispose();
   }
 
+  void _initializeDots() {
+    _dotCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _dotAnims = [
+      Tween<double>(begin: 0, end: 1).animate(
+        CurvedAnimation(
+          parent: _dotCtrl,
+          curve: const Interval(0.0, 0.4, curve: Curves.easeInOut),
+        ),
+      ),
+      Tween<double>(begin: 0, end: 1).animate(
+        CurvedAnimation(
+          parent: _dotCtrl,
+          curve: const Interval(0.2, 0.6, curve: Curves.easeInOut),
+        ),
+      ),
+      Tween<double>(begin: 0, end: 1).animate(
+        CurvedAnimation(
+          parent: _dotCtrl,
+          curve: const Interval(0.4, 0.8, curve: Curves.easeInOut),
+        ),
+      ),
+    ];
+
+    _dotCtrl.repeat();
+  }
+
   Future<void> _refreshStatus() async {
-    final pro = await UsageManager.isPro();
-    final free = await UsageManager.freeGensRemaining();
-    final proRem = await UsageManager.proGensRemaining();
-    if (mounted)
-      setState(() {
-        _isPro = pro;
-        _freeRemaining = free;
-        _proRemaining = proRem;
-      });
+    final isPro = await UsageManager.isPro();
+
+    final freeRemaining = await UsageManager.freeGensRemaining();
+
+    final rewardedRemaining = await UsageManager.rewardedGensRemaining();
+
+    final proRemaining = await UsageManager.proGensRemaining();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isPro = isPro;
+      _freeRemaining = freeRemaining;
+      _rewardedRemaining = rewardedRemaining;
+      _proRemaining = proRemaining;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    String genHint;
-    if (_isPro) {
-      genHint =
-          "Generates up to 16 test cases per batch (${_proRemaining}/15 left)";
-    } else if (_freeRemaining > 0) {
-      genHint =
-          "Generates up to 8 test cases per batch (${_freeRemaining} free left)";
-    } else {
-      genHint = "Watch an ad to generate more";
-    }
-
     return Scaffold(
       resizeToAvoidBottomInset: true,
+
       backgroundColor: const Color(0xFF050505),
+
       body: Stack(
         children: [
-          // Micro-texture noise overlay
           Positioned.fill(
             child: Opacity(
               opacity: 0.012,
@@ -130,6 +162,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
+
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -142,6 +175,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 end: Alignment.bottomCenter,
               ),
             ),
+
             child: SafeArea(
               child: Column(
                 children: [
@@ -150,14 +184,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       absorbing: loading,
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(20),
+
                         child: Form(
                           key: formKey,
+
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+
                             children: [
                               const SizedBox(height: 8),
+
                               const Text(
-                                "SPECIFICATION",
+                                'SPECIFICATION',
                                 style: TextStyle(
                                   color: Color(0xFF46DFFF),
                                   fontSize: 13,
@@ -165,9 +203,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   letterSpacing: 6,
                                 ),
                               ),
+
                               const SizedBox(height: 20),
+
                               Container(
                                 key: HomeScreen.moduleKey,
+
                                 decoration: const BoxDecoration(
                                   boxShadow: [
                                     BoxShadow(
@@ -178,18 +219,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     ),
                                   ],
                                 ),
+
                                 child: _input(
-                                  "Module Name *",
-                                  "e.g. User Authentication",
+                                  'Module Name *',
+                                  'e.g. User Authentication',
                                   mCtrl,
                                   maxLength: 40,
-                                  validator: (v) =>
-                                      v!.trim().isEmpty ? "Required" : null,
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+
+                                    return null;
+                                  },
                                 ),
                               ),
+
                               const SizedBox(height: 12),
+
                               Container(
                                 key: HomeScreen.featureKey,
+
                                 decoration: const BoxDecoration(
                                   boxShadow: [
                                     BoxShadow(
@@ -199,20 +249,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     ),
                                   ],
                                 ),
+
                                 child: _input(
-                                  "Feature *",
-                                  "e.g. Login with Google OAuth",
+                                  'Feature *',
+                                  'e.g. Login with Google OAuth',
                                   fCtrl,
                                   maxLength: 70,
-                                  validator: (v) =>
-                                      v!.trim().isEmpty ? "Required" : null,
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+
+                                    return null;
+                                  },
                                 ),
                               ),
+
                               const SizedBox(height: 20),
+
                               const Padding(
                                 padding: EdgeInsets.only(left: 22),
                                 child: Text(
-                                  "Platform *",
+                                  'Platform *',
                                   style: TextStyle(
                                     color: Color(0xFFA7AFBF),
                                     fontSize: 15,
@@ -220,16 +278,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   ),
                                 ),
                               ),
+
                               const SizedBox(height: 8),
+
                               Container(
                                 key: HomeScreen.platformKey,
+
                                 child: _platformSelector(),
                               ),
+
                               const SizedBox(height: 20),
+
                               const Padding(
                                 padding: EdgeInsets.only(left: 22),
                                 child: Text(
-                                  "Constraints (optional)",
+                                  'Constraints (optional)',
                                   style: TextStyle(
                                     color: Color(0xFFA7AFBF),
                                     fontSize: 15,
@@ -237,10 +300,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   ),
                                 ),
                               ),
+
                               const SizedBox(height: 14),
+
                               _constraints(),
+
                               const SizedBox(height: 12),
-                              Center(child: Text(genHint, style: AppText.hint)),
+
+                              Center(
+                                child: Text(
+                                  _generationHint(),
+                                  style: AppText.hint,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+
                               const SizedBox(height: 12),
                             ],
                           ),
@@ -248,10 +322,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
+
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+
                     child: Container(
                       key: HomeScreen.generateKey,
+
                       child: _generateBtn(),
                     ),
                   ),
@@ -264,6 +341,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  String _generationHint() {
+    if (_isPro) {
+      return 'Generates up to 16 test cases per batch ($_proRemaining/15 left)';
+    }
+
+    if (_freeRemaining > 0) {
+      return '1 free generation remaining today';
+    }
+
+    if (_rewardedRemaining > 0) {
+      return 'Watch ads for $_rewardedRemaining more generations today';
+    }
+
+    return 'Daily limit reached. Upgrade to PRO.';
+  }
+
   Widget _input(
     String label,
     String hint,
@@ -273,47 +366,65 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }) {
     return TextFormField(
       controller: ctrl,
+
+      validator: validator,
+
+      maxLength: maxLength,
+
+      maxLengthEnforcement: maxLength != null
+          ? MaxLengthEnforcement.enforced
+          : MaxLengthEnforcement.none,
+
       style: const TextStyle(
         color: Colors.white,
         fontSize: 17,
         fontWeight: FontWeight.w500,
       ),
-      validator: validator,
-      maxLength: maxLength,
-      maxLengthEnforcement: maxLength != null
-          ? MaxLengthEnforcement.enforced
-          : MaxLengthEnforcement.none,
+
       decoration: InputDecoration(
         labelText: label,
+
         labelStyle: const TextStyle(
           color: Color(0xFFA7AFBF),
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
+
         hintText: hint,
+
         hintStyle: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w400,
           color: Color(0xFF8A90A2),
         ),
+
         filled: true,
+
         fillColor: const Color(0xFF0D0F14),
+
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
+
           borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
         ),
+
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
+
           borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
         ),
+
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
+
           borderSide: const BorderSide(color: Color(0xFF46DFFF), width: 1.3),
         ),
+
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 22,
           vertical: 20,
         ),
+
         counterStyle: AppText.hint,
       ),
     );
@@ -322,11 +433,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _platformSelector() {
     return Container(
       height: 68,
+
       padding: const EdgeInsets.all(4),
+
       decoration: BoxDecoration(
         color: const Color(0xFF0D0F14),
+
         borderRadius: BorderRadius.circular(26),
+
         border: Border.all(color: const Color(0x14FFFFFF), width: 1),
+
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.14),
@@ -336,34 +452,48 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ],
       ),
+
       child: Row(
-        children: ["Mobile", "Web", "API"].map((p) {
-          final sel = platform == p;
+        children: ['Mobile', 'Web', 'API'].map((p) {
+          final selected = platform == p;
+
           return Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => platform = p),
+              onTap: () {
+                setState(() {
+                  platform = p;
+                });
+              },
+
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
+
                 margin: const EdgeInsets.symmetric(horizontal: 2),
+
                 decoration: BoxDecoration(
-                  gradient: sel
+                  gradient: selected
                       ? const LinearGradient(
                           colors: [Color(0xFF46DFFF), Color(0xFF7CEBFF)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         )
                       : null,
-                  color: sel ? null : const Color(0xFF12141A),
+
+                  color: selected ? null : const Color(0xFF12141A),
+
                   borderRadius: BorderRadius.circular(22),
                 ),
+
                 child: Center(
                   child: Text(
                     p,
                     style: TextStyle(
-                      color: sel
+                      color: selected
                           ? const Color(0xFF07131A)
                           : const Color(0xFF8A90A2),
+
                       fontWeight: FontWeight.w600,
+
                       fontSize: 15,
                     ),
                   ),
@@ -379,32 +509,48 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _constraints() {
     return TextFormField(
       controller: cCtrl,
+
       maxLines: 3,
-      maxLength: AppConfig.maxConstraintsLength,
+
+      maxLength: EnvironmentAuthority.maxConstraintsLength,
+
       maxLengthEnforcement: MaxLengthEnforcement.enforced,
+
       style: const TextStyle(color: Colors.white),
+
       decoration: InputDecoration(
-        hintText: "e.g. Must support WCAG 2.1 AA, test on Chrome & Safari...",
+        hintText: 'e.g. Must support WCAG 2.1 AA, test on Chrome & Safari...',
+
         hintStyle: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w400,
           color: Color(0xFF8A90A2),
         ),
+
         filled: true,
+
         fillColor: const Color(0xFF0D0F14),
+
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
+
           borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
         ),
+
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
+
           borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
         ),
+
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
+
           borderSide: const BorderSide(color: Color(0xFF46DFFF), width: 1.3),
         ),
+
         contentPadding: const EdgeInsets.all(20),
+
         counterStyle: AppText.hint,
       ),
     );
@@ -413,20 +559,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _generateBtn() {
     return SizedBox(
       width: double.infinity,
+
       height: 58,
+
       child: ElevatedButton(
         onPressed: loading ? null : _generate,
+
         style: ElevatedButton.styleFrom(
           elevation: 0,
+
           padding: EdgeInsets.zero,
+
           backgroundColor: Colors.transparent,
+
           foregroundColor: Colors.black,
+
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
           ),
+
           overlayColor: Colors.transparent,
+
           splashFactory: NoSplash.splashFactory,
         ),
+
         child: Container(
           decoration: BoxDecoration(
             gradient: loading
@@ -436,21 +592,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
+
             borderRadius: BorderRadius.circular(22),
+
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF46DFFF).withOpacity(0.16),
+
                 blurRadius: 22,
+
                 spreadRadius: -10,
+
                 offset: const Offset(0, 10),
               ),
             ],
           ),
+
           child: Center(
             child: loading
                 ? _smoothDots()
                 : const Text(
-                    "Generate Batch →",
+                    'Generate Batch →',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -467,197 +629,213 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _smoothDots() {
     return Row(
       mainAxisSize: MainAxisSize.min,
+
       children: [
         const Text(
-          "Generating",
+          'Generating',
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
+
         for (int i = 0; i < 3; i++)
           AnimatedBuilder(
             animation: _dotAnims[i],
-            builder: (_, child) => Opacity(
-              opacity: _dotAnims[i].value,
-              child: Text(
-                ".",
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textHint,
+
+            builder: (_, child) {
+              return Opacity(
+                opacity: _dotAnims[i].value,
+
+                child: Text(
+                  '.',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textHint,
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
       ],
     );
   }
 
   Future<void> _generate() async {
-    if (!formKey.currentState!.validate()) return;
-    final pro = await UsageManager.isPro();
-    bool can = await UsageManager.canGenerate();
-    if (!can && !pro) {
-      final count = await UsageManager.getGenerationCount();
-      if (count >= 3 && count < 10) {
+    FocusScope.of(context).unfocus();
+
+    if (!formKey.currentState!.validate()) {
+      return;
+    }
+
+    bool canGenerate = await UsageManager.canGenerate();
+
+    final isPro = await UsageManager.isPro();
+
+    var usedRewardedAd = false;
+
+    if (!canGenerate && !isPro) {
+      final rewardedRemaining = await UsageManager.rewardedGensRemaining();
+
+      if (rewardedRemaining > 0) {
         final watched = await showDialog<bool>(
           context: context,
           builder: (_) => const AdDialog(),
         );
-        if (watched != true) return;
-        can = await UsageManager.canGenerate(afterRewardedAd: true);
-        if (!can) {
-          if (mounted)
-            showBlurredDialog(
-              context,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: AppColors.surface,
-                title: const Text(
-                  "Limit Reached",
-                  style: TextStyle(color: Colors.white),
-                ),
-                content: const Text(
-                  "Today's generation limit reached. Upgrade to Pro.",
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text("OK"),
-                  ),
-                ],
-              ),
-            );
+
+        if (watched != true) {
           return;
         }
+
+        usedRewardedAd = true;
+
+        canGenerate = await UsageManager.canGenerate(afterRewardedAd: true);
       } else {
-        if (mounted)
+        if (mounted) {
           showBlurredDialog(
             context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: AppColors.surface,
-              title: const Text(
-                "Limit Reached",
-                style: TextStyle(color: Colors.white),
-              ),
-              content: const Text(
-                "Today's generation limit reached. Upgrade to Pro.",
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text("OK"),
+            builder: (ctx) {
+              return AlertDialog(
+                backgroundColor: AppColors.surface,
+
+                title: const Text(
+                  'Limit Reached',
+                  style: TextStyle(color: Colors.white),
                 ),
-              ],
-            ),
+
+                content: const Text(
+                  'Today\'s generation limit reached. Upgrade to PRO.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
+              );
+            },
           );
+        }
+
         return;
       }
     }
-    if (!can) return;
-    setState(() => loading = true);
-    try {
-      final m = mCtrl.text.trim(),
-          f = fCtrl.text.trim(),
-          p = platform,
-          n = cCtrl.text.trim();
-      final result = await gen.execute(
-        module: m,
-        feature: f,
-        platform: p,
-        notes: n,
-      );
-      final isPro = await UsageManager.isPro();
-      final targetLimit = isPro ? 16 : 8;
-      final cases = result.cases.take(targetLimit).toList();
-      
-      final suiteId = await save.execute(
-        module: m,
-        feature: f,
-        platform: p,
-        cases: cases,
-      );
-      await UsageManager.incrementGeneration();
-      await BetaManager.touch();
-      await AdService().showInterstitialIfAppropriate();
-      await _refreshStatus();
-      final generationWarning = result.warning;
-      if (mounted && generationWarning != null) {
-        // Log warning and show snackbar
-        UiErrorService.logAndShow(
-          context: context,
-          source: ErrorSource.generationUi,
-          screen: 'HomeScreen',
-          stage: ErrorStage.generation,
-          severity: ErrorSeverity.warning,
-          userMessage: generationWarning,
-          error: generationWarning,
-          showSnackBar: true,
-        );
-      }
-      
-      print('FINAL CASE DATA START');
-      for (final tc in cases.take(3)) {
-        final data = tc.steps.map((s) => s.data).join(', ');
-        print('Case Data: $data');
-      }
-      print('FINAL CASE DATA END');
 
-      if (mounted)
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PreviewScreen(
-              testCases: cases,
-              moduleName: m,
-              feature: f,
-              platform: p,
-              suiteId: suiteId,
-            ),
-          ),
-        );
-    } catch (e, stack) {
-      // Log the error (no snackbar, because we'll show a dialog)
-      UiErrorService.logAndShow(
-        context: context,
-        source: ErrorSource.generationUi,
-        screen: 'HomeScreen',
-        stage: ErrorStage.generation,
-        severity: ErrorSeverity.error,
-        userMessage: 'Generation failed: $e',
-        error: e,
-        stack: stack,
-        showSnackBar: false,
+    if (!canGenerate) {
+      return;
+    }
+
+    setState(() {
+      loading = true;
+    });
+
+    try {
+      final module = mCtrl.text.trim();
+
+      final feature = fCtrl.text.trim();
+
+      final notes = cCtrl.text.trim();
+
+      final bool currentPro = await UsageManager.isPro();
+
+      final int hardLimit = currentPro ? 16 : 8;
+
+      final session = await _generateUseCase.execute(
+        dto: GenerationDto(
+          module: module,
+          feature: feature,
+          platform: platform,
+          mode: currentPro ? GenerationMode.pro : GenerationMode.core,
+          count: hardLimit,
+          constraints: notes,
+          traceId: TraceIdGenerator.generate(),
+        ),
       );
-      if (mounted)
-        showBlurredDialog(
-          context,
-          builder: (ctx) => AlertDialog(
+
+      final suiteId = await _saveSuiteUseCase.createSuite(
+        module: module,
+        feature: feature,
+        platform: platform,
+      );
+
+      await _saveSuiteUseCase.saveSuite(
+        suiteId: suiteId,
+        cases: session.testCases,
+      );
+
+      await UsageManager.incrementGeneration(
+        rewarded: usedRewardedAd && !currentPro,
+      );
+
+      await BetaManager.touch();
+
+      await AdService().showInterstitialIfAppropriate();
+
+      await _refreshStatus();
+
+      if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PreviewScreen(
+            session: session,
+            moduleName: module,
+            feature: feature,
+            platform: platform,
+            suiteId: suiteId,
+          ),
+        ),
+      );
+    } catch (e, stackTrace) {
+      UiErrorService.handle(e, stackTrace: stackTrace, category: 'generation');
+
+      if (!mounted) return;
+
+      showBlurredDialog(
+        context,
+        builder: (ctx) {
+          return AlertDialog(
             backgroundColor: AppColors.surface,
+
             title: const Text(
-              "Generation Failed",
+              'Generation Failed',
               style: TextStyle(color: Colors.white),
             ),
+
             content: Text(
-              "$e",
+              '$e',
               style: const TextStyle(color: AppColors.textSecondary),
             ),
+
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("Cancel"),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Cancel'),
               ),
+
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(ctx);
+
                   _generate();
                 },
-                child: const Text("Retry"),
+                child: const Text('Retry'),
               ),
             ],
-          ),
-        );
+          );
+        },
+      );
     } finally {
-      if (mounted) setState(() => loading = false);
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
     }
   }
 }

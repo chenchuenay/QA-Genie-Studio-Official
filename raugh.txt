@@ -645,3 +645,74 @@ Your ownership boundaries are correct.
 You may proceed with Phase 1 architecture implementation once the user provides the detailed plan."
 
 note:we finished phase 2 
+
+
+
+
+
+
+
+Great call. With 100+ issues, guessing won't work—I need to see actual code files to align fixes with your canonical architecture.
+
+Let me ask for **specific files** in priority order.  
+Share just these first (copy-paste content or link to gist/pastebin):
+
+---
+
+## Round 1 – Core Models & Enums (most ripple effects)
+
+1. **`lib/domain/entities/finalized_test_case.dart`**  
+   – field order, invariant fields, `actualResult`/`status` defaults (Sections 19, 20)
+
+2. **`lib/engine/models/generation_outcome.dart`**  
+   – enum definitions, expected exhaustive handling (Section 7)
+
+3. **`lib/domain/enums/case_source.dart`** and **`test_case_origin.dart`**  
+   – forensic tracking (Section 18) – but export safety depends on them
+
+4. **`lib/features/export/common/export_mapper.dart`**  
+   – mapping from `FinalizedTestCase` to export formats (Section 21)
+
+---
+
+## Round 2 – Pipeline Orchestration & Stages
+
+5. **`lib/engine/orchestration/pipeline_orchestrator.dart`**  
+   – coordinates stages, enforces no recursion (Section 6)
+
+6. **`lib/engine/orchestration/stages/ai_generation_stage.dart`**  
+   – single AI call enforcement (Section 2)
+
+7. **`lib/engine/recovery/failure_classifier.dart`**  
+   – central recovery logic (Section 8)
+
+---
+
+## Round 3 – Validation & Repair (where many lints hide)
+
+8. **`lib/engine/validators/structural_validator.dart`**  
+9. **`lib/engine/validators/semantic_validator.dart`**  
+10. **`lib/engine/recovery/deterministic_repair.dart`**  
+11. **`lib/engine/recovery/partial_suite_expander.dart`**
+
+---
+
+## Round 4 – Feature layer (often has import path errors)
+
+12. **`lib/features/generation/ui/screens/preview_screen.dart`**  
+13. **`lib/features/generation/ui/widgets/master_table.dart`**  
+    – editable fields, single source of truth (Section 19)
+
+---
+
+Once you share these (even one by one), I will:
+
+- Identify each `flutter analyze` error/warning in those files.
+- Map it to the **exact section** of your spec.
+- Provide a code diff that fixes it while keeping architecture pure.
+- Then ask for the next batch.
+
+**You don’t have to paste all 100 errors now.**  
+Just share the first 3–5 files from Round 1, and I’ll walk through the errors they cause.
+
+Ready when you are 👍

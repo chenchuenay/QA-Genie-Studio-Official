@@ -1,37 +1,132 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:qa_genie/core/error/exceptions.dart';
+// ============================================================
+// FILE: lib/features/export/folder/export_folder_service.dart
+// ============================================================
 
+/// ===============================================================
+///
+/// EXPORT FOLDER SERVICE
+///
+/// PURPOSE:
+/// - Centralized export storage authority
+/// - Prevent scattered filesystem access
+/// - Stable temp/export directory resolution
+/// - Future migration-safe
+///
+/// STORAGE STRATEGY:
+/// - TEMP EXPORTS:
+///   Used for sharing/export flow
+///
+/// - PERSISTENT EXPORTS:
+///   Optional future upgrade
+///
+/// ===============================================================
 class ExportFolderService {
+  const ExportFolderService._();
 
-  /// Returns a temporary directory that works in both headless tests and normal runtime
+  // ============================================================
+  // TEMP DIRECTORY
+  // ============================================================
+
   static Future<Directory> getTempDirectory() async {
-    if (const bool.fromEnvironment('QA_GENIE_TEST', defaultValue: false)) {
-      return Directory.systemTemp;
+    try {
+      final dir = await getTemporaryDirectory();
+
+      final exportDir = Directory('${dir.path}/qa_genie_exports');
+
+      if (!await exportDir.exists()) {
+        await exportDir.create(recursive: true);
+      }
+
+      return exportDir;
+    } catch (e) {
+      throw ExportException('Failed to access temp export directory: $e');
     }
-    return getTemporaryDirectory();
   }
 
-  static Future<Directory> getTestCaseDirectory(String format) async {
-    final base = await () async {
-      if (const bool.fromEnvironment('QA_GENIE_TEST', defaultValue: false)) {
-        return Directory.systemTemp;
+  // ============================================================
+  // APP DOCUMENT DIRECTORY
+  // ============================================================
+
+  static Future<Directory> getPersistentDirectory() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+
+      final exportDir = Directory('${dir.path}/qa_genie_exports');
+
+      if (!await exportDir.exists()) {
+        await exportDir.create(recursive: true);
       }
-      return getApplicationDocumentsDirectory();
-    }();
-    final dir = Directory('${base.path}/QA_Genie/TestCases/$format');
-    if (!await dir.exists()) await dir.create(recursive: true);
-    return dir;
+
+      return exportDir;
+    } catch (e) {
+      throw ExportException('Failed to access persistent export directory: $e');
+    }
   }
 
-  static Future<Directory> getSummaryReportDirectory() async {
-    final base = await () async {
-      if (const bool.fromEnvironment('QA_GENIE_TEST', defaultValue: false)) {
-        return Directory.systemTemp;
+  // ============================================================
+  // CLEAN TEMP EXPORTS
+  // ============================================================
+
+  static Future<void> clearTempExports() async {
+    try {
+      final dir = await getTempDirectory();
+
+      if (!await dir.exists()) {
+        return;
       }
-      return getApplicationDocumentsDirectory();
-    }();
-    final dir = Directory('${base.path}/QA_Genie/SummaryReports');
-    if (!await dir.exists()) await dir.create(recursive: true);
-    return dir;
+
+      final files = dir.listSync();
+
+      for (final entity in files) {
+        try {
+          if (entity is File) {
+            await entity.delete();
+          }
+        } catch (_) {}
+      }
+    } catch (_) {
+      // Silent cleanup failure
+    }
+  }
+
+  // ============================================================
+  // EXPORT FILE EXISTS
+  // ============================================================
+
+  static Future<bool> fileExists(
+    String fileName, {
+    required String extension,
+    bool persistent = false,
+  }) async {
+    try {
+      final dir = persistent
+          ? await getPersistentDirectory()
+          : await getTempDirectory();
+
+      final file = File('${dir.path}/$fileName.$extension');
+
+      return file.exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ============================================================
+  // RESOLVE EXPORT FILE
+  // ============================================================
+
+  static Future<File> resolveFile(
+    String fileName, {
+    required String extension,
+    bool persistent = false,
+  }) async {
+    final dir = persistent
+        ? await getPersistentDirectory()
+        : await getTempDirectory();
+
+    return File('${dir.path}/$fileName.$extension');
   }
 }

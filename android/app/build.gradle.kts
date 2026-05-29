@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -11,34 +12,39 @@ android {
 
     defaultConfig {
         applicationId = "com.enaykumar.qagenie"
-        minSdk = flutter.minSdkVersion
+        minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "1.2.70"
+        versionName = "1.0"
         multiDexEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = "1.8"
+    flavorDimensions.add("mode")
+    productFlavors {
+        create("dev") {
+            dimension = "mode"
+            // applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+        }
+        create("prod") {
+            dimension = "mode"
+            applicationIdSuffix = ""
+            versionNameSuffix = ""
+        }
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = file(System.getProperty("user.home") + "/qa-genie-release.jks")
-            storePassword = "android"
-            keyAlias = "my-key-alias"
-            keyPassword = "android"
-        }
+    kotlinOptions {
+        jvmTarget = "17"
     }
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
@@ -49,9 +55,4 @@ flutter {
 
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
-}
-
-// Suppress Java obsolete version warnings
-tasks.withType<JavaCompile> {
-    options.compilerArgs.add("-Xlint:-options")
 }

@@ -1,41 +1,55 @@
-import 'package:qa_genie/core/database/database_service.dart';
-import 'package:qa_genie/engine/generation_result.dart';
-import 'package:qa_genie/engine/generation_service.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/data/dto/generation_dto.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
+import 'package:qa_genie/engine/prompts/prompt_composer.dart';
+import 'package:qa_genie/engine/planners/scenario_planner.dart';
+import 'package:qa_genie/engine/orchestration/pipeline_orchestrator.dart';
 
 class GenerateTestCasesUseCase {
-  final GenerationService _service = GenerationService();
+  final PipelineOrchestrator _orchestrator;
 
-  Future<GenerationResult> execute({
-    required String module,
-    required String feature,
-    required String platform,
-    String? notes,
-  }) async {
-    final maxCases = await UsageManager.maxCasesPerBatch();
+  const GenerateTestCasesUseCase({required PipelineOrchestrator orchestrator})
+    : _orchestrator = orchestrator;
 
-    final db = await DatabaseService.db;
-    int startIndex = 1;
-    await db.transaction((txn) async {
-      final prefix =
-          'TC_${module.replaceAll(' ', '_').toUpperCase()}_${feature.replaceAll(' ', '_').toUpperCase()}_';
-      final rows = await txn.rawQuery(
-        'SELECT MAX(CAST(SUBSTR(id, LENGTH(?)+1) AS INTEGER)) as max_idx FROM test_cases WHERE id LIKE ?',
-        [prefix, '$prefix%'],
-      );
-      final maxIdx = rows.first['max_idx'];
-      startIndex = (maxIdx != null ? (maxIdx as int) : 0) + 1;
-    });
-
-    final result = await _service.execute(
-      module: module,
-      feature: feature,
-      platform: platform,
-      maxCases: maxCases,
-      notes: notes,
-      startIndex: startIndex,
+  Future<GenerationSession> execute({required GenerationDto dto}) async {
+    final planner = ScenarioPlanner(
+      module: dto.module,
+      feature: dto.feature,
+      platform: dto.platform,
+      mode: dto.mode,
+      count: dto.count,
+      domain: dto.domain,
+      constraints: dto.constraints,
     );
 
-    return result;
+    final skeletons = planner.generateSkeletons();
+
+    final prompt = PromptComposer.compose(
+      module: dto.module,
+      feature: dto.feature,
+      platform: dto.platform,
+      skeletons: skeletons,
+      domain: dto.domain,
+    );
+
+    final request = GenerationRequest(
+      module: dto.module,
+      feature: dto.feature,
+      platform: dto.platform,
+      generationMode: dto.mode.name,
+      requestedCaseCount: dto.count,
+      constraints: dto.constraints,
+      domain: dto.domain,
+    );
+
+    final result = await _orchestrator.execute(
+      prompt: prompt,
+      request: request,
+    );
+
+    return GenerationSession(
+      traceId: result.traceId,
+      testCases: result.cases,
+      auditReport: result.auditReport,
+    );
   }
 }

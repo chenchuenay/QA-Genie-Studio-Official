@@ -1,4 +1,4 @@
-import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 
 class ExportValidationResult {
   final bool isValid;
@@ -8,7 +8,7 @@ class ExportValidationResult {
 }
 
 class ExportValidationService {
-  static ExportValidationResult validate(List<TestCaseModel> suite) {
+  static ExportValidationResult validate(List<FinalizedTestCase> suite) {
     final errors = <String>[];
 
     if (suite.isEmpty) {
@@ -23,16 +23,24 @@ class ExportValidationService {
       final idx = i + 1;
 
       if (tc.id.trim().isEmpty) errors.add('Case #$idx: ID is empty.');
-      if (seenIds.contains(tc.id.trim())) errors.add('Case #$idx: Duplicate ID "${tc.id}".');
+      if (seenIds.contains(tc.id.trim()))
+        errors.add('Case #$idx: Duplicate ID "${tc.id}".');
       seenIds.add(tc.id.trim());
       if (tc.title.trim().isEmpty) errors.add('Case #$idx: Title is empty.');
-      if (tc.steps.isEmpty) errors.add('Case #$idx ("${tc.title}"): No steps defined.');
+      if (tc.steps.isEmpty)
+        errors.add('Case #$idx ("${tc.title}"): No steps defined.');
       for (int j = 0; j < tc.steps.length; j++) {
-        if (tc.steps[j].action.trim().isEmpty) errors.add('Case #$idx ("${tc.title}"), Step ${j + 1}: Action is empty.');
+        if (tc.steps[j].action.trim().isEmpty)
+          errors.add(
+            'Case #$idx ("${tc.title}"), Step ${j + 1}: Action is empty.',
+          );
       }
-      if (tc.expectedResult.trim().isEmpty) errors.add('Case #$idx ("${tc.title}"): Expected result is empty.');
+      if (tc.expectedResult.trim().isEmpty)
+        errors.add('Case #$idx ("${tc.title}"): Expected result is empty.');
       if (!['High', 'Medium', 'Low'].contains(tc.priority)) {
-        errors.add('Case #$idx ("${tc.title}"): Invalid priority "${tc.priority}".');
+        errors.add(
+          'Case #$idx ("${tc.title}"): Invalid priority "${tc.priority}".',
+        );
       }
     }
     return ExportValidationResult(isValid: errors.isEmpty, errors: errors);

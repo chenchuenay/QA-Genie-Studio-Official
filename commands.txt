@@ -1,0 +1,20 @@
+
+
+flutter run --flavor dev
+
+
+flutter run --flavor prod
+
+
+
+
+
+
+Build commands for APKs
+
+bash
+# Dev APK
+flutter build apk --release --flavor dev
+
+# Prod APK
+flutter build apk --release --flavor prod

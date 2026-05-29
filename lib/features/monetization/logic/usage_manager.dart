@@ -1,144 +1,261 @@
-import 'dart:convert';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:crypto/crypto.dart';
 import 'package:qa_genie/app/config/app_config.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qa_genie/core/security/security_bridge.dart';
+import 'package:qa_genie/core/network/cloud_authority_service.dart';
+// lib/features/monetization/logic/usage_manager.dart
 
 class UsageManager {
-  static const _countKey = "daily_gen_count";
-  static const _exportKey = "daily_export_count";
-  static const _dateKey = "last_reset_date";
-  static const _installIdKey = "install_id";
-  static const _storage = FlutterSecureStorage();
+  static const _generationCountKey = 'generation_count';
 
-  static Future<String> _getInstallationId() async {
-    String? id = await _storage.read(key: _installIdKey);
-    if (id == null) {
-      final deviceInfo = DeviceInfoPlugin();
-      final packageInfo = await PackageInfo.fromPlatform();
-      final androidId = (await deviceInfo.androidInfo).id;
-      final fp =
-          "${packageInfo.packageName}_${androidId}_${DateTime.now().millisecondsSinceEpoch}";
-      id = _hashString(fp);
-      await _storage.write(key: _installIdKey, value: id);
-      final prefs = await SharedPreferences.getInstance();
-      if (!prefs.containsKey('first_launch_date')) {
-        await prefs.setString(
-          'first_launch_date',
-          DateTime.now().toIso8601String(),
-        );
-      }
-    }
-    return id;
-  }
+  static const _rewardedGenerationCountKey = 'rewarded_generation_count';
 
-  static String _hashString(String s) {
-    final bytes = utf8.encode(s);
-    return sha256.convert(bytes).toString();
+  static const _exportCountKey = 'export_count';
+
+  static const _summaryExportCountKey = 'summary_export_count';
+
+  static const _rewardedExportCountKey = 'rewarded_export_count';
+
+  static const _proKey = 'is_pro';
+
+  static const int _freeDailyGenerationLimit = 1;
+
+  static const int _rewardedDailyGenerationLimit = 5;
+
+  static const int _proDailyGenerationLimit = 15;
+
+  static const int _rewardedDailyExportLimit = 50;
+
+  static Future<SharedPreferences> _prefs() async {
+    return SharedPreferences.getInstance();
   }
 
   static Future<bool> isPro() async {
-    if (!AppConfig.isProduction) return AppConfig.testProMode;
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('is_pro') ?? false;
-  }
-
-  static Future<void> setPro(bool v) async {
-    if (!AppConfig.isProduction) AppConfig.testProMode = v;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_pro', v);
-    await prefs.setBool('testProMode', v);
-  }
-
-  // Reset all daily limits (for testing)
-  static Future<void> resetLimits() async {
-    final iid = await _getInstallationId();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('${_countKey}_$iid', 0);
-    await prefs.setInt('${_exportKey}_$iid', 0);
-  }
-
-  static Future<String> _dateSuffix() async {
-    final iid = await _getInstallationId();
-    return '${_dateKey}_$iid';
-  }
-
-  static Future<void> _resetIfNewDay() async {
-    final prefs = await SharedPreferences.getInstance();
-    final ds = await _dateSuffix();
-    final last = prefs.getString(ds);
-    final today = DateTime.now().toIso8601String().split("T").first;
-    if (last != today) {
-      final iid = await _getInstallationId();
-      await prefs.setString(ds, today);
-      await prefs.setInt('${_countKey}_$iid', 0);
-      await prefs.setInt('${_exportKey}_$iid', 0);
+    if (!EnvironmentAuthority.isProduction && AppConfig.testProMode) {
+      return true;
     }
+
+    final prefs = await _prefs();
+
+    return prefs.getBool(_proKey) ?? false;
+  }
+
+  static Future<void> setPro(bool value) async {
+    final prefs = await _prefs();
+
+    await prefs.setBool(_proKey, value);
   }
 
   static Future<int> getGenerationCount() async {
-    await _resetIfNewDay();
-    final iid = await _getInstallationId();
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('${_countKey}_$iid') ?? 0;
+    final prefs = await _prefs();
+
+    return prefs.getInt(_generationCountKey) ?? 0;
   }
 
-  static Future<void> incrementGeneration() async {
-    await _resetIfNewDay();
-    final iid = await _getInstallationId();
-    final prefs = await SharedPreferences.getInstance();
-    final c = await getGenerationCount();
-    await prefs.setInt('${_countKey}_$iid', c + 1);
-  }
+  static Future<int> getRewardedGenerationCount() async {
+    final prefs = await _prefs();
 
-  static Future<int> getExportCount() async {
-    await _resetIfNewDay();
-    final iid = await _getInstallationId();
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('${_exportKey}_$iid') ?? 0;
-  }
-
-  static Future<void> incrementExport() async {
-    await _resetIfNewDay();
-    final iid = await _getInstallationId();
-    final prefs = await SharedPreferences.getInstance();
-    final c = await getExportCount();
-    await prefs.setInt('${_exportKey}_$iid', c + 1);
+    return prefs.getInt(_rewardedGenerationCountKey) ?? 0;
   }
 
   static Future<bool> canGenerate({bool afterRewardedAd = false}) async {
-    final pro = await UsageManager.isPro();
-    if (!AppConfig.isProduction && pro) return true;
-    final count = await getGenerationCount();
-    if (pro) return count < 15;
-    if (count < 1) return true;
-    if (count < 6) return afterRewardedAd;
-    return false;
+    if (SecurityBridge.instance.canBypassLimits) {
+      return true;
+    }
+
+    final pro = await isPro();
+
+    if (pro) {
+      return _checkServerQuota(
+        type: 'generation',
+        limit: _proDailyGenerationLimit,
+      );
+    }
+
+    final freeCount = await getGenerationCount();
+
+    final rewardedCount = await getRewardedGenerationCount();
+
+    if (freeCount < _freeDailyGenerationLimit) {
+      return true;
+    }
+
+    if (!afterRewardedAd) {
+      return false;
+    }
+
+    return rewardedCount < _rewardedDailyGenerationLimit;
+  }
+
+  static Future<void> incrementGeneration({bool rewarded = false}) async {
+    final prefs = await _prefs();
+
+    if (rewarded) {
+      final rewardedCount = await getRewardedGenerationCount();
+
+      await prefs.setInt(_rewardedGenerationCountKey, rewardedCount + 1);
+    } else {
+      final count = await getGenerationCount();
+
+      await prefs.setInt(_generationCountKey, count + 1);
+    }
+
+    await CloudAuthorityService.instance.trackUsage(
+      type: 'generation',
+      value: 1,
+    );
   }
 
   static Future<int> freeGensRemaining() async {
     final count = await getGenerationCount();
-    if (count >= 6) return 0;
-    return 6 - count;
+
+    final remaining = _freeDailyGenerationLimit - count;
+
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  static Future<int> rewardedGensRemaining() async {
+    final count = await getRewardedGenerationCount();
+
+    final remaining = _rewardedDailyGenerationLimit - count;
+
+    return remaining < 0 ? 0 : remaining;
   }
 
   static Future<int> proGensRemaining() async {
     final count = await getGenerationCount();
-    return (15 - count).clamp(0, 15);
+
+    final remaining = _proDailyGenerationLimit - count;
+
+    return remaining < 0 ? 0 : remaining;
   }
 
-  static Future<int> maxCasesPerBatch() async {
-    return (await isPro()) ? 16 : 8;
+  static Future<int> getExportCount() async {
+    final prefs = await _prefs();
+
+    return prefs.getInt(_exportCountKey) ?? 0;
   }
 
+  static Future<int> getSummaryExportCount() async {
+    final prefs = await _prefs();
 
-  static Future<bool> canExport({bool afterRewardedAd = false}) async {
+    return prefs.getInt(_summaryExportCountKey) ?? 0;
+  }
+
+  static Future<int> getRewardedExportCount() async {
+    final prefs = await _prefs();
+
+    return prefs.getInt(_rewardedExportCountKey) ?? 0;
+  }
+
+  static Future<bool> canExport({bool rewarded = false}) async {
     final pro = await isPro();
+
     if (pro) return true;
+
+    final exportCount = await getExportCount();
+
+    if (exportCount < 1) {
+      return true;
+    }
+
+    if (!rewarded) {
+      return false;
+    }
+
+    final rewardedExports = await getRewardedExportCount();
+
+    return rewardedExports < _rewardedDailyExportLimit;
+  }
+
+  static Future<bool> canExportSummary({bool rewarded = false}) async {
+    final pro = await isPro();
+
+    if (pro) return true;
+
+    final summaryCount = await getSummaryExportCount();
+
+    if (summaryCount < 1) {
+      return true;
+    }
+
+    if (!rewarded) {
+      return false;
+    }
+
+    final rewardedExports = await getRewardedExportCount();
+
+    return rewardedExports < _rewardedDailyExportLimit;
+  }
+
+  static Future<void> incrementExport({bool rewarded = false}) async {
+    final prefs = await _prefs();
+
     final count = await getExportCount();
-    if (count == 0) return true;
-    return afterRewardedAd;
+
+    await prefs.setInt(_exportCountKey, count + 1);
+
+    if (rewarded) {
+      final rewardedCount = await getRewardedExportCount();
+
+      await prefs.setInt(_rewardedExportCountKey, rewardedCount + 1);
+    }
+
+    await CloudAuthorityService.instance.trackUsage(type: 'export', value: 1);
+  }
+
+  static Future<void> incrementSummaryExport({bool rewarded = false}) async {
+    final prefs = await _prefs();
+
+    final count = await getSummaryExportCount();
+
+    await prefs.setInt(_summaryExportCountKey, count + 1);
+
+    if (rewarded) {
+      final rewardedCount = await getRewardedExportCount();
+
+      await prefs.setInt(_rewardedExportCountKey, rewardedCount + 1);
+    }
+
+    await CloudAuthorityService.instance.trackUsage(
+      type: 'summary_export',
+      value: 1,
+    );
+  }
+
+  static Future<int> rewardedExportsRemaining() async {
+    final count = await getRewardedExportCount();
+
+    final remaining = _rewardedDailyExportLimit - count;
+
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  static Future<void> resetDailyUsage() async {
+    final prefs = await _prefs();
+
+    await prefs.remove(_generationCountKey);
+
+    await prefs.remove(_rewardedGenerationCountKey);
+
+    await prefs.remove(_rewardedExportCountKey);
+  }
+
+  static Future<void> resetLimits() {
+    return resetDailyUsage();
+  }
+
+  static Future<bool> _checkServerQuota({
+    required String type,
+    required int limit,
+  }) async {
+    try {
+      return await CloudAuthorityService.instance.validateQuota(
+        type: type,
+        limit: limit,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 }

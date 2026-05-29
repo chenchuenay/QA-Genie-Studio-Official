@@ -1,127 +1,85 @@
-import 'package:qa_genie/core/logging/telemetry_models.dart';
-import 'package:qa_genie/core/logging/telemetry_collector.dart';
+import 'dart:async';
 
-enum ErrorSeverity { info, warning, error, critical }
+class UiErrorEvent {
+  final String id;
 
-enum ErrorSource {
-  generationUi,
-  exportEngine,
-  uiPreview,
-  framework,
-  platform,
-  auth,
-  storage,
-  network,
-  aiProvider,
-  bugReportUi,
-  unknown
-}
+  final String title;
 
-enum ErrorStage {
-  request,
-  rawResponse,
-  parse,
-  repair,
-  validation,
-  export,
-  uiRender,
-  generation,
-  aiCall,
-  runtime,
-  submit,
-  unknown
-}
+  final String message;
 
-class UiErrorRecord {
+  final String category;
+
   final DateTime timestamp;
-  final String operationId; // matches a generation batch
-  final ErrorSource source;
-  final String screen; // screen name if applicable
-  final ErrorStage stage;
-  final ErrorSeverity severity;
-  final String userMessage;
-  final String technicalError;
-  final String? stackTrace;
 
-  UiErrorRecord({
+  final Object? exception;
+
+  final StackTrace? stackTrace;
+
+  final bool isFatal;
+
+  const UiErrorEvent({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.category,
     required this.timestamp,
-    required this.operationId,
-    required this.source,
-    required this.screen,
-    required this.stage,
-    required this.severity,
-    required this.userMessage,
-    required this.technicalError,
+    this.exception,
     this.stackTrace,
+    this.isFatal = false,
   });
 
-  @override
-  String toString() {
-    final buf = StringBuffer();
-    buf.writeln(
-      '[$timestamp] OP: $operationId | SOURCE: ${source.name.toUpperCase()} | SCREEN: $screen | STAGE: ${stage.name.toUpperCase()} | SEVERITY: ${severity.name.toUpperCase()}',
+  UiErrorEvent copyWith({
+    String? id,
+    String? title,
+    String? message,
+    String? category,
+    DateTime? timestamp,
+    Object? exception,
+    StackTrace? stackTrace,
+    bool? isFatal,
+  }) {
+    return UiErrorEvent(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      message: message ?? this.message,
+      category: category ?? this.category,
+      timestamp: timestamp ?? this.timestamp,
+      exception: exception ?? this.exception,
+      stackTrace: stackTrace ?? this.stackTrace,
+      isFatal: isFatal ?? this.isFatal,
     );
-    buf.writeln('  USER: $userMessage');
-    buf.writeln('  TECH: $technicalError');
-    if (stackTrace != null) buf.writeln('  STACK: $stackTrace');
-    return buf.toString();
   }
 }
 
 class UiErrorStore {
-  static final UiErrorStore _instance = UiErrorStore._internal();
-  factory UiErrorStore() => _instance;
-  UiErrorStore._internal();
+  UiErrorStore._();
 
-  final List<UiErrorRecord> _errors = [];
-  String _currentOperationId = '';
+  static final StreamController<UiErrorEvent> _streamController =
+      StreamController<UiErrorEvent>.broadcast();
 
-  void startOperation(String operationId) {
-    _currentOperationId = operationId;
+  static final List<UiErrorEvent> _history = [];
+
+  static Stream<UiErrorEvent> get stream => _streamController.stream;
+
+  static List<UiErrorEvent> get history => List.unmodifiable(_history);
+
+  static void push(UiErrorEvent event) {
+    _history.insert(0, event);
+
+    if (_history.length > 200) {
+      _history.removeRange(200, _history.length);
+    }
+
+    if (!_streamController.isClosed) {
+      _streamController.add(event);
+    }
   }
 
-  void add({
-    required ErrorSource source,
-    required String screen,
-    required ErrorStage stage,
-    required ErrorSeverity severity,
-    required String userMessage,
-    required dynamic error,
-    StackTrace? stack,
-  }) {
-    try {
-      TelemetryCollector().uiErrorTraces.add(
-        UiErrorTrace(
-          timestamp: DateTime.now(),
-          screen: screen,
-          userMessage: userMessage,
-          technicalError: error.toString(),
-          stackTrace: stack?.toString(),
-        ),
-      );
-    } catch (_) {}
-
-    _errors.add(
-      UiErrorRecord(
-        timestamp: DateTime.now(),
-        operationId: _currentOperationId,
-        source: source,
-        screen: screen,
-        stage: stage,
-        severity: severity,
-        userMessage: userMessage,
-        technicalError: error.toString(),
-        stackTrace: stack?.toString(),
-      ),
-    );
+  static void clear() {
+    _history.clear();
   }
 
-  List<UiErrorRecord> get errors => List.unmodifiable(_errors);
-
-  void clear() => _errors.clear();
-
-  String dump() {
-    if (_errors.isEmpty) return "None.";
-    return _errors.map((e) => e.toString()).join('\n');
+  static Future<void> dispose() async {
+    await _streamController.close();
   }
 }

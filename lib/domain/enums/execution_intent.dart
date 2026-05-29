@@ -10,5 +10,5 @@ enum ExecutionIntent {
   workflowRecovery,
   navigationIntegrity,
   positive,
-  usability
+  usability,
 }

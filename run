@@ -1,0 +1,3 @@
+#!/bin/bash
+# QA Genie default dev runner
+flutter run --flavor dev "$@"

@@ -13,9 +13,10 @@ analyzer:
   exclude:
     - _trash/**
     - build/**
-    - functions/node_modules/**
     - project_context_snapshot.dart
     - project_snapshot_part_*.dart
+    - legacy_disabled/**
+    - temp_disabled/**
   errors:
     avoid_print: ignore
     constant_identifier_names: ignore

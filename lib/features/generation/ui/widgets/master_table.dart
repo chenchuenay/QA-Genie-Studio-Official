@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:qa_genie/app/theme/constants.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/core/utils/priority_utils.dart';
+import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/data/models/test_case_model.dart';
 import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/domain/entities/finalized_test_case.dart';
+import 'package:qa_genie/core/utils/finalized_test_case_adapter.dart';
 
 class MasterTable extends StatefulWidget {
-  final List<TestCaseModel> testCases;
-  final List<TestCaseModel> originalData;
+  final List<FinalizedTestCase> testCases;
   final bool isEditable;
   final VoidCallback? onCellEdit;
   final int? suiteId;
@@ -16,7 +18,6 @@ class MasterTable extends StatefulWidget {
   const MasterTable({
     super.key,
     required this.testCases,
-    required this.originalData,
     required this.isEditable,
     this.onCellEdit,
     this.suiteId,
@@ -28,6 +29,7 @@ class MasterTable extends StatefulWidget {
 }
 
 class _MasterTableState extends State<MasterTable> {
+  late List<TestCaseModel> _legacyModels;
   late List<TextEditingController> idCtrls,
       titleCtrls,
       preCtrls,
@@ -36,7 +38,9 @@ class _MasterTableState extends State<MasterTable> {
       expectedCtrls,
       actualCtrls,
       statusCtrls;
+
   final List<double> colWidths = [85, 150, 170, 180, 140, 180, 140, 110, 90];
+
   static const _cyanColor = Color(0xFF00D4FF);
   static const _dividerColor = Color(0xFF2A2A3A);
   static const _textPrimary = Colors.white;
@@ -52,70 +56,28 @@ class _MasterTableState extends State<MasterTable> {
       bottom: BorderSide(color: _fieldBorder.withOpacity(0.45), width: 1.2),
     ),
   );
+
   @override
   void initState() {
     super.initState();
-    print('MASTER TABLE RUNTIME COUNT: ${widget.testCases.length}');
+    _syncLegacyModels();
     _initControllers();
   }
 
-  void _initControllers() {
-    for (final tc in widget.testCases) {
-      tc.priority = PriorityUtils.normalize(tc.priority);
-    }
-    idCtrls = widget.testCases
-        .map((e) => TextEditingController(text: e.id))
-        .toList();
-    titleCtrls = widget.testCases
-        .map((e) => TextEditingController(text: e.title))
-        .toList();
-    preCtrls = widget.testCases
-        .map((e) => TextEditingController(text: e.preconditions.join('\n')))
-        .toList();
-    stepsCtrls = widget.testCases
-        .map(
-          (e) => TextEditingController(
-            text: e.steps
-                .asMap()
-                .entries
-                .map((entry) => "${entry.key + 1}. ${entry.value.action}")
-                .join('\n'),
-          ),
-        )
-        .toList();
-    dataCtrls = widget.testCases
-        .map(
-          (e) => TextEditingController(
-            text: e.steps
-                .map((s) => s.data)
-                .where((d) => d.isNotEmpty)
-                .join('\n'),
-          ),
-        )
-        .toList();
-    expectedCtrls = widget.testCases
-        .map((e) => TextEditingController(text: e.expectedResult))
-        .toList();
-    actualCtrls = widget.testCases
-        .map((e) => TextEditingController(text: e.actualResult))
-        .toList();
-    statusCtrls = widget.testCases
-        .map((e) => TextEditingController(text: e.status))
+  void _syncLegacyModels() {
+    _legacyModels = widget.testCases
+        .map((e) => FinalizedTestCaseAdapter.toLegacy(e))
         .toList();
   }
 
-  void _disposeControllers() {
-    for (final c in [
-      ...idCtrls,
-      ...titleCtrls,
-      ...preCtrls,
-      ...stepsCtrls,
-      ...dataCtrls,
-      ...expectedCtrls,
-      ...actualCtrls,
-      ...statusCtrls,
-    ]) {
-      c.dispose();
+  @override
+  void didUpdateWidget(covariant MasterTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.testCases != widget.testCases ||
+        oldWidget.testCases.length != widget.testCases.length) {
+      _disposeControllers();
+      _syncLegacyModels();
+      _initControllers();
     }
   }
 
@@ -125,8 +87,83 @@ class _MasterTableState extends State<MasterTable> {
     super.dispose();
   }
 
+  void _initControllers() {
+    for (final tc in _legacyModels) {
+      tc.priority = PriorityUtils.normalize(tc.priority);
+      if (tc.status.trim().isEmpty) tc.status = 'Not Executed';
+    }
+
+    idCtrls = _legacyModels
+        .map((e) => TextEditingController(text: e.id))
+        .toList();
+    titleCtrls = _legacyModels
+        .map((e) => TextEditingController(text: e.title))
+        .toList();
+    preCtrls = _legacyModels
+        .map((e) => TextEditingController(text: e.preconditions.join('\n')))
+        .toList();
+    stepsCtrls = _legacyModels
+        .map(
+          (e) => TextEditingController(
+            text: e.steps
+                .asMap()
+                .entries
+                .map((entry) => '${entry.key + 1}. ${entry.value.action}')
+                .join('\n'),
+          ),
+        )
+        .toList();
+    dataCtrls = _legacyModels
+        .map(
+          (e) => TextEditingController(
+            text: e.steps
+                .map((s) => s.data)
+                .where((d) => d.isNotEmpty)
+                .join('\n'),
+          ),
+        )
+        .toList();
+    expectedCtrls = _legacyModels
+        .map((e) => TextEditingController(text: e.expectedResult))
+        .toList();
+    actualCtrls = _legacyModels
+        .map((e) => TextEditingController(text: e.actualResult))
+        .toList();
+    statusCtrls = _legacyModels
+        .map((e) => TextEditingController(text: e.status))
+        .toList();
+  }
+
+  void _disposeControllers() {
+    final all = [
+      ...idCtrls,
+      ...titleCtrls,
+      ...preCtrls,
+      ...stepsCtrls,
+      ...dataCtrls,
+      ...expectedCtrls,
+      ...actualCtrls,
+      ...statusCtrls,
+    ];
+    for (final c in all) c.dispose();
+  }
+
   double get _totalWidth => colWidths.reduce((a, b) => a + b);
-  void _editted() => widget.onCellEdit?.call();
+
+  void _edited(int index) {
+    final legacy = _legacyModels[index];
+    final canonical = widget.testCases[index];
+    widget.testCases[index] = canonical.copyWith(
+      title: legacy.title,
+      priority: legacy.priority,
+      status: legacy.status,
+      actualResult: legacy.actualResult,
+      expectedResult: legacy.expectedResult,
+      preconditions: legacy.preconditions,
+      type: legacy.type,
+    );
+    widget.onCellEdit?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +181,7 @@ class _MasterTableState extends State<MasterTable> {
                 const Divider(height: 1, thickness: 1, color: _dividerColor),
                 Expanded(
                   child: ListView.separated(
-                    itemCount: widget.testCases.length,
+                    itemCount: _legacyModels.length,
                     separatorBuilder: (_, __) => const Divider(
                       height: 1,
                       thickness: 1,
@@ -198,7 +235,7 @@ class _MasterTableState extends State<MasterTable> {
   }
 
   Widget _buildRow(int i) {
-    final tc = widget.testCases[i];
+    final legacy = _legacyModels[i];
     return GestureDetector(
       onLongPress: () => _showContextMenu(i),
       child: Container(
@@ -207,38 +244,41 @@ class _MasterTableState extends State<MasterTable> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _idCell(i, tc),
-            _plainTextCell(titleCtrls[i], colWidths[1], (v) => tc.title = v),
+            _idCell(i, legacy),
+            _plainTextCell(titleCtrls[i], colWidths[1], (v) {
+              legacy.title = v;
+              _edited(i);
+            }),
             _plainTextCell(preCtrls[i], colWidths[2], (v) {
-              tc.preconditions = v
+              legacy.preconditions = v
                   .split('\n')
                   .map((e) => e.trim())
                   .where((e) => e.isNotEmpty)
                   .toList();
+              _edited(i);
             }),
-            _stepsCell(i, tc),
+            _stepsCell(i, legacy),
             _plainTextCell(dataCtrls[i], colWidths[4], (v) {
               final data = v
                   .split('\n')
                   .map((e) => e.trim())
                   .where((e) => e.isNotEmpty)
                   .toList();
-              for (int j = 0; j < tc.steps.length; j++) {
-                tc.steps[j].data = j < data.length ? data[j] : '';
+              for (int j = 0; j < legacy.steps.length; j++) {
+                legacy.steps[j].data = j < data.length ? data[j] : '';
               }
+              _edited(i);
             }),
-            _plainTextCell(
-              expectedCtrls[i],
-              colWidths[5],
-              (v) => tc.expectedResult = v,
-            ),
-            _plainTextCell(
-              actualCtrls[i],
-              colWidths[6],
-              (v) => tc.actualResult = v,
-            ),
-            _statusCell(tc),
-            _priorityCell(tc),
+            _plainTextCell(expectedCtrls[i], colWidths[5], (v) {
+              legacy.expectedResult = v;
+              _edited(i);
+            }),
+            _plainTextCell(actualCtrls[i], colWidths[6], (v) {
+              legacy.actualResult = v;
+              _edited(i);
+            }),
+            _statusCell(i, legacy),
+            _priorityCell(i, legacy),
           ],
         ),
       ),
@@ -273,7 +313,7 @@ class _MasterTableState extends State<MasterTable> {
                       ),
                       onChanged: (v) {
                         tc.id = v;
-                        _editted();
+                        _edited(i);
                       },
                     ),
                   )
@@ -305,12 +345,25 @@ class _MasterTableState extends State<MasterTable> {
         color = Colors.blue;
         break;
       case CaseSource.repairedAi:
+      case CaseSource.repaired:
         label = 'REP';
         color = Colors.orange;
         break;
       case CaseSource.fallback:
         label = 'FB';
         color = Colors.red;
+        break;
+      case CaseSource.emergency:
+        label = 'EM';
+        color = Colors.redAccent;
+        break;
+      case CaseSource.imported:
+        label = 'IMP';
+        color = Colors.purple;
+        break;
+      case CaseSource.manual:
+        label = 'MAN';
+        color = Colors.green;
         break;
     }
     return Container(
@@ -373,7 +426,7 @@ class _MasterTableState extends State<MasterTable> {
                       );
                     }
                     if (newSteps.isNotEmpty) tc.steps = newSteps;
-                    _editted();
+                    _edited(i);
                   },
                 ),
               )
@@ -387,11 +440,11 @@ class _MasterTableState extends State<MasterTable> {
 
   Widget _plainTextCell(
     TextEditingController ctrl,
-    double w,
+    double width,
     Function(String) onChanged,
   ) {
     return SizedBox(
-      width: w,
+      width: width,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: widget.isEditable
@@ -409,7 +462,7 @@ class _MasterTableState extends State<MasterTable> {
                   ),
                   onChanged: (v) {
                     onChanged(v);
-                    _editted();
+                    _edited(0);
                   },
                 ),
               )
@@ -424,9 +477,9 @@ class _MasterTableState extends State<MasterTable> {
     );
   }
 
-  Widget _statusCell(TestCaseModel tc) {
+  Widget _statusCell(int i, TestCaseModel tc) {
     const options = ['Pass', 'Fail', 'Blocked', 'Not Executed'];
-    final displayValue = tc.status.isEmpty ? '—' : tc.status;
+    final displayValue = tc.status.trim().isEmpty ? 'Not Executed' : tc.status;
     return SizedBox(
       width: colWidths[7],
       child: Padding(
@@ -436,26 +489,27 @@ class _MasterTableState extends State<MasterTable> {
                 decoration: _fieldDecoration,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: options.toSet().contains(displayValue)
+                  child: DropdownButton<String>(
+                    value: options.contains(displayValue)
                         ? displayValue
-                        : options.first,
+                        : 'Not Executed',
                     dropdownColor: const Color(0xFF1E1E2E),
                     style: const TextStyle(color: _textPrimary, fontSize: 12),
                     isExpanded: true,
                     items: options
-                        .toSet()
-                        .toList()
                         .map(
-                          (e) => DropdownMenuItem<String?>(
+                          (e) => DropdownMenuItem<String>(
                             value: e,
                             child: _statusPill(e),
                           ),
                         )
                         .toList(),
                     onChanged: (v) {
-                      if (v != null) setState(() => tc.status = v);
-                      _editted();
+                      if (v == null) return;
+                      setState(() {
+                        tc.status = v;
+                      });
+                      _edited(i);
                     },
                   ),
                 ),
@@ -465,21 +519,24 @@ class _MasterTableState extends State<MasterTable> {
     );
   }
 
-  Widget _statusPill(String label) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-    decoration: BoxDecoration(
-      color: _pillBg,
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(color: _textPrimary, fontSize: 12),
-      textAlign: TextAlign.center,
-    ),
-  );
+  Widget _statusPill(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: _pillBg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: _textPrimary, fontSize: 12),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
 
-  Widget _priorityCell(TestCaseModel tc) {
+  Widget _priorityCell(int i, TestCaseModel tc) {
     const options = ['High', 'Medium', 'Low'];
+    final value = PriorityUtils.normalize(tc.priority);
     return SizedBox(
       width: colWidths[8],
       child: Padding(
@@ -490,7 +547,7 @@ class _MasterTableState extends State<MasterTable> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: options.contains(tc.priority) ? tc.priority : 'High',
+                    value: options.contains(value) ? value : 'Medium',
                     dropdownColor: const Color(0xFF1E1E2E),
                     isExpanded: true,
                     items: options
@@ -502,13 +559,15 @@ class _MasterTableState extends State<MasterTable> {
                         )
                         .toList(),
                     onChanged: (v) {
-                      setState(() => tc.priority = v ?? 'High');
-                      _editted();
+                      setState(() {
+                        tc.priority = v ?? 'Medium';
+                      });
+                      _edited(i);
                     },
                   ),
                 ),
               )
-            : _priorityBadge(tc.priority.isEmpty ? 'High' : tc.priority),
+            : _priorityBadge(value),
       ),
     );
   }
@@ -546,7 +605,10 @@ class _MasterTableState extends State<MasterTable> {
     );
   }
 
-  void _showContextMenu(int index) async {
+  // ============================================================
+  // CONTEXT MENU (Copy / Move / Delete)
+  // ============================================================
+  Future<void> _showContextMenu(int index) async {
     final RenderBox box = context.findRenderObject() as RenderBox;
     final Offset offset = box.localToGlobal(Offset.zero);
     final result = await showMenu<String>(
@@ -559,20 +621,20 @@ class _MasterTableState extends State<MasterTable> {
       ),
       color: const Color(0xFF2C2C3E),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      items: [
-        const PopupMenuItem(
+      items: const [
+        PopupMenuItem(
           value: 'copy',
           child: Center(
             child: Text('Copy', style: TextStyle(color: Colors.white)),
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'move',
           child: Center(
             child: Text('Move', style: TextStyle(color: Colors.white)),
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'delete',
           child: Center(
             child: Text('Delete', style: TextStyle(color: Colors.red)),
@@ -581,96 +643,113 @@ class _MasterTableState extends State<MasterTable> {
       ],
     );
     if (result == null) return;
-    final tc = widget.testCases[index];
+
+    final tc = _legacyModels[index]; // operate on legacy model
     if (result == 'copy') {
       final newTc = tc.copy();
       newTc.id = '${tc.id}_copy';
       if (widget.getOtherSuites != null) {
         final suites = await widget.getOtherSuites!();
+        if (!mounted) return;
         final targetSuiteId = await showDialog<int>(
           context: context,
-          builder: (ctx) {
-            return AlertDialog(
-              backgroundColor: AppColors.surface,
-              title: const Text(
-                "Copy to Suite",
-                style: TextStyle(color: Colors.white),
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text(
+              'Copy to Suite',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: suites.length,
+                itemBuilder: (_, i) {
+                  final s = suites[i];
+                  final sid = s['id'] as int;
+                  return ListTile(
+                    title: Text(
+                      '${s['moduleName']} · ${s['feature']}',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    onTap: () => Navigator.pop(ctx, sid),
+                  );
+                },
               ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: suites.length,
-                  itemBuilder: (_, i) {
-                    final s = suites[i];
-                    final sid = s['id'] as int;
-                    return ListTile(
-                      title: Text(
-                        "${s['moduleName']} · ${s['feature']}",
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      onTap: () => Navigator.pop(ctx, sid),
-                    );
-                  },
-                ),
-              ),
-            );
-          },
+            ),
+          ),
         );
         if (targetSuiteId != null) {
-          await DatabaseService.insertTestCases(targetSuiteId, [newTc]);
+          // Convert new legacy copy to canonical and insert
+          final newCanonical = FinalizedTestCaseAdapter.fromLegacy(newTc);
+          await DatabaseService.insertTestCases(
+            suiteId: targetSuiteId,
+            cases: [newCanonical],
+          );
         }
       } else if (widget.suiteId != null) {
-        // fallback: copy inside same suite if no other suites available
-        await DatabaseService.insertTestCases(widget.suiteId!, [newTc]);
+        final newCanonical = FinalizedTestCaseAdapter.fromLegacy(newTc);
+        await DatabaseService.insertTestCases(
+          suiteId: widget.suiteId!,
+          cases: [newCanonical],
+        );
+        if (!mounted) return;
         setState(() {
-          widget.testCases.insert(index + 1, newTc);
+          widget.testCases.insert(index + 1, newCanonical);
+          _syncLegacyModels();
+          _disposeControllers();
           _initControllers();
         });
+        _edited(index);
       }
     } else if (result == 'move') {
       if (widget.getOtherSuites != null) {
         final suites = await widget.getOtherSuites!();
+        if (!mounted) return;
         final targetSuiteId = await showDialog<int>(
           context: context,
-          builder: (ctx) {
-            return AlertDialog(
-              backgroundColor: AppColors.surface,
-              title: const Text(
-                "Move to Suite",
-                style: TextStyle(color: Colors.white),
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text(
+              'Move to Suite',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: suites.length,
+                itemBuilder: (_, i) {
+                  final s = suites[i];
+                  final sid = s['id'] as int;
+                  if (sid == widget.suiteId) return const SizedBox.shrink();
+                  return ListTile(
+                    title: Text(
+                      '${s['moduleName']} · ${s['feature']}',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    onTap: () => Navigator.pop(ctx, sid),
+                  );
+                },
               ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: suites.length,
-                  itemBuilder: (_, i) {
-                    final s = suites[i];
-                    final sid = s['id'] as int;
-                    if (sid == widget.suiteId) return const SizedBox.shrink();
-                    return ListTile(
-                      title: Text(
-                        "${s['moduleName']} · ${s['feature']}",
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      onTap: () => Navigator.pop(ctx, sid),
-                    );
-                  },
-                ),
-              ),
-            );
-          },
+            ),
+          ),
         );
         if (targetSuiteId != null) {
-          await DatabaseService.insertTestCases(targetSuiteId, [tc]);
-          if (tc.dbId != null) {
-            await DatabaseService.deleteTestCase(tc.dbId!);
-          }
+          final canonical = FinalizedTestCaseAdapter.fromLegacy(tc);
+          await DatabaseService.insertTestCases(
+            suiteId: targetSuiteId,
+            cases: [canonical],
+          );
+          if (tc.dbId != null) await DatabaseService.deleteTestCase(tc.dbId!);
+          if (!mounted) return;
           setState(() {
             widget.testCases.removeAt(index);
+            _syncLegacyModels();
+            _disposeControllers();
             _initControllers();
           });
+          _edited(index);
         }
       }
     } else if (result == 'delete') {
@@ -679,7 +758,7 @@ class _MasterTableState extends State<MasterTable> {
         builder: (ctx) => AlertDialog(
           backgroundColor: AppColors.surface,
           title: const Text(
-            "Delete Test Case?",
+            'Delete Test Case?',
             style: TextStyle(color: Colors.white),
           ),
           content: Text(
@@ -689,23 +768,25 @@ class _MasterTableState extends State<MasterTable> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text("Cancel"),
+              child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text("Delete", style: TextStyle(color: Colors.red)),
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
             ),
           ],
         ),
       );
       if (confirm == true) {
-        if (tc.dbId != null) {
-          await DatabaseService.deleteTestCase(tc.dbId!);
-        }
+        if (tc.dbId != null) await DatabaseService.deleteTestCase(tc.dbId!);
+        if (!mounted) return;
         setState(() {
           widget.testCases.removeAt(index);
+          _syncLegacyModels();
+          _disposeControllers();
           _initControllers();
         });
+        _edited(index);
       }
     }
   }

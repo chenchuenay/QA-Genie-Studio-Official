@@ -1,81 +1,106 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:qa_genie/app/theme/constants.dart';
-import 'package:qa_genie/core/error/ui_error_store.dart';
+import 'package:qa_genie/app/theme/app_theme.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/shared/dialogs/ad_dialog.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
-import 'package:qa_genie/data/models/test_case_model.dart';
-import 'package:qa_genie/presentation/widgets/ad_dialog.dart';
-import 'package:qa_genie/domain/usecases/get_history_use_case.dart';
-import 'package:qa_genie/domain/usecases/save_test_suite_use_case.dart';
-import 'package:qa_genie/presentation/widgets/export_bottom_sheet.dart';
-import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
+import 'package:qa_genie/app/startup/app_dependencies.dart';
+import 'package:qa_genie/shared/dialogs/export_bottom_sheet.dart';
+import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
+import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
-import 'package:qa_genie/presentation/widgets/export_success_dialog.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart'; // ✅ for GenerationSession
 
 class PreviewScreen extends StatefulWidget {
-  final List<TestCaseModel> testCases;
-  final String moduleName, feature, platform;
+  final GenerationSession session;
+  final String moduleName;
+  final String feature;
+  final String platform;
   final int suiteId;
+
   const PreviewScreen({
     super.key,
-    required this.testCases,
+    required this.session,
     required this.moduleName,
     required this.feature,
     required this.platform,
     required this.suiteId,
   });
+
   @override
   State<PreviewScreen> createState() => _PreviewScreenState();
 }
 
 class _PreviewScreenState extends State<PreviewScreen>
     with WidgetsBindingObserver {
+  final ExportTestCasesUseCase _exportUseCase = ExportTestCasesUseCase();
+  final SaveSuiteUseCase _saveUseCase = AppDependencies.saveSuiteUseCase;
+
+  Timer? _debounceTimer;
   bool isEditable = false;
-  late List<TestCaseModel> originalData, workingData;
-  final _exportUseCase = ExportTestCasesUseCase();
-  final _saveUseCase = SaveTestSuiteUseCase();
   bool _hasUnsaved = false;
 
   @override
   void initState() {
     super.initState();
-    print('PREVIEW RUNTIME COUNT: ${widget.testCases.length}');
     WidgetsBinding.instance.addObserver(this);
-    originalData = widget.testCases.map((e) => e.copy()).toList();
-    workingData = widget.testCases.map((e) => e.copy()).toList();
+    debugPrint('PREVIEW RUNTIME COUNT: ${widget.session.testCases.length}');
   }
 
-  void _markUnsaved() => setState(() => _hasUnsaved = true);
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _forceSave();
+    }
+  }
+
+  Future<void> _forceSave() async {
+    if (_hasUnsaved) await _autoSave();
+  }
 
   Future<void> _autoSave() async {
     if (!_hasUnsaved) return;
-    await _saveUseCase.update(suiteId: widget.suiteId, cases: workingData);
+    // Save using the canonical list directly – convert to legacy via adapter
+    await _saveUseCase.saveSuite(
+      suiteId: widget.suiteId,
+      cases: widget.session.testCases, // List<FinalizedTestCase>
+    );
+    if (!mounted) return;
     setState(() {
-      originalData = workingData.map((e) => e.copy()).toList();
       _hasUnsaved = false;
     });
   }
 
   Future<bool> _onWillPop() async {
-    await _autoSave();
+    await _forceSave();
     return true;
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      if (_hasUnsaved) {
-        _autoSave();
-      }
-    }
+  void _markUnsaved() {
+    if (!mounted) return;
+    setState(() {
+      _hasUnsaved = true;
+    });
   }
 
-  void _toggleEdit() => setState(() => isEditable = !isEditable);
+  void _toggleEdit() {
+    setState(() {
+      isEditable = !isEditable;
+    });
+  }
+
   void _undo() {
     setState(() {
-      workingData = originalData.map((e) => e.copy()).toList();
       _hasUnsaved = false;
     });
   }
@@ -83,8 +108,11 @@ class _PreviewScreenState extends State<PreviewScreen>
   Future<void> _saveAndExitEdit() async {
     try {
       await _autoSave();
-      if (mounted) setState(() => isEditable = false);
-    } catch (e, stack) {
+      if (!mounted) return;
+      setState(() {
+        isEditable = false;
+      });
+    } catch (e, stackTrace) {
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
@@ -93,16 +121,16 @@ class _PreviewScreenState extends State<PreviewScreen>
         severity: ErrorSeverity.error,
         userMessage: 'Save failed: $e',
         error: e,
-        stack: stack,
+        stack: stackTrace,
       );
     }
   }
 
-  // Single _export method with optional updatedCases parameter
-  Future<void> _export(String type, [List<TestCaseModel>? updatedCases]) async {
+  Future<void> _export(String type) async {
     await _autoSave();
-    final pro = await UsageManager.isPro();
-    if (!pro) {
+
+    final isPro = await UsageManager.isPro();
+    if (!isPro) {
       final exportCount = await UsageManager.getExportCount();
       if (exportCount > 0) {
         final watched = await showDialog<bool>(
@@ -112,40 +140,31 @@ class _PreviewScreenState extends State<PreviewScreen>
         if (watched != true) return;
       }
     }
+
     try {
-      // If we have updated cases from the preview, persist them first
-      if (updatedCases != null) {
-        setState(() {
-          workingData = updatedCases;
-          originalData = updatedCases.map((e) => e.copy()).toList();
-          _hasUnsaved = false;
-        });
-        await _saveUseCase.update(suiteId: widget.suiteId, cases: updatedCases);
-      }
-      print('EXPORT: Starting $type with ${originalData.length} cases');
-      print('EXPORT: actual cases count = ${originalData.length}');
+      debugPrint(
+        'EXPORT STARTED: $type | ${widget.session.testCases.length} cases',
+      );
       await _exportUseCase.execute(
         type: type,
-        cases: workingData,
+        cases: widget.session.testCases, // ✅ direct list
         moduleName: widget.moduleName,
         featureName: widget.feature,
       );
       await UsageManager.incrementExport();
-      print('EXPORT: $type completed successfully');
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (_) => ExportSuccessDialog(
-            type: type,
-            count: workingData.length,
-            moduleName: widget.moduleName,
-            onShareAgain: () => _export(type),
-          ),
-        );
-      }
-    } catch (e, stack) {
-      print('EXPORT ERROR: $e');
-      print('STACK: $stack');
+      debugPrint('EXPORT SUCCESS: $type');
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => ExportSuccessDialog(
+          type: type,
+          count: widget.session.testCases.length,
+          moduleName: widget.moduleName,
+          onShareAgain: () => _export(type),
+        ),
+      );
+    } catch (e, stackTrace) {
+      debugPrint('EXPORT ERROR: $e');
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
@@ -154,68 +173,49 @@ class _PreviewScreenState extends State<PreviewScreen>
         severity: ErrorSeverity.error,
         userMessage: 'Export failed: $e',
         error: e,
-        stack: stack,
+        stack: stackTrace,
       );
     }
   }
 
-  void _openExport() async {
+  Future<void> _openExport() async {
     await _autoSave();
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => ExportBottomSheet(
-        cases: workingData,
+        cases: widget.session.testCases, // ✅ direct list
         moduleName: widget.moduleName,
         featureName: widget.feature,
         onSave: (updatedCases) async {
-          // Save changes without exporting
-          setState(() {
-            workingData = updatedCases;
-            originalData = updatedCases.map((e) => e.copy()).toList();
-            _hasUnsaved = false;
-          });
-          await _saveUseCase.update(
-            suiteId: widget.suiteId,
-            cases: updatedCases,
+          await _autoSave();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Changes saved'),
+              backgroundColor: AppColors.success,
+            ),
           );
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Changes saved"),
-                backgroundColor: AppColors.success,
-              ),
-            );
-          }
-          Navigator.pop(context); // close the bottom sheet
+          Navigator.pop(context);
         },
         onExport: (type, updatedCases) async {
-          // Save changes, then export
-          setState(() {
-            workingData = updatedCases;
-            originalData = updatedCases.map((e) => e.copy()).toList();
-            _hasUnsaved = false;
-          });
-          await _saveUseCase.update(
-            suiteId: widget.suiteId,
-            cases: updatedCases,
-          );
-          Navigator.pop(context); // close the bottom sheet
-          await _export(type, updatedCases);
+          await _autoSave();
+          if (mounted) Navigator.pop(context);
+          await _export(type);
         },
       ),
     );
   }
 
-  void _openSummary() async {
+  Future<void> _openSummary() async {
     await _autoSave();
     if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => SummaryReportScreen(
-          testCases: workingData,
+          session: widget.session, // ✅ pass entire session
           moduleName: widget.moduleName,
           feature: widget.feature,
           platform: widget.platform,
@@ -251,7 +251,9 @@ class _PreviewScreenState extends State<PreviewScreen>
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () async {
-                          if (await _onWillPop()) Navigator.pop(context);
+                          if (await _onWillPop()) {
+                            if (mounted) Navigator.pop(context);
+                          }
                         },
                       ),
                       const Spacer(),
@@ -266,7 +268,7 @@ class _PreviewScreenState extends State<PreviewScreen>
                               color: AppColors.accent,
                             ),
                             label: const Text(
-                              "Summary Report",
+                              'Summary Report',
                               style: TextStyle(
                                 color: AppColors.accent,
                                 fontWeight: FontWeight.w600,
@@ -305,7 +307,7 @@ class _PreviewScreenState extends State<PreviewScreen>
                             ),
                           ),
                           child: const Text(
-                            "EDIT",
+                            'EDIT',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
@@ -321,7 +323,7 @@ class _PreviewScreenState extends State<PreviewScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                           child: const Text(
-                            "UNDO",
+                            'UNDO',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
@@ -343,7 +345,7 @@ class _PreviewScreenState extends State<PreviewScreen>
                             ),
                           ),
                           child: const Text(
-                            "SAVE",
+                            'SAVE',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
@@ -355,21 +357,11 @@ class _PreviewScreenState extends State<PreviewScreen>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    "${widget.moduleName} · ${widget.platform} · ${originalData.length} cases",
+                    '${widget.moduleName} · ${widget.platform} · ${widget.session.testCases.length} cases',
                     style: AppText.subheading,
                   ),
                 ],
               ),
-            ),
-            Builder(
-              builder: (context) {
-                final displayedCount = originalData.length;
-                assert(
-                  displayedCount <= 16,
-                  'HEADER DISPLAY COUNT VIOLATION: $displayedCount',
-                );
-                return const SizedBox.shrink();
-              },
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -391,7 +383,7 @@ class _PreviewScreenState extends State<PreviewScreen>
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        "Actual Result and Status are left empty — fill them during execution. Accurate reporting starts with what you record.",
+                        'Actual Result and Status are left empty — fill them during execution. Accurate reporting starts with what you record.',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
@@ -407,14 +399,13 @@ class _PreviewScreenState extends State<PreviewScreen>
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: MasterTable(
-                  testCases: workingData,
-                  originalData: originalData,
+                  testCases: widget.session.testCases,
                   isEditable: isEditable,
                   onCellEdit: _markUnsaved,
                   suiteId: widget.suiteId,
                   getOtherSuites: () async {
-                    final svc = GetHistoryUseCase();
-                    return await svc.execute();
+                    final history = AppDependencies.getHistoryUseCase;
+                    return history.getAllSuites();
                   },
                 ),
               ),
@@ -422,7 +413,7 @@ class _PreviewScreenState extends State<PreviewScreen>
             const Padding(
               padding: EdgeInsets.only(bottom: 4),
               child: Text(
-                "AI‑generated content – please review and adjust before export.",
+                'AI-generated content – please review and adjust before export.',
                 style: TextStyle(
                   color: AppColors.textHint,
                   fontSize: 10,
@@ -440,7 +431,7 @@ class _PreviewScreenState extends State<PreviewScreen>
                   child: ElevatedButton.icon(
                     onPressed: _openExport,
                     icon: const Icon(Icons.file_download),
-                    label: const Text("Export Options"),
+                    label: const Text('Export Options'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       foregroundColor: Colors.black,

@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:qa_genie/app/theme/constants.dart';
-import 'package:qa_genie/core/utils/priority_utils.dart';
-import 'package:qa_genie/core/error/ui_error_store.dart';
-import 'package:qa_genie/data/models/test_case_model.dart';
+import 'package:qa_genie/app/theme/app_text.dart';
+import 'package:qa_genie/app/theme/app_theme.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
+import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 
 class SummaryReportScreen extends StatefulWidget {
-  final List<TestCaseModel> testCases;
-  final String moduleName, feature, platform;
+  final GenerationSession session;
+  final String moduleName;
+  final String feature;
+  final String platform;
   final int? suiteId;
 
   const SummaryReportScreen({
     super.key,
-    required this.testCases,
+    required this.session,
     required this.moduleName,
     required this.feature,
     required this.platform,
@@ -25,33 +29,10 @@ class SummaryReportScreen extends StatefulWidget {
 }
 
 class _SummaryReportScreenState extends State<SummaryReportScreen> {
-  late final List<TestCaseModel> _summaryCases;
-
-  @override
-  void initState() {
-    super.initState();
-    _summaryCases = widget.testCases.map((tc) => tc.copy()).toList();
-    for (final tc in _summaryCases) {
-      tc.priority = PriorityUtils.normalize(tc.priority);
-    }
-  }
-
   final _testerCtrl = TextEditingController(text: 'QA Tester');
   final _envCtrl = TextEditingController(text: 'Staging');
   final _exportUseCase = ExportTestCasesUseCase();
   bool _editing = false;
-
-  String get _tester => _testerCtrl.text.trim();
-  String get _environment => _envCtrl.text.trim();
-
-  int get _total => _summaryCases.length;
-  int get _passed => _summaryCases.where((c) => c.status == 'Pass').length;
-  int get _failed => _summaryCases.where((c) => c.status == 'Fail').length;
-  int get _blocked => _summaryCases.where((c) => c.status == 'Blocked').length;
-  String get _passRate {
-    final executed = _passed + _failed + _blocked;
-    return executed > 0 ? (_passed / executed * 100).toStringAsFixed(1) : '0.0';
-  }
 
   @override
   void dispose() {
@@ -60,30 +41,44 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
     super.dispose();
   }
 
-  void _toggleEdit() {
-    setState(() => _editing = !_editing);
+  String get _tester => _testerCtrl.text.trim();
+  String get _environment => _envCtrl.text.trim();
+
+  int get _total => widget.session.testCases.length;
+  int get _passed =>
+      widget.session.testCases.where((c) => c.status == 'Pass').length;
+  int get _failed =>
+      widget.session.testCases.where((c) => c.status == 'Fail').length;
+  int get _blocked =>
+      widget.session.testCases.where((c) => c.status == 'Blocked').length;
+
+  String get _passRate {
+    final executed = _passed + _failed + _blocked;
+    return executed == 0
+        ? '0.0'
+        : (_passed / executed * 100).toStringAsFixed(1);
   }
+
+  void _toggleEdit() => setState(() => _editing = !_editing);
 
   Future<void> _export() async {
     try {
       await _exportUseCase.exportSummaryReport(
-        cases: _summaryCases,
+        cases: widget.session.testCases,
         moduleName: widget.moduleName,
         featureName: widget.feature,
         platform: widget.platform,
         testerName: _tester,
         environment: _environment,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Summary report exported!"),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Summary report exported!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
     } catch (e, stack) {
-      // Log the error and show SnackBar
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
@@ -99,128 +94,117 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        return true;
-      },
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          title: const Text(
-            "Summary Report",
-            style: TextStyle(color: Colors.white),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () async {
-              if (context.mounted) Navigator.pop(context);
-            },
-          ),
-          actions: [
-            IconButton(
-              icon: Icon(
-                _editing ? Icons.visibility : Icons.edit,
-                color: AppColors.accentLight,
-                size: 22,
-              ),
-              tooltip: _editing ? 'Done' : 'Edit',
-              onPressed: _toggleEdit,
-            ),
-          ],
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Summary Report',
+          style: TextStyle(color: Colors.white),
         ),
-        body: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "${widget.moduleName} · ${widget.feature}",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+        actions: [
+          IconButton(
+            tooltip: _editing ? 'Done' : 'Edit',
+            onPressed: _toggleEdit,
+            icon: Icon(
+              _editing ? Icons.visibility : Icons.edit,
+              color: AppColors.accentLight,
+              size: 22,
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${widget.moduleName} · ${widget.feature}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
-                    Text(
-                      "${widget.platform} · ${widget.testCases.length} cases",
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
+                  ),
+                  Text(
+                    '${widget.platform} · ${widget.session.testCases.length} cases',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
                     ),
-                    const SizedBox(height: 20),
-                    _buildField("Tester Name", "e.g. John Doe", _testerCtrl),
-                    const SizedBox(height: 12),
-                    _buildField(
-                      "Environment",
-                      "e.g. Staging / iOS 17 / Chrome",
-                      _envCtrl,
+                  ),
+                  const SizedBox(height: 20),
+                  _buildField('Tester Name', 'e.g. John Doe', _testerCtrl),
+                  const SizedBox(height: 12),
+                  _buildField(
+                    'Environment',
+                    'e.g. Staging / iOS 17 / Chrome',
+                    _envCtrl,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildStatRow(),
+                  const SizedBox(height: 16),
+                  _buildPassRateBar(),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Priority Breakdown',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 24),
-                    _buildStatRow(),
-                    const SizedBox(height: 16),
-                    _buildPassRateBar(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      "Priority Breakdown",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildPriorityBreakdown(),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Detailed Results',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 8),
-                    _buildPriorityBreakdown(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      "Detailed Results",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildDetailedTable(),
-                    const SizedBox(height: 20),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDetailedTable(),
+                  const SizedBox(height: 20),
+                ],
               ),
             ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    onPressed: _editing ? null : _export,
-                    icon: const Icon(Icons.picture_as_pdf, color: Colors.black),
-                    label: const Text(
-                      "Export Summary Report",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _editing ? null : _export,
+                  icon: const Icon(Icons.picture_as_pdf, color: Colors.black),
+                  label: const Text(
+                    'Export Summary Report',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _editing
-                          ? AppColors.textHint
-                          : AppColors.accent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _editing
+                        ? AppColors.textHint
+                        : AppColors.accent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -228,6 +212,7 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
   Widget _buildField(String label, String hint, TextEditingController ctrl) {
     return TextField(
       controller: ctrl,
+      readOnly: !_editing,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
@@ -237,20 +222,8 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
         filled: true,
         fillColor: AppColors.card,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
         ),
       ),
     );
@@ -263,7 +236,7 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
         _statCard('Passed', _passed, AppColors.success),
         _statCard('Failed', _failed, AppColors.error),
         _statCard('Blocked', _blocked, AppColors.warning),
-      ].map((w) => Expanded(child: w)).toList(),
+      ].map((e) => Expanded(child: e)).toList(),
     );
   }
 
@@ -309,11 +282,11 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              "Pass Rate",
+              'Pass Rate',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             Text(
-              "$_passRate%",
+              '$_passRate%',
               style: const TextStyle(
                 color: AppColors.success,
                 fontWeight: FontWeight.bold,
@@ -336,7 +309,7 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
   }
 
   Widget _buildPriorityBreakdown() {
-    final cases = _summaryCases;
+    final cases = widget.session.testCases;
     return Column(
       children: [
         _priorityRow(
@@ -361,7 +334,7 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
   Widget _priorityRow(
     String label,
     Color color,
-    Iterable<TestCaseModel> cases,
+    Iterable<FinalizedTestCase> cases,
   ) {
     final p = cases.where((c) => c.status == 'Pass').length;
     final f = cases.where((c) => c.status == 'Fail').length;
@@ -381,7 +354,7 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              "$label: ${cases.length} cases ($p Passed, $f Failed, $b Blocked, $n Not Executed)",
+              '$label: ${cases.length} cases ($p Passed, $f Failed, $b Blocked, $n Not Executed)',
               style: const TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -395,56 +368,52 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
 
   Widget _buildDetailedTable() {
     return Column(
-      children: _summaryCases
-          .map(
-            (tc) => Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border),
+      children: widget.session.testCases.map((tc) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 1,
+                child: Text(
+                  tc.id,
+                  style: const TextStyle(
+                    color: AppColors.accentLight,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 1,
-                    child: Text(
-                      tc.id,
-                      style: const TextStyle(
-                        color: AppColors.accentLight,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      tc.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Expanded(flex: 1, child: _priorityBadge(tc.priority)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    flex: 1,
-                    child: _editing
-                        ? _statusDropdown(tc)
-                        : _statusText(tc.status),
-                  ),
-                ],
+              Expanded(
+                flex: 3,
+                child: Text(
+                  tc.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
               ),
-            ),
-          )
-          .toList(),
+              Expanded(flex: 1, child: _priorityBadge(tc.priority)),
+              const SizedBox(width: 6),
+              Expanded(
+                flex: 1,
+                child: _editing ? _statusDropdown(tc) : _statusText(tc.status),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
   Widget _priorityBadge(String p) {
-    final Color bg;
+    Color bg;
     switch (p) {
       case 'High':
         bg = const Color(0xFFB71C1C);
@@ -466,18 +435,18 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
       ),
       child: Text(
         p,
+        textAlign: TextAlign.center,
         style: const TextStyle(
           color: Colors.white,
           fontSize: 10,
           fontWeight: FontWeight.w600,
         ),
-        textAlign: TextAlign.center,
       ),
     );
   }
 
   Widget _statusText(String s) {
-    final Color c;
+    late final Color c;
     switch (s) {
       case 'Pass':
         c = AppColors.success;
@@ -497,7 +466,7 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
     );
   }
 
-  Widget _statusDropdown(TestCaseModel tc) {
+  Widget _statusDropdown(FinalizedTestCase tc) {
     const options = ['Pass', 'Fail', 'Blocked', 'Not Executed'];
     final currentValue = options.contains(tc.status)
         ? tc.status
@@ -529,7 +498,10 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
               )
               .toList(),
           onChanged: (v) {
-            if (v != null) setState(() => tc.status = v);
+            if (v == null) return;
+            setState(() {
+              tc.status = v;
+            });
           },
         ),
       ),

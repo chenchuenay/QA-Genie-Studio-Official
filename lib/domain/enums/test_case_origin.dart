@@ -1,5 +1,1 @@
-enum TestCaseOrigin {
-  ai,
-  repaired,
-  fallback,
-}
+enum TestCaseOrigin { ai, repairedAi, fallback }
