@@ -2,11 +2,11 @@ import 'package:equatable/equatable.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 
-// ignore: must_be_immutable
 class FinalizedTestCase extends Equatable {
-  final String id;
+  int? dbId;
+  String id;
   String title;
-  final List<String> preconditions;
+  List<String> preconditions;
   String testData;
   List<TestStep> steps;
   String expectedResult;
@@ -14,12 +14,10 @@ class FinalizedTestCase extends Equatable {
   String priority;
   String status;
   String type;
-
-  final int? dbId;
-  final String module;
-  final String feature;
-  final String platform;
-  final CaseSource source;
+  String module;
+  String feature;
+  String platform;
+  CaseSource source;
 
   FinalizedTestCase({
     this.dbId,
@@ -60,9 +58,9 @@ class FinalizedTestCase extends Equatable {
       dbId: dbId ?? this.dbId,
       id: id ?? this.id,
       title: title ?? this.title,
-      preconditions: preconditions ?? this.preconditions,
+      preconditions: preconditions ?? List.from(this.preconditions),
       testData: testData ?? this.testData,
-      steps: steps ?? this.steps,
+      steps: steps ?? this.steps.map((s) => s.copyWith()).toList(), // deep copy
       expectedResult: expectedResult ?? this.expectedResult,
       actualResult: actualResult ?? this.actualResult,
       priority: priority ?? this.priority,
@@ -77,20 +75,20 @@ class FinalizedTestCase extends Equatable {
 
   @override
   List<Object?> get props => [
-    dbId,
-    id,
-    title,
-    preconditions,
-    testData,
-    steps,
-    expectedResult,
-    actualResult,
-    priority,
-    status,
-    type,
-    module,
-    feature,
-    platform,
-    source,
-  ];
+        dbId,
+        id,
+        title,
+        preconditions,
+        testData,
+        steps,
+        expectedResult,
+        actualResult,
+        priority,
+        status,
+        type,
+        module,
+        feature,
+        platform,
+        source,
+      ];
 }

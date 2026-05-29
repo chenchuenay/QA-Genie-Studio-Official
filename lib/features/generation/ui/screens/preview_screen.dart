@@ -5,14 +5,15 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/shared/dialogs/ad_dialog.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/shared/dialogs/export_bottom_sheet.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
+import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
-import 'package:qa_genie/engine/models/pipeline_models.dart'; // ✅ for GenerationSession
 
 class PreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -34,8 +35,7 @@ class PreviewScreen extends StatefulWidget {
   State<PreviewScreen> createState() => _PreviewScreenState();
 }
 
-class _PreviewScreenState extends State<PreviewScreen>
-    with WidgetsBindingObserver {
+class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserver {
   final ExportTestCasesUseCase _exportUseCase = ExportTestCasesUseCase();
   final SaveSuiteUseCase _saveUseCase = AppDependencies.saveSuiteUseCase;
 
@@ -43,11 +43,12 @@ class _PreviewScreenState extends State<PreviewScreen>
   bool isEditable = false;
   bool _hasUnsaved = false;
 
+  List<FinalizedTestCase>? _backupCases;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    debugPrint('PREVIEW RUNTIME COUNT: ${widget.session.testCases.length}');
   }
 
   @override
@@ -59,9 +60,7 @@ class _PreviewScreenState extends State<PreviewScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      _forceSave();
-    }
+    if (state == AppLifecycleState.paused) _forceSave();
   }
 
   Future<void> _forceSave() async {
@@ -70,15 +69,9 @@ class _PreviewScreenState extends State<PreviewScreen>
 
   Future<void> _autoSave() async {
     if (!_hasUnsaved) return;
-    // Save using the canonical list directly – convert to legacy via adapter
-    await _saveUseCase.saveSuite(
-      suiteId: widget.suiteId,
-      cases: widget.session.testCases, // List<FinalizedTestCase>
-    );
+    await _saveUseCase.saveSuite(suiteId: widget.suiteId, cases: widget.session.testCases);
     if (!mounted) return;
-    setState(() {
-      _hasUnsaved = false;
-    });
+    setState(() => _hasUnsaved = false);
   }
 
   Future<bool> _onWillPop() async {
@@ -88,21 +81,24 @@ class _PreviewScreenState extends State<PreviewScreen>
 
   void _markUnsaved() {
     if (!mounted) return;
-    setState(() {
-      _hasUnsaved = true;
-    });
+    setState(() => _hasUnsaved = true);
   }
 
   void _toggleEdit() {
-    setState(() {
-      isEditable = !isEditable;
-    });
+    if (!isEditable) {
+      _backupCases = widget.session.testCases.map((tc) => tc.copyWith()).toList();
+    }
+    setState(() => isEditable = !isEditable);
   }
 
   void _undo() {
-    setState(() {
-      _hasUnsaved = false;
-    });
+    if (_backupCases != null) {
+      widget.session.testCases.clear();
+      widget.session.testCases.addAll(_backupCases!);
+      _backupCases = null;
+      setState(() {});
+      _markUnsaved();
+    }
   }
 
   Future<void> _saveAndExitEdit() async {
@@ -111,8 +107,9 @@ class _PreviewScreenState extends State<PreviewScreen>
       if (!mounted) return;
       setState(() {
         isEditable = false;
+        _backupCases = null;
       });
-    } catch (e, stackTrace) {
+    } catch (e, stack) {
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
@@ -121,38 +118,29 @@ class _PreviewScreenState extends State<PreviewScreen>
         severity: ErrorSeverity.error,
         userMessage: 'Save failed: $e',
         error: e,
-        stack: stackTrace,
+        stack: stack,
       );
     }
   }
 
   Future<void> _export(String type) async {
     await _autoSave();
-
     final isPro = await UsageManager.isPro();
     if (!isPro) {
       final exportCount = await UsageManager.getExportCount();
       if (exportCount > 0) {
-        final watched = await showDialog<bool>(
-          context: context,
-          builder: (_) => const AdDialog(),
-        );
+        final watched = await showDialog<bool>(context: context, builder: (_) => const AdDialog());
         if (watched != true) return;
       }
     }
-
     try {
-      debugPrint(
-        'EXPORT STARTED: $type | ${widget.session.testCases.length} cases',
-      );
       await _exportUseCase.execute(
         type: type,
-        cases: widget.session.testCases, // ✅ direct list
+        cases: widget.session.testCases,
         moduleName: widget.moduleName,
         featureName: widget.feature,
       );
       await UsageManager.incrementExport();
-      debugPrint('EXPORT SUCCESS: $type');
       if (!mounted) return;
       showDialog(
         context: context,
@@ -163,8 +151,7 @@ class _PreviewScreenState extends State<PreviewScreen>
           onShareAgain: () => _export(type),
         ),
       );
-    } catch (e, stackTrace) {
-      debugPrint('EXPORT ERROR: $e');
+    } catch (e, stack) {
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
@@ -173,7 +160,7 @@ class _PreviewScreenState extends State<PreviewScreen>
         severity: ErrorSeverity.error,
         userMessage: 'Export failed: $e',
         error: e,
-        stack: stackTrace,
+        stack: stack,
       );
     }
   }
@@ -185,18 +172,18 @@ class _PreviewScreenState extends State<PreviewScreen>
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => ExportBottomSheet(
-        cases: widget.session.testCases, // ✅ direct list
+        cases: widget.session.testCases,
         moduleName: widget.moduleName,
         featureName: widget.feature,
         onSave: (updatedCases) async {
+          // Replace the list reference to trigger UI update
+          widget.session.testCases = List.from(updatedCases);
           await _autoSave();
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Changes saved'),
-              backgroundColor: AppColors.success,
-            ),
+            const SnackBar(content: Text('Changes saved'), backgroundColor: AppColors.success),
           );
+          setState(() {});
           Navigator.pop(context);
         },
         onExport: (type, updatedCases) async {
@@ -215,7 +202,7 @@ class _PreviewScreenState extends State<PreviewScreen>
       context,
       MaterialPageRoute(
         builder: (_) => SummaryReportScreen(
-          session: widget.session, // ✅ pass entire session
+          session: widget.session,
           moduleName: widget.moduleName,
           feature: widget.feature,
           platform: widget.platform,
@@ -237,11 +224,7 @@ class _PreviewScreenState extends State<PreviewScreen>
             Container(
               padding: EdgeInsets.fromLTRB(4, topPadding, 16, 12),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.surface, AppColors.background],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
+                gradient: LinearGradient(colors: [AppColors.surface, AppColors.background]),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,84 +234,39 @@ class _PreviewScreenState extends State<PreviewScreen>
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () async {
-                          if (await _onWillPop()) {
-                            if (mounted) Navigator.pop(context);
-                          }
+                          if (await _onWillPop() && mounted) Navigator.pop(context);
                         },
                       ),
                       const Spacer(),
                       if (!isEditable) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: OutlinedButton.icon(
-                            onPressed: _openSummary,
-                            icon: const Icon(
-                              Icons.description,
-                              size: 16,
-                              color: AppColors.accent,
-                            ),
-                            label: const Text(
-                              'Summary Report',
-                              style: TextStyle(
-                                color: AppColors.accent,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 11,
-                              ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                color: AppColors.accent,
-                                width: 1.2,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              backgroundColor: AppColors.accent.withOpacity(
-                                0.08,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                            ),
+                        OutlinedButton.icon(
+                          onPressed: _openSummary,
+                          icon: const Icon(Icons.description, size: 16, color: AppColors.accent),
+                          label: const Text('Summary Report', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600, fontSize: 11)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.accent, width: 1.2),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: AppColors.accent.withOpacity(0.08),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         OutlinedButton(
                           onPressed: _toggleEdit,
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
                             side: const BorderSide(color: AppColors.border),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           ),
-                          child: const Text(
-                            'EDIT',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
+                          child: const Text('EDIT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                         ),
                       ],
                       if (isEditable) ...[
                         TextButton(
                           onPressed: _undo,
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          child: const Text(
-                            'UNDO',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
+                          style: TextButton.styleFrom(foregroundColor: AppColors.error, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                          child: const Text('UNDO', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
                         ),
                         const SizedBox(width: 4),
                         ElevatedButton(
@@ -336,21 +274,10 @@ class _PreviewScreenState extends State<PreviewScreen>
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.success,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          child: const Text(
-                            'SAVE',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
+                          child: const Text('SAVE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                         ),
                       ],
                     ],
@@ -373,22 +300,13 @@ class _PreviewScreenState extends State<PreviewScreen>
                 ),
                 padding: const EdgeInsets.all(10),
                 child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 16,
-                      color: AppColors.warning,
-                    ),
+                    Icon(Icons.info_outline, size: 16, color: AppColors.warning),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Actual Result and Status are left empty — fill them during execution. Accurate reporting starts with what you record.',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                        ),
+                        'Actual Result and Status are left empty — fill them during execution.',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontStyle: FontStyle.italic),
                       ),
                     ),
                   ],
@@ -403,10 +321,7 @@ class _PreviewScreenState extends State<PreviewScreen>
                   isEditable: isEditable,
                   onCellEdit: _markUnsaved,
                   suiteId: widget.suiteId,
-                  getOtherSuites: () async {
-                    final history = AppDependencies.getHistoryUseCase;
-                    return history.getAllSuites();
-                  },
+                  getOtherSuites: () async => AppDependencies.getHistoryUseCase.getAllSuites(),
                 ),
               ),
             ),
@@ -414,12 +329,7 @@ class _PreviewScreenState extends State<PreviewScreen>
               padding: EdgeInsets.only(bottom: 4),
               child: Text(
                 'AI-generated content – please review and adjust before export.',
-                style: TextStyle(
-                  color: AppColors.textHint,
-                  fontSize: 10,
-                  fontStyle: FontStyle.italic,
-                ),
-                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textHint, fontSize: 10, fontStyle: FontStyle.italic),
               ),
             ),
             SafeArea(
@@ -435,9 +345,7 @@ class _PreviewScreenState extends State<PreviewScreen>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                   ),
                 ),
