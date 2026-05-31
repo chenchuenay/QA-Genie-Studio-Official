@@ -10,6 +10,26 @@ flutter run --flavor prod
 
 
 
+
+
+
+flutter clean
+flutter pub get
+flutter test test/forensic_tests/headless/generation/generation_pipeline_test.dart
+flutter test test/forensic_tests/headless/generation/live_mass_generation_test.dart
+flutter test test/forensic_tests/headless/exports/full_export_test.dart
+
+
+
+
+
+
+
+
+
+
+
+
 Build commands for APKs
 
 bash

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
-import 'package:qa_genie/shared/dialogs/ad_dialog.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
@@ -14,6 +13,8 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
+import 'package:qa_genie/features/monetization/ads/ad_service.dart'; // ✅ added
+// Remove: import 'package:qa_genie/shared/dialogs/ad_dialog.dart';
 
 class PreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -42,7 +43,6 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
   Timer? _debounceTimer;
   bool isEditable = false;
   bool _hasUnsaved = false;
-
   List<FinalizedTestCase>? _backupCases;
 
   @override
@@ -129,11 +129,18 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
     if (!isPro) {
       final exportCount = await UsageManager.getExportCount();
       if (exportCount > 0) {
-        final watched = await showDialog<bool>(context: context, builder: (_) => const AdDialog());
-        if (watched != true) return;
+        final watched = await AdService.showRewardedAd(
+          adUnitId: 'ca-app-pub-.../export_reward',
+          onRewarded: () async {
+            await UsageManager.incrementExport();
+          },
+          context: context,
+        );
+        if (!watched) return;
       }
     }
     try {
+      debugPrint('EXPORT STARTED: $type | ${widget.session.testCases.length} cases');
       await _exportUseCase.execute(
         type: type,
         cases: widget.session.testCases,
@@ -141,17 +148,18 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
         featureName: widget.feature,
       );
       await UsageManager.incrementExport();
+      debugPrint('EXPORT SUCCESS: $type');
       if (!mounted) return;
       showDialog(
         context: context,
         builder: (_) => ExportSuccessDialog(
           type: type,
-          count: widget.session.testCases.length,
           moduleName: widget.moduleName,
           onShareAgain: () => _export(type),
         ),
       );
-    } catch (e, stack) {
+    } catch (e, stackTrace) {
+      debugPrint('EXPORT ERROR: $e');
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
@@ -160,7 +168,7 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
         severity: ErrorSeverity.error,
         userMessage: 'Export failed: $e',
         error: e,
-        stack: stack,
+        stack: stackTrace,
       );
     }
   }
@@ -176,7 +184,6 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
         moduleName: widget.moduleName,
         featureName: widget.feature,
         onSave: (updatedCases) async {
-          // Replace the list reference to trigger UI update
           widget.session.testCases = List.from(updatedCases);
           await _autoSave();
           if (!mounted) return;
@@ -237,6 +244,8 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
                           if (await _onWillPop() && mounted) Navigator.pop(context);
                         },
                       ),
+                      const SizedBox(width: 8),
+                      const Text("Suite", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
                       const Spacer(),
                       if (!isEditable) ...[
                         OutlinedButton.icon(

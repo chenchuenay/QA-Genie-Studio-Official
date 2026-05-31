@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:pdf/pdf.dart';
+import 'package:flutter/material.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import 'package:qa_genie/core/error/exceptions.dart';
@@ -8,16 +9,18 @@ import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/adapters/csv_adapter.dart';
 import 'package:qa_genie/features/export/adapters/pdf_adapter.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
+import 'package:qa_genie/features/monetization/ads/ad_service.dart';
 import 'package:qa_genie/features/export/adapters/json_adapter.dart';
 import 'package:qa_genie/features/export/adapters/excel_adapter.dart';
 import 'package:qa_genie/domain/usecases/export_validation_service.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/export/folder/export_folder_service.dart';
 
 class ExportTestCasesUseCase {
   const ExportTestCasesUseCase();
 
   // ============================================================
-  // MAIN EXECUTION (moduleName and featureName are now optional)
+  // MAIN EXECUTION (moduleName and featureName optional)
   // ============================================================
 
   Future<void> execute({
@@ -29,11 +32,8 @@ class ExportTestCasesUseCase {
     try {
       _validateOrThrow(cases);
 
-      // If moduleName/featureName not provided, extract from first test case
-      final effectiveModule =
-          moduleName ?? (cases.isNotEmpty ? cases.first.module : 'Unknown');
-      final effectiveFeature =
-          featureName ?? (cases.isNotEmpty ? cases.first.feature : 'Unknown');
+      final effectiveModule = moduleName ?? (cases.isNotEmpty ? cases.first.module : 'Unknown');
+      final effectiveFeature = featureName ?? (cases.isNotEmpty ? cases.first.feature : 'Unknown');
 
       final normalizedType = type.trim().toLowerCase();
       final safeModule = _safeModulePrefix(effectiveModule);
@@ -48,7 +48,7 @@ class ExportTestCasesUseCase {
             moduleName: effectiveModule,
             featureName: effectiveFeature,
           );
-          return;
+          break;
         case 'jira':
           await CsvAdapter.export(
             cases,
@@ -56,7 +56,7 @@ class ExportTestCasesUseCase {
             moduleName: effectiveModule,
             featureName: effectiveFeature,
           );
-          return;
+          break;
         case 'xray':
           await JsonAdapter.export(
             cases,
@@ -64,7 +64,7 @@ class ExportTestCasesUseCase {
             moduleName: effectiveModule,
             featureName: effectiveFeature,
           );
-          return;
+          break;
         case 'pdf':
           await PdfAdapter.export(
             cases,
@@ -72,17 +72,19 @@ class ExportTestCasesUseCase {
             moduleName: effectiveModule,
             featureName: effectiveFeature,
           );
-          return;
+          break;
         default:
           throw ExportException('Unsupported export format: $type');
       }
+
+      await AdService.maybeShowInterstitial();
     } catch (e) {
       throw ExportException('Export execution failed: $e');
     }
   }
 
   // ============================================================
-  // SUMMARY REPORT (moduleName and featureName optional)
+  // SUMMARY REPORT (with rewarded ad for Core users after first free)
   // ============================================================
 
   Future<void> exportSummaryReport({
@@ -92,12 +94,25 @@ class ExportTestCasesUseCase {
     required String platform,
     required String testerName,
     required String environment,
+    required BuildContext context,
   }) async {
     try {
-      final effectiveModule =
-          moduleName ?? (cases.isNotEmpty ? cases.first.module : 'Unknown');
-      final effectiveFeature =
-          featureName ?? (cases.isNotEmpty ? cases.first.feature : 'Unknown');
+      final effectiveModule = moduleName ?? (cases.isNotEmpty ? cases.first.module : 'Unknown');
+      final effectiveFeature = featureName ?? (cases.isNotEmpty ? cases.first.feature : 'Unknown');
+
+      final isPro = await UsageManager.isPro();
+      if (!isPro && await UsageManager.isFirstExportFreeUsed()) {
+        final watched = await AdService.showRewardedAd(
+          adUnitId: 'ca-app-pub-.../summary_reward',
+          onRewarded: () async {
+            await UsageManager.incrementExport();
+          },
+          context: context,
+        );
+        if (!watched) return;
+      } else if (!isPro) {
+        await UsageManager.markFirstExportUsed();
+      }
 
       final data = ExportMapper.toSummaryReport(
         cases,
@@ -138,84 +153,54 @@ class ExportTestCasesUseCase {
       final file = File('${dir.path}/TSR_${safeModule}_$code.pdf');
       await file.writeAsBytes(await pdf.save());
       await Share.shareXFiles([XFile(file.path)]);
+
+      await AdService.maybeShowInterstitial();
     } catch (e) {
       throw ExportException('Summary export failed: $e');
     }
   }
 
   // ============================================================
-  // HEADER
+  // HEADER (unchanged)
   // ============================================================
-
   pw.Widget _buildHeader(Map<String, dynamic> data) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Test Summary Report',
-          style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-        ),
+        pw.Text('Test Summary Report', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 8),
         pw.Text('Suite: ${data['suiteName']}'),
         pw.Text('Platform: ${data['platform']}'),
         pw.Text('Date: ${data['date']}'),
-        if ((data['testerName'] ?? '').toString().isNotEmpty)
-          pw.Text('Tester: ${data['testerName']}'),
-        if ((data['environment'] ?? '').toString().isNotEmpty)
-          pw.Text('Environment: ${data['environment']}'),
+        if ((data['testerName'] ?? '').toString().isNotEmpty) pw.Text('Tester: ${data['testerName']}'),
+        if ((data['environment'] ?? '').toString().isNotEmpty) pw.Text('Environment: ${data['environment']}'),
       ],
     );
   }
 
   // ============================================================
-  // EXECUTION SUMMARY
+  // EXECUTION SUMMARY (unchanged)
   // ============================================================
-
   pw.Widget _buildExecutionSummary(Map<String, dynamic> data) {
-    final labels = [
-      'Total',
-      'Passed',
-      'Failed',
-      'Blocked',
-      'Not Executed',
-      'Pass Rate',
-    ];
-    final keys = [
-      'total',
-      'passed',
-      'failed',
-      'blocked',
-      'notExecuted',
-      'passRate',
-    ];
-
+    final labels = ['Total', 'Passed', 'Failed', 'Blocked', 'Not Executed', 'Pass Rate'];
+    final keys = ['total', 'passed', 'failed', 'blocked', 'notExecuted', 'passRate'];
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Execution Summary',
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-        ),
+        pw.Text('Execution Summary', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
           children: [
             pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-              children: [
-                _cell('Metric', bold: true),
-                _cell('Value', bold: true),
-              ],
+              children: [_cell('Metric', bold: true), _cell('Value', bold: true)],
             ),
             for (int i = 0; i < labels.length; i++)
               pw.TableRow(
                 children: [
                   _cell(labels[i]),
-                  _cell(
-                    keys[i] == 'passRate'
-                        ? '${data[keys[i]]}%'
-                        : '${data[keys[i]]}',
-                  ),
+                  _cell(keys[i] == 'passRate' ? '${data[keys[i]]}%' : '${data[keys[i]]}'),
                 ],
               ),
           ],
@@ -225,20 +210,15 @@ class ExportTestCasesUseCase {
   }
 
   // ============================================================
-  // PRIORITY BREAKDOWN
+  // PRIORITY BREAKDOWN (unchanged)
   // ============================================================
-
   pw.Widget _buildPriorityBreakdown(Map<String, dynamic> data) {
     final breakdown = data['priorityBreakdown'] as Map<String, dynamic>;
     final items = breakdown.entries.map((e) => '${e.key}: ${e.value}').toList();
-
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Priority Breakdown',
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-        ),
+        pw.Text('Priority Breakdown', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
         pw.SizedBox(height: 8),
         for (final item in items)
           pw.Padding(
@@ -250,19 +230,14 @@ class ExportTestCasesUseCase {
   }
 
   // ============================================================
-  // DETAILED RESULTS
+  // DETAILED RESULTS (unchanged)
   // ============================================================
-
   pw.Widget _buildDetailedResults(List<dynamic> details) {
     if (details.isEmpty) return pw.Container();
-
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Detailed Results',
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-        ),
+        pw.Text('Detailed Results', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
@@ -301,37 +276,29 @@ class ExportTestCasesUseCase {
   }
 
   // ============================================================
-  // CELL
+  // CELL (unchanged)
   // ============================================================
-
   pw.Widget _cell(String text, {bool bold = false}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
         text,
-        style: pw.TextStyle(
-          fontSize: 9,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
+        style: pw.TextStyle(fontSize: 9, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal),
       ),
     );
   }
 
   // ============================================================
-  // VALIDATION
+  // VALIDATION (unchanged)
   // ============================================================
-
   void _validateOrThrow(List<FinalizedTestCase> cases) {
     final validation = ExportValidationService.validate(cases);
-    if (!validation.isValid) {
-      throw ExportException(validation.errors.join('\n'));
-    }
+    if (!validation.isValid) throw ExportException(validation.errors.join('\n'));
   }
 
   // ============================================================
-  // FILE PREFIX
+  // FILE PREFIX (unchanged)
   // ============================================================
-
   String _safeModulePrefix(String moduleName) {
     final cleaned = moduleName
         .replaceAll(RegExp(r'[^A-Za-z0-9]'), '_')
@@ -342,9 +309,8 @@ class ExportTestCasesUseCase {
   }
 
   // ============================================================
-  // RANDOM CODE
+  // RANDOM CODE (unchanged)
   // ============================================================
-
   String _shortCode() {
     final value = DateTime.now().millisecondsSinceEpoch % 10000;
     return value.toString().padLeft(4, '0');

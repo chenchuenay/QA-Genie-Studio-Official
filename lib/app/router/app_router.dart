@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:qa_genie/legacy/screens/splash_screen.dart';
 import 'package:qa_genie/features/beta/logic/beta_manager.dart';
 import 'package:qa_genie/features/beta/ui/beta_expired_screen.dart';
-// lib/app/router/app_router.dart
+import 'package:qa_genie/features/generation/ui/screens/home_screen.dart';
+import 'package:qa_genie/shared/navigation/main_screen.dart'; // ✅ use MainScreen
 
 class AppRouter {
   static const String startupRoute = '/';
@@ -14,7 +14,6 @@ class AppRouter {
           builder: (_) => const _StartupGate(),
           settings: settings,
         );
-
       default:
         return MaterialPageRoute(
           builder: (_) => const _UnknownRouteScreen(),
@@ -33,25 +32,19 @@ class _StartupGate extends StatefulWidget {
 
 class _StartupGateState extends State<_StartupGate> {
   bool _loading = true;
-
   bool _expired = false;
-
   bool _updateRequired = false;
 
   @override
   void initState() {
     super.initState();
-
     _initialize();
   }
 
   Future<void> _initialize() async {
     final expired = await BetaManager.isExpired();
-
     final updateRequired = await BetaManager.isUpdateRequired();
-
     if (!mounted) return;
-
     setState(() {
       _expired = expired;
       _updateRequired = updateRequired;
@@ -74,7 +67,8 @@ class _StartupGateState extends State<_StartupGate> {
       return BetaExpiredScreen(isUpdateRequired: _updateRequired);
     }
 
-    return const SplashScreen();
+    // ✅ Go to MainScreen (tabs with AppBar and bottom navigation)
+    return const MainScreen();
   }
 }
 

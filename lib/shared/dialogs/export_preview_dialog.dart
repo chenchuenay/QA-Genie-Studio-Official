@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
+import 'package:qa_genie/features/monetization/ads/ad_service.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class ExportPreviewDialog extends StatefulWidget {
   final String type;
@@ -30,13 +34,19 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   late List<List<String>> _data;
   late List<List<TextEditingController>> _controllers;
   bool _editing = false;
+  int? _statusColumnIndex;
 
   static const List<double> _colWidths = [120, 100, 100, 200, 150, 130, 350, 160, 120, 100, 100];
+  static const List<String> _statusOptions = ['Pass', 'Fail', 'Blocked', 'Not Executed'];
 
-  double _totalWidth(int count) {
-    double total = 0;
-    for (int i = 0; i < count && i < _colWidths.length; i++) total += _colWidths[i];
-    return total;
+  String _normalizeStatus(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 'Not Executed';
+    final lower = trimmed.toLowerCase();
+    if (lower == 'pass') return 'Pass';
+    if (lower == 'fail') return 'Fail';
+    if (lower == 'blocked') return 'Blocked';
+    return 'Not Executed';
   }
 
   @override
@@ -44,6 +54,9 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     super.initState();
     _data = _getMappedData();
     _controllers = _data.map((row) => row.map((cell) => TextEditingController(text: cell)).toList()).toList();
+    if (_data.isNotEmpty) {
+      _statusColumnIndex = _data.first.indexWhere((h) => h.toLowerCase() == 'status');
+    }
   }
 
   @override
@@ -54,10 +67,8 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
 
   List<List<String>> _getMappedData() {
     switch (widget.type) {
-      case "excel":
-        return ExportMapper.toExcel(widget.cases, moduleName: widget.moduleName, featureName: widget.featureName);
-      case "jira":
-        return ExportMapper.toJira(widget.cases, featureName: widget.featureName);
+      case "excel": return ExportMapper.toExcel(widget.cases, moduleName: widget.moduleName, featureName: widget.featureName);
+      case "jira": return ExportMapper.toJira(widget.cases, featureName: widget.featureName);
       case "xray":
         final jsonData = ExportMapper.toXray(widget.cases, moduleName: widget.moduleName, featureName: widget.featureName);
         if (jsonData.isEmpty) return [];
@@ -127,7 +138,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
           case "status": updated = updated.copyWith(status: newValue); break;
         }
       }
-      // Preserve the original dbId so database replacement works correctly
       if (original.dbId != null) updated = updated.copyWith(dbId: original.dbId);
       updatedCases.add(updated);
     }
@@ -140,7 +150,20 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     widget.onSave(updatedCases);
   }
 
-  void _performShare() {
+  void _performShare() async {
+    final isPro = await UsageManager.isPro();
+    if (!isPro && await UsageManager.isFirstExportFreeUsed()) {
+      final watched = await AdService.showRewardedAd(
+        adUnitId: 'ca-app-pub-.../export_preview_share',
+        onRewarded: () async {
+          await UsageManager.incrementExport();
+        },
+        context: context,
+      );
+      if (!watched) return;
+    } else if (!isPro) {
+      await UsageManager.markFirstExportUsed();
+    }
     final editedData = _collectEditedData();
     final updatedCases = _updateOriginalCasesFromEditedData(editedData);
     widget.onShare(updatedCases);
@@ -150,6 +173,85 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   Widget build(BuildContext context) {
     final headers = _data.isNotEmpty ? _data.first : <String>[];
     final rowCount = _controllers.length - 1;
+
+    final headerRow = Row(
+      children: List.generate(headers.length, (col) => Container(
+        width: col < _colWidths.length ? _colWidths[col] : 100,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        color: AppColors.card,
+        child: Text(
+          headers[col],
+          style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 11),
+          textAlign: TextAlign.center,
+        ),
+      )),
+    );
+
+    final dataRows = <Widget>[];
+    for (int rowIdx = 0; rowIdx < rowCount; rowIdx++) {
+      dataRows.add(
+        Row(
+          children: List.generate(headers.length, (col) {
+            final w = col < _colWidths.length ? _colWidths[col] : 100.0;
+            final isStatus = (_statusColumnIndex != null && col == _statusColumnIndex);
+            final controller = _controllers[rowIdx + 1][col];
+            final cellContent = _editing
+                ? (isStatus
+                    ? Container(
+                        width: w,
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: DropdownButton<String>(
+                          value: _normalizeStatus(controller.text),
+                          isExpanded: true,
+                          dropdownColor: AppColors.card,
+                          style: const TextStyle(color: Colors.white, fontSize: 10),
+                          underline: const SizedBox(),
+                          items: _statusOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(),
+                          onChanged: (newVal) {
+                            if (newVal != null) {
+                              controller.text = newVal;
+                              setState(() {});
+                            }
+                          },
+                        ),
+                      )
+                    : Container(
+                        width: w,
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: TextField(
+                          controller: controller,
+                          style: const TextStyle(color: Colors.white, fontSize: 10),
+                          maxLines: null,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ))
+                : Container(
+                    width: w,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Text(
+                      controller.text,
+                      style: const TextStyle(color: Colors.white70, fontSize: 10),
+                      softWrap: true,
+                    ),
+                  );
+            return cellContent;
+          }),
+        ),
+      );
+      if (rowIdx < rowCount - 1) {
+        dataRows.add(const Divider(height: 1, thickness: 1, color: Color(0xFF2A2A3A)));
+      }
+    }
+
+    final tableContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [headerRow, const SizedBox(height: 4), ...dataRows],
+    );
+
     return Dialog(
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -173,41 +275,10 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
             const SizedBox(height: 8),
             Expanded(
               child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: _totalWidth(headers.length),
-                  child: Column(
-                    children: [
-                      Row(children: List.generate(headers.length, (col) => Container(
-                        width: col < _colWidths.length ? _colWidths[col] : 100,
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                        color: AppColors.card,
-                        child: Text(headers[col], style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center, overflow: TextOverflow.ellipsis),
-                      ))),
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: rowCount,
-                          itemBuilder: (context, rowIdx) => Row(
-                            children: List.generate(headers.length, (col) {
-                              final w = col < _colWidths.length ? _colWidths[col] : 100.0;
-                              return Container(
-                                width: w,
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                                child: _editing
-                                  ? TextField(
-                                      controller: _controllers[rowIdx + 1][col],
-                                      style: const TextStyle(color: Colors.white, fontSize: 10),
-                                      maxLines: null,
-                                      decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 4), border: OutlineInputBorder()),
-                                    )
-                                  : Text(_controllers[rowIdx + 1][col].text, style: const TextStyle(color: Colors.white70, fontSize: 10)),
-                              );
-                            }),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                scrollDirection: Axis.vertical,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: tableContent,
                 ),
               ),
             ),

@@ -1,6 +1,6 @@
 import '../../support/forensic_runner.dart';
-import '../../inputs/generation_inputs.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../inputs/generation_inputs.dart'; // ✅ correct path
 
 void main() {
   test('Single generation', () async {

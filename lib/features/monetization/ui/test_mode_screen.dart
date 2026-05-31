@@ -102,16 +102,16 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                   ),
                   _row(
                     "Generation requests per day",
-                    _isPro ? "15" : "1 free + 5 via ads",
+                    _isPro ? "15" : "Ad Sponsored",
                   ),
                   _row(
                     "Exports",
-                    _isPro ? "Unlimited" : "1st free, then via ads",
+                    _isPro ? "Unlimited" : "Ad Sponsored",
                   ),
-                  _row("Ads", _isPro ? "None" : "yes"),
+                  _row("Ads", _isPro ? "No" : "Yes"),
                   _row(
                     "Test summary reports",
-                    _isPro ? "Unlimited" : "Limited",
+                    _isPro ? "Unlimited" : "Ad Sponsored",
                   ),
                   const SizedBox(height: 30),
                   if (!AppConfig.isProduction)

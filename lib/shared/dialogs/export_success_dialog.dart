@@ -1,33 +1,57 @@
 import 'package:flutter/material.dart';
-import 'package:qa_genie/app/theme/app_theme.dart';
-import 'package:in_app_review/in_app_review.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
 
 class ExportSuccessDialog extends StatelessWidget {
   final String type;
-  final int count;
   final String moduleName;
   final VoidCallback onShareAgain;
-  const ExportSuccessDialog({super.key, required this.type, required this.count, required this.moduleName, required this.onShareAgain});
 
-  @override Widget build(BuildContext context) {
-    return Dialog(
+  const ExportSuccessDialog({
+    super.key,
+    required this.type,
+    required this.moduleName,
+    required this.onShareAgain,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.check_circle, color: AppColors.success, size: 60),
-        const SizedBox(height: 16),
-        const Text("Export Complete", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Text("$count test cases from \"$moduleName\" exported as $type.", style: const TextStyle(color: AppColors.textSecondary), textAlign: TextAlign.center),
-        const SizedBox(height: 12),
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (i) => IconButton(icon: const Icon(Icons.star, color: AppColors.warning), onPressed: () async { final review = InAppReview.instance; if (await review.isAvailable()) review.requestReview(); }))),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text("Done"))),
-          const SizedBox(width: 10),
-          Expanded(child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent), onPressed: () { Navigator.pop(context); onShareAgain(); }, child: const Text("Share Again"))),
-        ]),
-      ])),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text(
+        'Export Complete',
+        style: TextStyle(color: Colors.white),
+        textAlign: TextAlign.center,
+      ),
+      content: Text(
+        'Test cases from "$moduleName" exported as $type.',
+        style: const TextStyle(color: Colors.white70),
+        textAlign: TextAlign.center,
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            // TODO: Open Play Store review page later
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          child: const Text('Rate us', style: TextStyle(color: Colors.black)),
+        ),
+        OutlinedButton(
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Colors.white54),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          child: const Text('Done', style: TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }

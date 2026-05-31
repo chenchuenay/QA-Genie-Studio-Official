@@ -38,13 +38,6 @@ class _MasterTableState extends State<MasterTable> {
   static const _textSecondary = Color(0xFFCCCCCC);
   static const _pillBg = Color(0xFF2A2A3A);
   static const _fieldBg = Color(0xFF1A1A2E);
-  static const _fieldBorder = Color(0xFF00D4FF);
-
-  BoxDecoration get _fieldDecoration => BoxDecoration(
-        color: _fieldBg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border(bottom: BorderSide(color: _fieldBorder.withOpacity(0.45), width: 1.2)),
-      );
 
   @override
   void initState() {
@@ -178,6 +171,7 @@ class _MasterTableState extends State<MasterTable> {
     );
   }
 
+  // ✅ Changed to use OutlineInputBorder like export preview
   Widget _idCell(int i, FinalizedTestCase tc) {
     return SizedBox(
       width: colWidths[0],
@@ -187,12 +181,16 @@ class _MasterTableState extends State<MasterTable> {
           children: [
             widget.isEditable
                 ? Container(
-                    decoration: _fieldDecoration,
+                    color: _fieldBg,
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     child: TextField(
                       controller: idCtrls[i],
                       style: const TextStyle(color: _cyanColor, fontSize: 13, fontWeight: FontWeight.w600),
-                      decoration: const InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      ),
                       onChanged: (v) { tc.id = v; _edited(i); },
                     ),
                   )
@@ -233,13 +231,17 @@ class _MasterTableState extends State<MasterTable> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: widget.isEditable
             ? Container(
-                decoration: _fieldDecoration,
+                color: _fieldBg,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: TextField(
                   controller: stepsCtrls[i],
                   maxLines: null,
                   style: const TextStyle(color: _textPrimary, fontSize: 12),
-                  decoration: const InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
                   onChanged: (v) {
                     final lines = v.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
                     final newSteps = <TestStep>[];
@@ -270,13 +272,17 @@ class _MasterTableState extends State<MasterTable> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: widget.isEditable
             ? Container(
-                decoration: _fieldDecoration,
+                color: _fieldBg,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: TextField(
                   controller: ctrl,
                   maxLines: null,
                   style: const TextStyle(color: _textPrimary, fontSize: 12),
-                  decoration: const InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
                   onChanged: (v) { onChanged(v); _edited(0); },
                 ),
               )
@@ -297,7 +303,7 @@ class _MasterTableState extends State<MasterTable> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: widget.isEditable
             ? Container(
-                decoration: _fieldDecoration,
+                color: _fieldBg,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
@@ -336,7 +342,7 @@ class _MasterTableState extends State<MasterTable> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: widget.isEditable
             ? Container(
-                decoration: _fieldDecoration,
+                color: _fieldBg,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
@@ -371,6 +377,7 @@ class _MasterTableState extends State<MasterTable> {
     );
   }
 
+  // Context menu unchanged
   Future<void> _showContextMenu(int index) async {
     final RenderBox box = context.findRenderObject() as RenderBox;
     final Offset offset = box.localToGlobal(Offset.zero);

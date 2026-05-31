@@ -63,14 +63,16 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
 
   Future<void> _export() async {
     try {
-      await _exportUseCase.exportSummaryReport(
-        cases: widget.session.testCases,
-        moduleName: widget.moduleName,
-        featureName: widget.feature,
-        platform: widget.platform,
-        testerName: _tester,
-        environment: _environment,
-      );
+      // Inside _export() method of SummaryReportScreen, change the call to:
+await _exportUseCase.exportSummaryReport(
+  cases: widget.session.testCases,
+  moduleName: widget.moduleName,
+  featureName: widget.feature,
+  platform: widget.platform,
+  testerName: _tester,
+  environment: _environment,
+  context: context, // add this line
+);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
