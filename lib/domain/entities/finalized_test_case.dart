@@ -3,7 +3,6 @@ import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 
 // ignore: must_be_immutable
-
 class FinalizedTestCase extends Equatable {
   int? dbId;
   String id;
@@ -77,7 +76,20 @@ class FinalizedTestCase extends Equatable {
 
   @override
   List<Object?> get props => [
-        dbId, id, title, preconditions, testData, steps, expectedResult,
-        actualResult, priority, status, type, module, feature, platform, source,
-      ];
+    dbId,
+    id,
+    title,
+    preconditions,
+    testData,
+    steps,
+    expectedResult,
+    actualResult,
+    priority,
+    status,
+    type,
+    module,
+    feature,
+    platform,
+    source,
+  ];
 }

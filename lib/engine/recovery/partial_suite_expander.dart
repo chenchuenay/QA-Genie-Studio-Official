@@ -8,13 +8,13 @@ class PartialSuiteExpander {
 
   List<WorkingCase> expand({
     required List<WorkingCase> existingCases,
-    required List<String> missingIntentIds,
+    required List<String> missingOutcomes,
     required GenerationRequest request,
   }) {
-    if (missingIntentIds.isEmpty) return existingCases;
-    final generated = deterministicGenerator.generateByIntentIds(
+    if (missingOutcomes.isEmpty) return existingCases;
+    final generated = deterministicGenerator.generateByOutcomes(
       request: request,
-      intentIds: missingIntentIds,
+      outcomes: missingOutcomes,
     );
     return [...existingCases, ...generated];
   }

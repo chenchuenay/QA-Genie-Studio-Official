@@ -97,7 +97,12 @@ class WorkingCase {
       constraints: constraints,
       preconditions: List.from(preconditions),
       testData: testData,
-      steps: steps.map((s) => TestStep(action: s.action, data: s.data, expected: s.expected)).toList(),
+      steps: steps
+          .map(
+            (s) =>
+                TestStep(action: s.action, data: s.data, expected: s.expected),
+          )
+          .toList(),
       expectedResult: expectedResult,
       actualResult: actualResult,
       status: status,
@@ -107,9 +112,13 @@ class WorkingCase {
   }
 
   bool get isNegative => type.toLowerCase() == 'negative';
-  bool get hasConstraints => constraints != null && constraints!.trim().isNotEmpty;
+  bool get hasConstraints =>
+      constraints != null && constraints!.trim().isNotEmpty;
 
-  factory WorkingCase.fromJson(Map<String, dynamic> json, {String traceId = ''}) {
+  factory WorkingCase.fromJson(
+    Map<String, dynamic> json, {
+    String traceId = '',
+  }) {
     return WorkingCase(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
@@ -135,23 +144,23 @@ class WorkingCase {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'module': module,
-        'feature': feature,
-        'platform': platform,
-        'priority': priority,
-        'type': type,
-        'categoryLock': categoryLock,
-        'constraints': constraints,
-        'preconditions': preconditions,
-        'testData': testData,
-        'steps': steps.map((e) => e.toJson()).toList(),
-        'expectedResult': expectedResult,
-        'actualResult': actualResult,
-        'status': status,
-        'intent_id': intentId,
-      };
+    'id': id,
+    'title': title,
+    'module': module,
+    'feature': feature,
+    'platform': platform,
+    'priority': priority,
+    'type': type,
+    'categoryLock': categoryLock,
+    'constraints': constraints,
+    'preconditions': preconditions,
+    'testData': testData,
+    'steps': steps.map((e) => e.toJson()).toList(),
+    'expectedResult': expectedResult,
+    'actualResult': actualResult,
+    'status': status,
+    'intent_id': intentId,
+  };
 }
 
 class GenerationSession {
@@ -232,7 +241,11 @@ class RejectedCaseInfo {
   final String title;
   final String reason;
   final String stage;
-  const RejectedCaseInfo({required this.title, required this.reason, required this.stage});
+  const RejectedCaseInfo({
+    required this.title,
+    required this.reason,
+    required this.stage,
+  });
 }
 
 class GenerationRequest {
@@ -243,6 +256,8 @@ class GenerationRequest {
   final int requestedCaseCount;
   final String constraints;
   final String domain;
+  final String
+  traceId; // <-- ADDED (required for deterministic seeding and auditing)
 
   const GenerationRequest({
     required this.module,
@@ -252,5 +267,6 @@ class GenerationRequest {
     required this.requestedCaseCount,
     this.constraints = '',
     this.domain = 'general',
+    required this.traceId,
   });
 }

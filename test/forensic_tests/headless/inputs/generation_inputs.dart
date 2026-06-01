@@ -14,7 +14,7 @@ class GenerationInputs {
   static int platformIndex = 2; // 0 = WEB, 1 = MOBILE, 2 = API
 
   // Mode selection: 0 = core, 1 = pro
-  static int modeCode = 1; // change to 1 for pro mode
+  static int modeCode = 0; // change to 1 for pro mode
 
   // Convenience getter
   static bool get isPro => modeCode == 1;

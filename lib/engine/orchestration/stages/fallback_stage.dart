@@ -6,10 +6,7 @@ class FallbackStage {
   final DeterministicCaseGenerator generator;
   final PartialSuiteExpander expander;
 
-  const FallbackStage({
-    required this.generator,
-    required this.expander,
-  });
+  const FallbackStage({required this.generator, required this.expander});
 
   List<WorkingCase> generateFullFallback({
     required GenerationRequest request,
@@ -21,11 +18,11 @@ class FallbackStage {
   List<WorkingCase> expandPartialSuite({
     required GenerationRequest request,
     required List<WorkingCase> existing,
-    required List<String> missingIntentIds,
+    required List<String> missingOutcomes, // changed from missingIntentIds
   }) {
     return expander.expand(
       existingCases: existing,
-      missingIntentIds: missingIntentIds,
+      missingOutcomes: missingOutcomes,
       request: request,
     );
   }
