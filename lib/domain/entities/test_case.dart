@@ -1,6 +1,8 @@
 import 'test_step.dart';
 // lib/domain/entities/test_case.dart
 
+// ignore: must_be_immutable
+
 class TestCase {
   final String id;
 

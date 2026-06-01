@@ -4,7 +4,6 @@ import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 import '../../../monetization/ui/upgrade_coming_soon_screen.dart';
-import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
 // lib/features/suites/ui/screens/suites_screen.dart

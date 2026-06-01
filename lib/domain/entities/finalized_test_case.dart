@@ -2,6 +2,8 @@ import 'package:equatable/equatable.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 
+// ignore: must_be_immutable
+
 class FinalizedTestCase extends Equatable {
   int? dbId;
   String id;
@@ -60,7 +62,7 @@ class FinalizedTestCase extends Equatable {
       title: title ?? this.title,
       preconditions: preconditions ?? List.from(this.preconditions),
       testData: testData ?? this.testData,
-      steps: steps ?? this.steps.map((s) => s.copyWith()).toList(), // deep copy
+      steps: steps ?? this.steps.map((s) => s.copyWith()).toList(),
       expectedResult: expectedResult ?? this.expectedResult,
       actualResult: actualResult ?? this.actualResult,
       priority: priority ?? this.priority,
@@ -75,20 +77,7 @@ class FinalizedTestCase extends Equatable {
 
   @override
   List<Object?> get props => [
-        dbId,
-        id,
-        title,
-        preconditions,
-        testData,
-        steps,
-        expectedResult,
-        actualResult,
-        priority,
-        status,
-        type,
-        module,
-        feature,
-        platform,
-        source,
+        dbId, id, title, preconditions, testData, steps, expectedResult,
+        actualResult, priority, status, type, module, feature, platform, source,
       ];
 }

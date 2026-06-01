@@ -1,18 +1,33 @@
 import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
-import 'package:qa_genie/engine/recovery/repair_engine.dart';
 import 'package:qa_genie/engine/planners/scenario_planner.dart';
 import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/engine/builders/preconditions_builder.dart';
 import 'package:qa_genie/engine/humanization/qa_heuristics_engine.dart';
+
+class RepairEvent {
+  final String testCaseId;
+  final String changedField;
+  final String before;
+  final String after;
+  final String reason;
+
+  RepairEvent({
+    required this.testCaseId,
+    required this.changedField,
+    required this.before,
+    required this.after,
+    required this.reason,
+  });
+}
 
 class DeterministicRepair {
   final ScenarioPlanner planner;
   final String? traceId;
   final List<RepairEvent> repairEvents = [];
 
-  DeterministicRepair(this.planner, {this.traceId});
+  DeterministicRepair({required this.planner, this.traceId});
 
   List<WorkingCase> repair(List<WorkingCase> cases, int targetCount) {
     final repaired = <WorkingCase>[];

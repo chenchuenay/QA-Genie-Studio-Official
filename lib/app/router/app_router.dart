@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/features/beta/logic/beta_manager.dart';
 import 'package:qa_genie/features/beta/ui/beta_expired_screen.dart';
-import 'package:qa_genie/features/generation/ui/screens/home_screen.dart';
 import 'package:qa_genie/shared/navigation/main_screen.dart'; // ✅ use MainScreen
 
 class AppRouter {

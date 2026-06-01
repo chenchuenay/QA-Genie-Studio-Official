@@ -1,11 +1,12 @@
+import 'package:flutter/material.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
+
 
 class ExportRepository {
   final ExportTestCasesUseCase _exportUseCase;
 
-  const ExportRepository({required ExportTestCasesUseCase exportUseCase})
-    : _exportUseCase = exportUseCase;
+  const ExportRepository({required ExportTestCasesUseCase exportUseCase}) : _exportUseCase = exportUseCase;
 
   Future<void> export({
     required String format,
@@ -28,6 +29,7 @@ class ExportRepository {
     required String platform,
     required String testerName,
     required String environment,
+    required BuildContext context,
   }) async {
     await _exportUseCase.exportSummaryReport(
       cases: cases,
@@ -36,6 +38,7 @@ class ExportRepository {
       platform: platform,
       testerName: testerName,
       environment: environment,
+      context: context,
     );
   }
 }

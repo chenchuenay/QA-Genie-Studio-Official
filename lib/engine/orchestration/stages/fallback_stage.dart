@@ -1,40 +1,32 @@
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/recovery/partial_suite_expander.dart';
 import 'package:qa_genie/engine/recovery/deterministic_case_generator.dart';
-// lib/engine/orchestration/stages/fallback_stage.dart
 
 class FallbackStage {
-  final DeterministicCaseGenerator _generator;
-
-  final PartialSuiteExpander _expander;
+  final DeterministicCaseGenerator generator;
+  final PartialSuiteExpander expander;
 
   const FallbackStage({
-    required DeterministicCaseGenerator generator,
-
-    required PartialSuiteExpander expander,
-  }) : _generator = generator,
-
-       _expander = expander;
+    required this.generator,
+    required this.expander,
+  });
 
   List<WorkingCase> generateFullFallback({
     required GenerationRequest request,
     required int count,
   }) {
-    return _generator.generate(
-      request: request,
-      count: count,
-    );
+    return generator.generate(request: request, count: count);
   }
 
   List<WorkingCase> expandPartialSuite({
     required GenerationRequest request,
     required List<WorkingCase> existing,
-    required int targetCount,
+    required List<String> missingIntentIds,
   }) {
-    return _expander.expand(
-      request: request,
+    return expander.expand(
       existingCases: existing,
-      targetCount: targetCount,
+      missingIntentIds: missingIntentIds,
+      request: request,
     );
   }
 }

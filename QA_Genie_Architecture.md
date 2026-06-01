@@ -1245,7 +1245,10 @@ QA_Genie:
 │ │ ├── pipeline_audit_report.dart
 │ │ └── trace_id_generator.dart
 │ ├── humanization/
+│ │ ├── qa_heuristics_engine.dart
 │ │ └── qa_realism_enforcer.dart
+│ ├── knowledge/
+│ │ └── intent_registry.dart
 │ ├── models/
 │ │ ├── generation_outcome.dart
 │ │ └── pipeline_models.dart
@@ -1272,12 +1275,12 @@ QA_Genie:
 │ │ ├── prompt_cache_manager.dart
 │ │ ├── prompt_composer.dart
 │ │ └── system_prompt.dart
-│ ├── qa_heuristics_engine.dart
 │ ├── recovery/
 │ │ ├── deterministic_case_generator.dart
 │ │ ├── deterministic_repair.dart
 │ │ ├── failure_classifier.dart
 │ │ ├── fallback_template_registry.dart
+│ │ ├── intent_recovery.dart
 │ │ ├── partial_suite_expander.dart
 │ │ ├── repair_engine.dart
 │ │ └── retry_policy.dart
@@ -1287,6 +1290,7 @@ QA_Genie:
 │ └── validators/
 │ ├── contracts/
 │ │ └── pipeline_contract_validator.dart
+│ ├── coverage_contract_validator.dart
 │ ├── export_safety_validator.dart
 │ ├── realism_validator.dart
 │ ├── semantic_validator.dart
@@ -1319,8 +1323,7 @@ QA_Genie:
 │ ├── generation/
 │ │ └── ui/
 │ │ ├── screens/
-│ │ │ ├── home_screen.dart
-│ │ │ └── preview_screen.dart
+│ │ │ └── home_screen.dart
 │ │ └── widgets/
 │ │ └── master_table.dart
 │ ├── monetization/
@@ -1334,7 +1337,7 @@ QA_Genie:
 │ ├── suites/
 │ │ └── ui/
 │ │ └── screens/
-│ │ ├── suite_detail_screen.dart
+│ │ ├── suite_preview_screen.dart
 │ │ └── suites_screen.dart
 │ └── summary/
 │ └── ui/
@@ -1344,13 +1347,9 @@ QA_Genie:
 │ │ └── analytics_service.dart
 │ ├── app_check/
 │ │ └── app_check_service.dart
-│ └── cloud_functions/
-│ └── functions_service.dart
-├── legacy/
-│ └── screens/
-│ ├── bug_report_screen.dart
-│ ├── splash_screen.dart
-│ └── upgrade_screen.dart
+│ ├── cloud_functions/
+│ │ └── functions_service.dart
+│ └── firebase_options.dart
 ├── main.dart
 └── shared/
 ├── animations/
@@ -1358,14 +1357,12 @@ QA_Genie:
 ├── badges/
 │ └── pro_badge.dart
 ├── dialogs/
-│ ├── ad_dialog.dart
 │ ├── export_bottom_sheet.dart
 │ ├── export_preview_dialog.dart
 │ ├── export_success_dialog.dart
 │ └── guidelines_dialog.dart
 ├── effects/
 │ └── press_effect.dart
-├── extensions/
 ├── navigation/
 │ └── main_screen.dart
 └── widgets/

@@ -10,7 +10,7 @@ import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/core/utils/finalized_test_case_adapter.dart';
-import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
+import 'package:qa_genie/engine/knowledge/intent_registry.dart';  // ADDED
 import 'package:qa_genie/engine/orchestration/stages/ai_generation_stage.dart';
 
 class ForensicRunner {
@@ -18,16 +18,16 @@ class ForensicRunner {
 
   static Future<void> initialize() async {
     if (_initialized) return;
-    // Load .env.dev if it exists (ignore if not)
-    try {
+    final envFile = File('.env.dev');
+    if (envFile.existsSync()) {
       await dotenv.load(fileName: '.env.dev');
-    } catch (e) {
-      print('Warning: .env.dev not found, using default environment variables.');
+    } else {
+      print('Warning: .env.dev not found, using default environment');
     }
-    // Wrap ApiClient.generate to match AiCaller signature
     AiGenerationStage.useTestCaller((String prompt) async {
       return await ApiClient.generate(prompt: prompt);
     });
+    IntentRegistry.loadDefaults();   // ADDED – ensures registry is populated
     _initialized = true;
   }
 
@@ -56,12 +56,11 @@ class ForensicRunner {
     final report = session.auditReport;
     final tier = isPro ? 'pro' : 'core';
 
-    // Write logs
     final baseDir = Directory('test_results/gen_results');
     if (!baseDir.existsSync()) baseDir.createSync(recursive: true);
+
     final pipelineFile = File('${baseDir.path}/${tier}_pipeline.txt');
     final analyticalFile = File('${baseDir.path}/${tier}_analytical_logs.txt');
-
     final uaeTime = _toUaeTime(DateTime.now());
 
     final pipelineLog = StringBuffer();
@@ -93,10 +92,7 @@ class ForensicRunner {
     for (final rejected in report.rejectedCases) {
       pipelineLog.writeln('${rejected.stage}: ${rejected.title} -> ${rejected.reason}');
     }
-    if (report.hasFailures) {
-      pipelineLog.writeln('--- ERROR ---');
-      pipelineLog.writeln('Pipeline had failures.');
-    }
+    if (report.hasFailures) pipelineLog.writeln('--- ERROR ---\nPipeline had failures.');
     await pipelineFile.writeAsString(pipelineLog.toString());
 
     final analyticalLine = '$uaeTime,$tier,${isPro ? 16 : 8},${session.testCases.length},'
@@ -106,7 +102,6 @@ class ForensicRunner {
         '${report.averageConfidence ?? 0},${report.aiLatencyMs ?? 0}\n';
     await analyticalFile.writeAsString(analyticalLine, mode: FileMode.append);
 
-    // Save cases for export test
     final jsonList = session.testCases.map((tc) {
       final legacy = FinalizedTestCaseAdapter.toLegacy(tc);
       return legacy.toJson();
@@ -120,9 +115,7 @@ class ForensicRunner {
 
   static Future<List<FinalizedTestCase>> loadLastGeneratedCases() async {
     final file = File('test_results/last_generation.json');
-    if (!file.existsSync()) {
-      throw Exception('No saved generation. Run generation_pipeline_test.dart first.');
-    }
+    if (!file.existsSync()) throw Exception('No saved generation. Run generation_pipeline_test.dart first.');
     final jsonString = await file.readAsString();
     final List<dynamic> jsonList = jsonDecode(jsonString);
     return jsonList.map((j) {
@@ -138,6 +131,8 @@ class ForensicRunner {
 
   static String _toUaeTime(DateTime dt) {
     final uae = dt.toUtc().add(const Duration(hours: 4));
-    return '${uae.toIso8601String().split('.')[0]}+04:00';
+    final iso = uae.toIso8601String();
+    final withoutMillis = iso.split('.').first;
+    return '$withoutMillis+04:00';
   }
 }

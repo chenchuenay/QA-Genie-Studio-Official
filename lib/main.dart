@@ -6,10 +6,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:qa_genie/app/config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qa_genie/engine/knowledge/intent_registry.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  IntentRegistry.loadDefaults();
   // Initialize Firebase with explicit Android options
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.android);

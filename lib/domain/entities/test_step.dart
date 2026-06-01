@@ -25,11 +25,7 @@ class TestStep extends Equatable {
         'expected': expected,
       };
 
-  TestStep copyWith({
-    String? action,
-    String? data,
-    String? expected,
-  }) {
+  TestStep copyWith({String? action, String? data, String? expected}) {
     return TestStep(
       action: action ?? this.action,
       data: data ?? this.data,

@@ -1,7 +1,6 @@
 import 'dart:io';
 import '../../support/forensic_runner.dart';
 import 'package:flutter_test/flutter_test.dart';
-import '../inputs/generation_inputs.dart'; // ✅ correct path
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 
 void main() {
@@ -17,6 +16,7 @@ void main() {
     await exportUseCase.execute(type: 'xray', cases: cases);
     await exportUseCase.execute(type: 'pdf', cases: cases);
 
-    // Summary report export skipped as it requires BuildContext (not available in headless test)
+    // Summary report export requires BuildContext; skip in headless test.
+    // await exportUseCase.exportSummaryReport(...);
   }, timeout: const Timeout(Duration(minutes: 10)));
 }

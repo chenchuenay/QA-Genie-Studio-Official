@@ -2,10 +2,6 @@ import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 
-// ============================================================
-// CASE METADATA
-// ============================================================
-
 class CaseMetadata {
   final CaseSource source;
   final List<String> repairHistory;
@@ -16,6 +12,7 @@ class CaseMetadata {
   String? fingerprint;
   double confidenceScore;
   final String traceId;
+  final String intentId;
 
   CaseMetadata({
     required this.source,
@@ -27,6 +24,7 @@ class CaseMetadata {
     this.diversitySignals = const {},
     this.fingerprint,
     this.confidenceScore = 1.0,
+    this.intentId = '__unknown__',
   });
 
   CaseMetadata copy() {
@@ -40,16 +38,12 @@ class CaseMetadata {
       diversitySignals: Set.from(diversitySignals),
       fingerprint: fingerprint,
       confidenceScore: confidenceScore,
+      intentId: intentId,
     );
   }
 
-  // ✅ Add this getter to satisfy pipeline_audit_logger.dart
   String get origin => source.name;
 }
-
-// ============================================================
-// WORKING CASE (no legacy dependencies)
-// ============================================================
 
 class WorkingCase {
   String id;
@@ -68,6 +62,7 @@ class WorkingCase {
   String actualResult;
   String status;
   final CaseMetadata metadata;
+  final String intentId;
 
   WorkingCase({
     required this.id,
@@ -86,6 +81,7 @@ class WorkingCase {
     required this.actualResult,
     required this.status,
     required this.metadata,
+    this.intentId = '__unknown__',
   });
 
   WorkingCase copy() {
@@ -106,6 +102,7 @@ class WorkingCase {
       actualResult: actualResult,
       status: status,
       metadata: metadata.copy(),
+      intentId: intentId,
     );
   }
 
@@ -133,6 +130,7 @@ class WorkingCase {
       actualResult: json['actualResult'] ?? '',
       status: json['status'] ?? 'Not Executed',
       metadata: CaseMetadata(source: CaseSource.ai, traceId: traceId),
+      intentId: json['intent_id'] ?? '__unknown__',
     );
   }
 
@@ -152,12 +150,9 @@ class WorkingCase {
         'expectedResult': expectedResult,
         'actualResult': actualResult,
         'status': status,
+        'intent_id': intentId,
       };
 }
-
-// ============================================================
-// GENERATION SESSION (mutable testCases)
-// ============================================================
 
 class GenerationSession {
   final String traceId;
@@ -175,10 +170,6 @@ class GenerationSession {
   int get count => testCases.length;
 }
 
-// ============================================================
-// PIPELINE AUDIT REPORT
-// ============================================================
-
 class PipelineAuditReport {
   final String traceId;
   final List<RejectedCaseInfo> rejectedCases;
@@ -190,8 +181,9 @@ class PipelineAuditReport {
   final int finalizedCases;
   final int repairedCases;
   final int rejectedCount;
+  final List<String>? missingIntentIds;
 
-  // forensic logging fields (optional)
+  // Forensic fields
   final String? prompt;
   final String? rawAiResponse;
   final int? aiLatencyMs;
@@ -217,6 +209,7 @@ class PipelineAuditReport {
     this.finalizedCases = 0,
     this.repairedCases = 0,
     this.rejectedCount = 0,
+    this.missingIntentIds,
     this.prompt,
     this.rawAiResponse,
     this.aiLatencyMs,
@@ -232,46 +225,15 @@ class PipelineAuditReport {
     this.fallbackCount,
   });
 
-  factory PipelineAuditReport.failure({
-    required String reason,
-    String stackTrace = '',
-    String traceId = 'UNKNOWN_TRACE',
-  }) {
-    return PipelineAuditReport(
-      traceId: traceId,
-      rejectedCases: [
-        RejectedCaseInfo(
-          title: 'Pipeline failure',
-          reason: stackTrace.isEmpty ? reason : '$reason\n$stackTrace',
-          stage: 'pipeline',
-        ),
-      ],
-      rejectedCount: 1,
-      fallbackTriggers: const ['pipeline_failure'],
-    );
-  }
-
   bool get hasFailures => rejectedCases.isNotEmpty;
 }
-
-// ============================================================
-// REJECTED CASE INFO
-// ============================================================
 
 class RejectedCaseInfo {
   final String title;
   final String reason;
   final String stage;
-  const RejectedCaseInfo({
-    required this.title,
-    required this.reason,
-    required this.stage,
-  });
+  const RejectedCaseInfo({required this.title, required this.reason, required this.stage});
 }
-
-// ============================================================
-// GENERATION REQUEST
-// ============================================================
 
 class GenerationRequest {
   final String module;

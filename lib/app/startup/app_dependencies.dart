@@ -1,20 +1,15 @@
-import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/engine/recovery/repair_engine.dart';
 import 'package:qa_genie/engine/parsers/schema_normalizer.dart';
-import 'package:qa_genie/engine/planners/scenario_planner.dart';
 import 'package:qa_genie/engine/parsers/ai_response_parser.dart';
 import 'package:qa_genie/data/repositories/suite_repository.dart';
 import 'package:qa_genie/engine/parsers/response_classifier.dart';
 import 'package:qa_genie/engine/recovery/failure_classifier.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
-import 'package:qa_genie/engine/validators/realism_validator.dart';
 import 'package:qa_genie/domain/usecases/get_history_use_case.dart';
-import 'package:qa_genie/engine/validators/semantic_validator.dart';
 import 'package:qa_genie/engine/parsers/partial_case_extractor.dart';
 import 'package:qa_genie/data/datasources/local/local_db_source.dart';
 import 'package:qa_genie/engine/parsers/malformed_json_salvager.dart';
 import 'package:qa_genie/engine/recovery/partial_suite_expander.dart';
-import 'package:qa_genie/engine/validators/structural_validator.dart';
 import 'package:qa_genie/data/repositories/generation_repository.dart';
 import 'package:qa_genie/engine/orchestration/stages/repair_stage.dart';
 import 'package:qa_genie/data/datasources/remote/remote_api_source.dart';
@@ -28,7 +23,6 @@ import 'package:qa_genie/engine/recovery/deterministic_case_generator.dart';
 import 'package:qa_genie/engine/orchestration/policies/pipeline_policy.dart';
 import 'package:qa_genie/engine/orchestration/stages/finalization_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/ai_generation_stage.dart';
-import 'package:qa_genie/engine/validators/contracts/pipeline_contract_validator.dart';
 
 class AppDependencies {
   AppDependencies._();
@@ -65,22 +59,9 @@ class AppDependencies {
       normalizer: const SchemaNormalizer(),
     ),
     repairStage: RepairStage(
-      repairEngine: RepairEngine(
-        planner: ScenarioPlanner(
-          module: 'init',
-          feature: 'init',
-          platform: 'Web',
-          mode: GenerationMode.core,
-          count: 0,
-        ),
-      ),
-    ),
-    validationStage: ValidationStage(
-      contractValidator: PipelineContractValidator(),
-      realismValidator: RealismValidator(),
-      semanticValidator: SemanticValidator(),
-      structuralValidator: StructuralValidator(),
-    ),
+  repairEngine: const RepairEngine(),
+),
+    validationStage: ValidationStage(),
     fallbackStage: FallbackStage(
       generator: deterministicGenerator,
       expander: PartialSuiteExpander(

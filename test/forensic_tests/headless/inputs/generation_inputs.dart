@@ -11,10 +11,13 @@ class GenerationInputs {
 
   // Platform selection: index into platforms list
   static List<String> platforms = ['WEB', 'MOBILE', 'API'];
-  static int platformIndex = 0; // 0 = WEB, 1 = MOBILE, 2 = API
+  static int platformIndex = 2; // 0 = WEB, 1 = MOBILE, 2 = API
 
-  // Mode: false = core (8 cases), true = pro (16 cases)
-  static bool isPro = false;
+  // Mode selection: 0 = core, 1 = pro
+  static int modeCode = 1; // change to 1 for pro mode
+
+  // Convenience getter
+  static bool get isPro => modeCode == 1;
 
   // Cooldown between platforms in live mass test
   static const cooldownBetweenPlatforms = Duration(seconds: 60);
