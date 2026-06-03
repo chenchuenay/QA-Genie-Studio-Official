@@ -182,7 +182,15 @@ TITLE_DIRECTION: ${sk['title']}
 
         "title": "Valid login succeeds",
 
+        "module": "Login",
+
+        "feature": "User login",
+
+        "platform": "WEB",
+
         "preconditions": ["User account exists", "Application is accessible"],
+
+        "testData": "email=user@example.com&password=ValidPass123!",
 
         "steps": [
           {
@@ -200,6 +208,10 @@ TITLE_DIRECTION: ${sk['title']}
         "priority": "High",
 
         "type": "POSITIVE",
+
+        "categoryLock": "positive",
+
+        "intent_id": "valid_login",
       },
     ];
 

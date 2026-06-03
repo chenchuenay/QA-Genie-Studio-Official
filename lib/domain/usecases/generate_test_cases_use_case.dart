@@ -1,5 +1,6 @@
 import 'package:qa_genie/data/dto/generation_dto.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
+import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 import 'package:qa_genie/engine/prompts/prompt_composer.dart';
 import 'package:qa_genie/engine/planners/prompt_planner.dart';
 import 'package:qa_genie/engine/orchestration/pipeline_orchestrator.dart';
@@ -25,8 +26,15 @@ class GenerateTestCasesUseCase {
       feature: dto.feature,
       platform: dto.platform,
       skeletons: skeletons,
+      constraints: dto.constraints,
       domain: dto.domain,
     );
+
+    PipelineForensics.instance.onTraceEvent('[AI REQUEST]\ntraceId=${dto.traceId}');
+    PipelineForensics.instance.onTraceEvent('model=gemini-2.5-flash-lite');
+    PipelineForensics.instance.onTraceEvent('promptLength=${prompt.length}');
+    PipelineForensics.instance.onTraceEvent('promptPreview=${prompt.length > 500 ? prompt.substring(0, 500) : prompt}');
+
     final request = GenerationRequest(
       module: dto.module,
       feature: dto.feature,
@@ -35,6 +43,7 @@ class GenerateTestCasesUseCase {
       requestedCaseCount: dto.count,
       constraints: dto.constraints,
       domain: dto.domain,
+      plan: skeletons,
       traceId: dto.traceId,
     );
     final result = await _orchestrator.execute(

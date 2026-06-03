@@ -1,15 +1,20 @@
 import 'package:qa_genie/engine/models/pipeline_models.dart';
+import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
+import 'package:qa_genie/engine/parsers/response_classifier.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
-import 'package:qa_genie/engine/validators/realism_validator.dart';
-import 'package:qa_genie/engine/validators/semantic_validator.dart';
-import 'package:qa_genie/engine/validators/structural_validator.dart';
-import 'package:qa_genie/engine/validators/export_safety_validator.dart';
-import 'package:qa_genie/engine/recovery/deterministic_case_generator.dart';
+import 'package:qa_genie/engine/orchestration/stages/repair_stage.dart';
+import 'package:qa_genie/engine/orchestration/stages/parsing_stage.dart';
+import 'package:qa_genie/engine/orchestration/stages/fallback_stage.dart';
+import 'package:qa_genie/engine/orchestration/stages/validation_stage.dart';
+import 'package:qa_genie/engine/orchestration/stages/finalization_stage.dart';
+import 'package:qa_genie/engine/orchestration/stages/ai_generation_stage.dart';
+import 'package:qa_genie/engine/orchestration/stages/coverage_analysis_stage.dart';
 
 class PipelineExecutionResult {
   final List<FinalizedTestCase> cases;
   final PipelineAuditReport auditReport;
   final String traceId;
+
   PipelineExecutionResult({
     required this.cases,
     required this.auditReport,
@@ -18,81 +23,179 @@ class PipelineExecutionResult {
 }
 
 class PipelineOrchestrator {
-  final DeterministicCaseGenerator _generator;
-  final StructuralValidator _structuralValidator = const StructuralValidator();
-  final SemanticValidator _semanticValidator = SemanticValidator();
-  final ExportSafetyValidator _exportValidator = const ExportSafetyValidator();
+  final AiGenerationStage _aiGenerationStage;
+  final ParsingStage _parsingStage;
+  final RepairStage _repairStage;
+  final ValidationStage _validationStage;
+  final CoverageAnalysisStage _coverageAnalysisStage;
+  final FallbackStage _fallbackStage;
+  final FinalizationStage _finalizationStage;
+  final ResponseClassifier _responseClassifier;
 
-  PipelineOrchestrator({required DeterministicCaseGenerator generator})
-    : _generator = generator;
+  const PipelineOrchestrator({
+    required AiGenerationStage aiGenerationStage,
+    required ParsingStage parsingStage,
+    required RepairStage repairStage,
+    required ValidationStage validationStage,
+    required CoverageAnalysisStage coverageAnalysisStage,
+    required FallbackStage fallbackStage,
+    required FinalizationStage finalizationStage,
+    ResponseClassifier responseClassifier = const ResponseClassifier(),
+  }) : _aiGenerationStage = aiGenerationStage,
+       _parsingStage = parsingStage,
+       _repairStage = repairStage,
+       _validationStage = validationStage,
+       _coverageAnalysisStage = coverageAnalysisStage,
+       _fallbackStage = fallbackStage,
+       _finalizationStage = finalizationStage,
+       _responseClassifier = responseClassifier;
 
   Future<PipelineExecutionResult> execute({
     required String prompt,
     required GenerationRequest request,
   }) async {
-    final workingCases = _generator.generate(
+    final aiResult = await _aiGenerationStage.execute(
+      prompt: prompt,
       request: request,
-      count: request.requestedCaseCount,
     );
 
-    // Structural validation
-    final structurallyValid = <WorkingCase>[];
-    for (final wc in workingCases) {
-      final structural = _structuralValidator.validateSingle(wc);
-      if (structural.isValid) structurallyValid.add(wc);
+    PipelineForensics.instance.onTraceEvent(
+      '\n[SECTION 5 — PARSER ENTRY]\nPARSER_INPUT_LENGTH=${aiResult.rawResponse.length}',
+    );
+    PipelineForensics.instance.onTraceEvent(
+      'PARSER_INPUT_FIRST_1000=${aiResult.rawResponse.length > 1000 ? aiResult.rawResponse.substring(0, 1000) : aiResult.rawResponse}',
+    );
+
+    final parsingResult = _parsingStage.execute(
+      rawResponse: aiResult.rawResponse,
+    );
+
+    PipelineForensics.instance.onTraceEvent(
+      '\n[SECTION 6 — PARSER OUTPUT]\nparsedCasesCount=${parsingResult.parsedCases.length}',
+    );
+    if (parsingResult.parsedCases.isEmpty) {
+      PipelineForensics.instance.onTraceEvent('salvagerInvoked=true');
+      PipelineForensics.instance.onTraceEvent('salvagerRecoveredCount=0');
     }
 
-    // Semantic validation (needs a rejection logger; we can pass a no-op)
-    final semanticResult = _semanticValidator.validate(
-      structurallyValid,
-      (_) {},
+    final aiReturnedCount = parsingResult.parsedCases.length;
+    final aiWorkingCases = _hydrateParsedCases(
+      parsingResult.parsedCases,
+      request,
     );
-    final semanticallyValid = semanticResult.validCases;
 
-    // (Optional) Repair using heuristics – QaHeuristicsEngine has only static methods, not a repair method.
-    // We'll skip repair for now; AI repair is handled elsewhere (e.g., RepairStage for AI cases).
-    // For fallback, we don't need repair.
-
-    // Realism validation
-    final realismValid = RealismValidator.validate(semanticallyValid);
-
-    // Convert to FinalizedTestCase
-    final finalized = realismValid.map((wc) => _toFinalized(wc)).toList();
-
-    // Export safety
-    final exportResult = _exportValidator.validate(
-      finalized.map((tc) {
-        // Convert FinalizedTestCase to WorkingCase? ExportSafetyValidator expects WorkingCase.
-        // We need to adapt. Simpler: create a temporary WorkingCase.
-        return WorkingCase(
-          id: tc.id,
-          title: tc.title,
-          module: tc.module,
-          feature: tc.feature,
-          platform: tc.platform,
-          priority: tc.priority,
-          type: tc.type,
-          categoryLock: tc.type,
-          preconditions: tc.preconditions,
-          testData: tc.testData,
-          steps: tc.steps,
-          expectedResult: tc.expectedResult,
-          actualResult: tc.actualResult,
-          status: tc.status,
-          metadata: CaseMetadata(source: tc.source, traceId: request.traceId),
-          intentId: '',
-        );
-      }).toList(),
+    final repairResult = _repairStage.execute(
+      cases: aiWorkingCases,
+      targetCount: request.requestedCaseCount,
     );
-    if (!exportResult.isSuccessful) {
-      // Log errors but still proceed with the list; we could filter invalid ones.
-      print('Export safety errors: ${exportResult.errors}');
+
+    PipelineForensics.instance.onTraceEvent(
+      '\n[SECTION 7 — REPAIR OUTPUT]\nrepairInputCount=${aiWorkingCases.length}',
+    );
+    PipelineForensics.instance.onTraceEvent(
+      'repairOutputCount=${repairResult.cases.length}',
+    );
+
+    final validationResult = _validationStage.execute(
+      cases: repairResult.cases,
+    );
+
+    PipelineForensics.instance.onTraceEvent(
+      '\n[SECTION 8 — VALIDATION OUTPUT]\nstructuralValidCount=${repairResult.cases.length - validationResult.structuralRejectedCount}',
+    );
+    PipelineForensics.instance.onTraceEvent(
+      'semanticValidCount=${repairResult.cases.length - (validationResult.structuralRejectedCount ?? 0) - validationResult.semanticRejectedCount}',
+    );
+
+    final acceptedAiCases = validationResult.validCases;
+
+    final outcomeType = _responseClassifier.classify(
+      rawResponse: aiResult.rawResponse,
+      validCaseCount: acceptedAiCases.length,
+      targetCaseCount: request.requestedCaseCount,
+      malformed: parsingResult.malformed,
+      transportFailure: aiResult.hasTransportError,
+      statusCode: aiResult.statusCode,
+    );
+
+    final coverage = _coverageAnalysisStage.execute(
+      request: request,
+      acceptedCases: acceptedAiCases,
+    );
+
+    PipelineForensics.instance.onTraceEvent(
+      '\n[SECTION 9 — COVERAGE OUTPUT]\nrequiredCount=${request.requestedCaseCount}',
+    );
+    PipelineForensics.instance.onTraceEvent(
+      'acceptedCount=${acceptedAiCases.length}',
+    );
+    PipelineForensics.instance.onTraceEvent(
+      'missingCount=${coverage.missingCount}',
+    );
+
+    final fallbackCases = _fallbackStage.fillMissing(
+      request: request,
+      existing: acceptedAiCases,
+      coverage: coverage,
+    );
+
+    PipelineForensics.instance.onTraceEvent(
+      '\n[SECTION 10 — FALLBACK OUTPUT]\nfallbackGeneratedCount=${fallbackCases.length}',
+    );
+
+    final finalWorkingCases = <WorkingCase>[
+      ...acceptedAiCases,
+      ...fallbackCases,
+    ].take(request.requestedCaseCount).toList();
+
+    final finalized = _finalizationStage.execute(
+      cases: finalWorkingCases,
+      module: request.module,
+    );
+
+    PipelineForensics.instance.onTraceEvent(
+      '\n[SECTION 11 — FINAL OUTPUT]\naiAcceptedCount=${acceptedAiCases.length}',
+    );
+    PipelineForensics.instance.onTraceEvent(
+      'fallbackAcceptedCount=${fallbackCases.length}',
+    );
+    PipelineForensics.instance.onTraceEvent(
+      'finalCaseCount=${finalized.length}',
+    );
+
+    for (final tc in finalized) {
+      PipelineForensics.instance.onTraceEvent(
+        '\n[FINAL CASE]\ntitle=${tc.title}\nsource=${tc.source.name}',
+      );
     }
 
     final auditReport = PipelineAuditReport(
       traceId: request.traceId,
-      totalInputCases: request.requestedCaseCount,
+      rejectedCases: validationResult.rejectedCases,
+      repairLog: repairResult.repairLog,
+      diversityBalance: _diversityBalance(finalWorkingCases),
+      averageConfidence: _averageConfidence(finalWorkingCases),
+      fallbackTriggers: _fallbackTriggers(
+        outcomeType: outcomeType.name,
+        coverage: coverage,
+      ),
+      totalInputCases: aiReturnedCount,
       finalizedCases: finalized.length,
+      repairedCases: repairResult.repairedCount,
+      rejectedCount: validationResult.rejectedCount,
+      missingIntentIds: coverage.missingOutcomes,
+      prompt: prompt,
+      rawAiResponse: aiResult.rawResponse,
+      aiLatencyMs: aiResult.latencyMs,
+      aiStatusCode: aiResult.statusCode,
+      aiReturnedCount: aiReturnedCount,
+      aiAcceptedCount: acceptedAiCases.length,
+      structuralRejectedCount: validationResult.structuralRejectedCount,
+      semanticRejectedCount: validationResult.semanticRejectedCount,
+      realismRejectedCount: validationResult.realismRejectedCount,
+      exportSafetyRejectedCount: validationResult.exportSafetyRejectedCount,
+      repairedCount: repairResult.repairedCount,
+      fallbackCount: fallbackCases.length,
     );
 
     return PipelineExecutionResult(
@@ -102,22 +205,107 @@ class PipelineOrchestrator {
     );
   }
 
-  FinalizedTestCase _toFinalized(WorkingCase wc) {
-    return FinalizedTestCase(
-      id: wc.id,
-      title: wc.title,
-      module: wc.module,
-      feature: wc.feature,
-      platform: wc.platform,
-      priority: wc.priority,
-      type: wc.type,
-      preconditions: wc.preconditions,
-      testData: wc.testData,
-      steps: wc.steps,
-      expectedResult: wc.expectedResult,
-      actualResult: wc.actualResult,
-      status: wc.status,
-      source: wc.metadata.source,
+  List<WorkingCase> _hydrateParsedCases(
+    List<Map<String, dynamic>> parsedCases,
+    GenerationRequest request,
+  ) {
+    final hydratedCases = <WorkingCase>[];
+
+    for (int i = 0; i < parsedCases.length; i++) {
+      final plan = i < request.plan.length
+          ? request.plan[i]
+          : const <String, dynamic>{};
+      final raw = Map<String, dynamic>.from(parsedCases[i]);
+      final category = _normalizeCategory(
+        _firstText(raw['categoryLock'], raw['category'], plan['category']),
+      );
+
+      raw['id'] = _firstText(raw['id'], _buildAiCaseId(request.module, i + 1));
+      raw['module'] = _firstText(raw['module'], request.module);
+      raw['feature'] = _firstText(raw['feature'], request.feature);
+      raw['platform'] = _firstText(raw['platform'], request.platform);
+      raw['priority'] = _firstText(raw['priority'], plan['priority'], 'Medium');
+      raw['type'] = _firstText(
+        raw['type'],
+        plan['type'],
+        category.toUpperCase(),
+      );
+      raw['categoryLock'] = category;
+      raw['constraints'] = _firstText(raw['constraints'], request.constraints);
+      raw['intent_id'] = _firstText(
+        raw['intent_id'],
+        raw['intentId'],
+        plan['intent_id'],
+        '__unknown__',
+      );
+
+      hydratedCases.add(WorkingCase.fromJson(raw, traceId: request.traceId));
+    }
+
+    return hydratedCases;
+  }
+
+  List<String> _fallbackTriggers({
+    required String outcomeType,
+    required CoverageAnalysisResult coverage,
+  }) {
+    if (!coverage.needsFallback) return const [];
+
+    final mode = coverage.requiresFullFallback ? 'full' : 'partial';
+    final outcomes = coverage.missingOutcomes.isEmpty
+        ? 'no specific outcomes'
+        : coverage.missingOutcomes.join(', ');
+    return [
+      '$mode fallback after $outcomeType: ${coverage.missingCount} missing cases ($outcomes)',
+    ];
+  }
+
+  Map<String, int> _diversityBalance(List<WorkingCase> cases) {
+    final balance = <String, int>{};
+    for (final testCase in cases) {
+      final profile = testCase.metadata.semanticProfile;
+      balance[profile] = (balance[profile] ?? 0) + 1;
+    }
+    return balance;
+  }
+
+  double _averageConfidence(List<WorkingCase> cases) {
+    if (cases.isEmpty) return 0;
+    final total = cases.fold<double>(
+      0,
+      (sum, testCase) => sum + testCase.metadata.confidenceScore,
     );
+    return total / cases.length;
+  }
+
+  String _buildAiCaseId(String module, int index) {
+    final normalized = module
+        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+        .toUpperCase();
+    return 'AI_${normalized}_${index.toString().padLeft(3, '0')}';
+  }
+
+  String _firstText(
+    Object? first, [
+    Object? second,
+    Object? third,
+    Object? fourth,
+  ]) {
+    for (final value in [first, second, third, fourth]) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty && text != 'null') return text;
+    }
+    return '';
+  }
+
+  String _normalizeCategory(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (value.contains('positive')) return 'positive';
+    if (value.contains('negative')) return 'negative';
+    if (value.contains('validation')) return 'validation';
+    if (value.contains('boundary')) return 'boundary';
+    if (value.contains('security')) return 'security';
+    if (value.contains('session')) return 'session';
+    return value.isEmpty ? 'positive' : value;
   }
 }

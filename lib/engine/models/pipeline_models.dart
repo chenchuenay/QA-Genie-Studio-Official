@@ -127,7 +127,7 @@ class WorkingCase {
       platform: json['platform'] ?? '',
       priority: json['priority'] ?? 'Medium',
       type: json['type'] ?? 'Positive',
-      categoryLock: json['categoryLock'] ?? 'Positive',
+      categoryLock: json['categoryLock'] ?? json['category'] ?? 'positive',
       constraints: json['constraints'],
       preconditions: List<String>.from(json['preconditions'] ?? []),
       testData: json['testData'] ?? '',
@@ -139,7 +139,7 @@ class WorkingCase {
       actualResult: json['actualResult'] ?? '',
       status: json['status'] ?? 'Not Executed',
       metadata: CaseMetadata(source: CaseSource.ai, traceId: traceId),
-      intentId: json['intent_id'] ?? '__unknown__',
+      intentId: json['intent_id'] ?? json['intentId'] ?? '__unknown__',
     );
   }
 
@@ -200,6 +200,7 @@ class PipelineAuditReport {
   final String? aiEndpoint;
   final int? aiStatusCode;
   final int? aiReturnedCount;
+  final int? aiAcceptedCount;
   final int? structuralRejectedCount;
   final int? semanticRejectedCount;
   final int? realismRejectedCount;
@@ -226,6 +227,7 @@ class PipelineAuditReport {
     this.aiEndpoint,
     this.aiStatusCode,
     this.aiReturnedCount,
+    this.aiAcceptedCount,
     this.structuralRejectedCount,
     this.semanticRejectedCount,
     this.realismRejectedCount,
@@ -256,6 +258,7 @@ class GenerationRequest {
   final int requestedCaseCount;
   final String constraints;
   final String domain;
+  final List<Map<String, dynamic>> plan;
   final String
   traceId; // <-- ADDED (required for deterministic seeding and auditing)
 
@@ -267,6 +270,7 @@ class GenerationRequest {
     required this.requestedCaseCount,
     this.constraints = '',
     this.domain = 'general',
+    this.plan = const [],
     required this.traceId,
   });
 }

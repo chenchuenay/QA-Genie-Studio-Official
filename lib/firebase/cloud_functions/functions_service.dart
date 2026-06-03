@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 // ============================================================
 // FILE: lib/firebase/cloud_functions/functions_service.dart
@@ -32,20 +34,47 @@ class FunctionsService {
     Map<String, dynamic>? payload,
     Duration timeout = const Duration(seconds: 25),
   }) async {
+    debugPrint('REACHED_FUNCTIONS_SERVICE');
+    debugPrint('LOG_1: Entering FunctionsService.call');
+    debugPrint('LOG_2: Function name called: $functionName');
+
     try {
       final callable = _functions.httpsCallable(
         functionName,
         options: HttpsCallableOptions(timeout: timeout),
       );
 
-      final result = await callable.call(payload ?? {});
+      try {
+        final result = await callable.call(payload ?? {});
+        debugPrint('CALLABLE_SUCCESS');
+        debugPrint('CALLABLE_DATA=${result.data}');
 
-      if (result.data == null) {
-        throw Exception('Cloud function returned null.');
+        debugPrint(
+          'LOG_3: FunctionsService returned runtimeType: ${result.data.runtimeType}',
+        );
+        debugPrint(
+          'LOG_4: FunctionsService returned full payload: ${result.data}',
+        );
+        if (result.data is Map) {
+          debugPrint(
+            'LOG_5: FunctionsService payload keys: ${(result.data as Map).keys}',
+          );
+        }
+
+        if (result.data == null) {
+          throw Exception('Cloud function returned null.');
+        }
+
+        return Map<String, dynamic>.from(result.data);
+      } catch (e, st) {
+        debugPrint('CALLABLE_EXCEPTION=$e');
+        debugPrint('CALLABLE_STACK=$st');
+        rethrow;
       }
-
-      return Map<String, dynamic>.from(result.data);
     } on FirebaseFunctionsException catch (e) {
+      debugPrint('FIREBASE_FUNCTION_CODE=${e.code}');
+      debugPrint('FIREBASE_FUNCTION_MESSAGE=${e.message}');
+      debugPrint('FIREBASE_FUNCTION_DETAILS=${e.details}');
       throw Exception(_mapError(e));
     } catch (e) {
       rethrow;

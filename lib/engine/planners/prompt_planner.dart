@@ -3,7 +3,7 @@ import 'package:qa_genie/engine/business/business_area.dart';
 import 'package:qa_genie/engine/scenario/scenario_engine.dart';
 import 'package:qa_genie/engine/planners/coverage_planner.dart';
 
-/// Generates skeletons for AI prompt in the same format as old ScenarioPlanner.
+/// Generates deterministic coverage skeletons for the AI prompt.
 class PromptPlanner {
   final String module;
   final String feature;
@@ -46,7 +46,7 @@ class PromptPlanner {
         'intent_id': assignment.outcome,
         'category': assignment.category,
         'priority': _priorityFromRisk(assignment.risk),
-        'type': null,
+        'type': assignment.category.toUpperCase(),
         'module': module,
         'feature': feature,
         'platform': platform,

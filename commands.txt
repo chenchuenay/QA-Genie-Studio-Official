@@ -27,6 +27,8 @@ flutter test test/forensic_tests/headless/exports/full_export_test.dart
 
 
 
+firebase deploy --only functions
+firebase functions:log --only generate
 
 
 
@@ -38,3 +40,47 @@ flutter build apk --release --flavor dev
 
 # Prod APK
 flutter build apk --release --flavor prod
+
+
+
+
+Dev
+Backend:
+✓ Firebase Auth
+✓ Cloud Functions
+✓ Firestore
+✓ Gemini
+✓ Usage Tracking
+✓ Export Tracking
+✓ Server-side Limits
+✓ Security Checks
+
+UI:
+✓ Account Test Page
+✓ Mock Rewarded Ads
+✓ Mock Interstitial Ads
+✓ Mock Native Ads
+
+Hidden:
+✗ Upgrade Page
+
+
+Prod
+Backend:
+✓ Firebase Auth
+✓ Cloud Functions
+✓ Firestore
+✓ Gemini
+✓ Usage Tracking
+✓ Export Tracking
+✓ Server-side Limits
+✓ Security Checks
+
+UI:
+✓ Upgrade Page
+✓ Real Rewarded Ads
+✓ Real Interstitial Ads
+✓ Real Native Ads
+
+Hidden:
+✗ Account Test Page

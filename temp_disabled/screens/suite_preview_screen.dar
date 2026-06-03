@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/shared/dialogs/ad_dialog.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
@@ -13,8 +14,6 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
-import 'package:qa_genie/features/monetization/ads/ad_service.dart'; // ✅ added
-// Remove: import 'package:qa_genie/shared/dialogs/ad_dialog.dart';
 
 class PreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -43,37 +42,13 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
   Timer? _debounceTimer;
   bool isEditable = false;
   bool _hasUnsaved = false;
+
   List<FinalizedTestCase>? _backupCases;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
-    final report = widget.session.auditReport;
-    debugPrint('========================================');
-    debugPrint('PIPELINE AUDIT REPORT');
-    debugPrint('========================================');
-    debugPrint('traceId: ${report.traceId}');
-    debugPrint('requestedCount: ${widget.session.testCases.length}');
-    debugPrint('aiReturnedCount: ${report.aiReturnedCount ?? 0}');
-    debugPrint('parsedCasesCount: ${report.totalInputCases}');
-    debugPrint('repairedCount: ${report.repairedCount ?? 0}');
-    debugPrint('aiAcceptedCount: ${report.aiAcceptedCount ?? 0}');
-    debugPrint('fallbackCount: ${report.fallbackCount ?? 0}');
-    debugPrint('finalizedCases: ${report.finalizedCases}');
-    debugPrint('CONSISTENCY_CHECK: ${((report.aiAcceptedCount ?? 0) + (report.fallbackCount ?? 0))}/${report.finalizedCases}');
-    debugPrint('========================================');
-
-    final aiCases = widget.session.testCases.where((c) => c.source.name == 'ai').length;
-    final fbCases = widget.session.testCases.where((c) => c.source.name == 'fallback').length;
-    debugPrint('AI_CASES: $aiCases');
-    debugPrint('FALLBACK_CASES: $fbCases');
-
-    for (int i = 0; i < widget.session.testCases.length; i++) {
-      final tc = widget.session.testCases[i];
-      debugPrint('CASE_${(i + 1).toString().padLeft(2, '0')} | source=${tc.source.name} | title=${tc.title}');
-    }
   }
 
   @override
@@ -154,18 +129,11 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
     if (!isPro) {
       final exportCount = await UsageManager.getExportCount();
       if (exportCount > 0) {
-        final watched = await AdService.showRewardedAd(
-          adUnitId: 'ca-app-pub-.../export_reward',
-          onRewarded: () async {
-            await UsageManager.incrementExport();
-          },
-          context: context,
-        );
-        if (!watched) return;
+        final watched = await showDialog<bool>(context: context, builder: (_) => const AdDialog());
+        if (watched != true) return;
       }
     }
     try {
-      debugPrint('EXPORT STARTED: $type | ${widget.session.testCases.length} cases');
       await _exportUseCase.execute(
         type: type,
         cases: widget.session.testCases,
@@ -173,18 +141,17 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
         featureName: widget.feature,
       );
       await UsageManager.incrementExport();
-      debugPrint('EXPORT SUCCESS: $type');
       if (!mounted) return;
       showDialog(
         context: context,
         builder: (_) => ExportSuccessDialog(
           type: type,
+          count: widget.session.testCases.length,
           moduleName: widget.moduleName,
           onShareAgain: () => _export(type),
         ),
       );
-    } catch (e, stackTrace) {
-      debugPrint('EXPORT ERROR: $e');
+    } catch (e, stack) {
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
@@ -193,7 +160,7 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
         severity: ErrorSeverity.error,
         userMessage: 'Export failed: $e',
         error: e,
-        stack: stackTrace,
+        stack: stack,
       );
     }
   }
@@ -209,6 +176,7 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
         moduleName: widget.moduleName,
         featureName: widget.feature,
         onSave: (updatedCases) async {
+          // Replace the list reference to trigger UI update
           widget.session.testCases = List.from(updatedCases);
           await _autoSave();
           if (!mounted) return;
@@ -269,8 +237,6 @@ class _PreviewScreenState extends State<PreviewScreen> with WidgetsBindingObserv
                           if (await _onWillPop() && mounted) Navigator.pop(context);
                         },
                       ),
-                      const SizedBox(width: 8),
-                      const Text("Suite", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
                       const Spacer(),
                       if (!isEditable) ...[
                         OutlinedButton.icon(

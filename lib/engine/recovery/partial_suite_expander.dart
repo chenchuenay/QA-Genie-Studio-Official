@@ -6,16 +6,15 @@ class PartialSuiteExpander {
 
   PartialSuiteExpander({required this.deterministicGenerator});
 
-  List<WorkingCase> expand({
-    required List<WorkingCase> existingCases,
-    required List<String> missingOutcomes,
+  List<WorkingCase> generateMissing({
     required GenerationRequest request,
+    required List<String> outcomes,
+    int startIndex = 0,
   }) {
-    if (missingOutcomes.isEmpty) return existingCases;
-    final generated = deterministicGenerator.generateByOutcomes(
+    return deterministicGenerator.generateByOutcomes(
       request: request,
-      outcomes: missingOutcomes,
+      outcomes: outcomes,
+      startIndex: startIndex,
     );
-    return [...existingCases, ...generated];
   }
 }

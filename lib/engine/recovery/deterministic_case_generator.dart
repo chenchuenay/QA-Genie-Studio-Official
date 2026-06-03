@@ -10,7 +10,6 @@ import 'package:qa_genie/engine/expected_result/composer.dart';
 import 'package:qa_genie/engine/adapters/platform_adapter.dart';
 import 'package:qa_genie/engine/generators/data_generator.dart';
 import 'package:qa_genie/engine/planners/coverage_planner.dart';
-import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/engine/observations/observation_generator.dart';
 
 class DeterministicCaseGenerator {
@@ -36,9 +35,6 @@ class DeterministicCaseGenerator {
     final coverage = planner.plan();
 
     final businessArea = _mapFeatureToBusinessArea(request.feature);
-    if (businessArea == null) {
-      throw Exception('Unknown business area for feature: ${request.feature}');
-    }
 
     final scenarioEngine = ScenarioEngine(request.traceId);
     final assignments = scenarioEngine.generateAssignments(
@@ -58,11 +54,9 @@ class DeterministicCaseGenerator {
   List<WorkingCase> generateByOutcomes({
     required GenerationRequest request,
     required List<String> outcomes,
+    int startIndex = 0,
   }) {
     final businessArea = _mapFeatureToBusinessArea(request.feature);
-    if (businessArea == null) {
-      throw Exception('Unknown business area for feature: ${request.feature}');
-    }
 
     final cases = <WorkingCase>[];
     for (int i = 0; i < outcomes.length; i++) {
@@ -73,7 +67,30 @@ class DeterministicCaseGenerator {
         category: _categoryFromOutcome(outcome),
         risk: _riskFromOutcome(outcome),
       );
-      cases.add(_buildCaseFromAssignment(assignment, request, i + 1));
+      cases.add(
+        _buildCaseFromAssignment(assignment, request, startIndex + i + 1),
+      );
+    }
+    return cases;
+  }
+
+  List<WorkingCase> generateByCategoryCounts({
+    required GenerationRequest request,
+    required Map<String, int> categoryCounts,
+    int startIndex = 0,
+  }) {
+    final businessArea = _mapFeatureToBusinessArea(request.feature);
+    final scenarioEngine = ScenarioEngine('${request.traceId}|$startIndex');
+    final assignments = scenarioEngine.generateAssignments(
+      categoryCounts: categoryCounts,
+      businessArea: businessArea,
+    );
+
+    final cases = <WorkingCase>[];
+    int idx = startIndex;
+    for (final assignment in assignments) {
+      idx++;
+      cases.add(_buildCaseFromAssignment(assignment, request, idx));
     }
     return cases;
   }
@@ -162,7 +179,7 @@ class DeterministicCaseGenerator {
       status: 'Not Executed',
       metadata: CaseMetadata(
         source: CaseSource.fallback,
-        traceId: TraceIdGenerator.generate(),
+        traceId: request.traceId,
         confidenceScore: 0.85,
         repairHistory: [],
         validationIssues: [],
@@ -182,7 +199,7 @@ class DeterministicCaseGenerator {
         : GenerationMode.core;
   }
 
-  BusinessArea? _mapFeatureToBusinessArea(String feature) {
+  BusinessArea _mapFeatureToBusinessArea(String feature) {
     final lower = feature.toLowerCase();
     if (lower.contains('login') ||
         lower.contains('auth') ||
@@ -211,7 +228,11 @@ class DeterministicCaseGenerator {
         riskProfile: 'HIGH',
       );
     }
-    return null;
+    return const BusinessArea(
+      id: 'general',
+      domain: 'general',
+      riskProfile: 'LOW',
+    );
   }
 
   GenericFlow _flowForBusinessArea(BusinessArea area) {

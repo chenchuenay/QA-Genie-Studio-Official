@@ -112,11 +112,11 @@ class AuthenticationDataGenerator implements DataGenerator {
   // ---------- Email pools ----------
   String _randomValidEmail(Random random) {
     const emails = [
-      'user_847@test.local',
-      'account_152@test.local',
-      'member_921@test.local',
-      'customer_438@test.local',
-      'portal_user_210@test.local',
+      'user@example.com',
+      'jhon@example.org',
+      'member_9@test.in',
+      'admin@test.ai',
+      'portal@example.ai',
     ];
     return emails[random.nextInt(emails.length)];
   }
@@ -144,11 +144,11 @@ class AuthenticationDataGenerator implements DataGenerator {
   // ---------- Password pools ----------
   String _randomValidPassword(Random random) {
     const passwords = [
-      'SecurePass@2025',
+      'SecurePass@2',
       'Welcome#456',
       'StrongLogin!789',
       'AccessKey@321',
-      'ValidUser#2025',
+      'ValidUser#@9',
     ];
     return passwords[random.nextInt(passwords.length)];
   }
@@ -159,12 +159,7 @@ class AuthenticationDataGenerator implements DataGenerator {
       'incorrect_password',
       'old_password',
       'reused_password',
-      'expired_password',
-      '123456',
-      'password',
-      'qwerty123',
-      'abc123',
-      'welcome',
+      '1',
     ];
     return passwords[random.nextInt(passwords.length)];
   }

@@ -1,15 +1,12 @@
 import 'package:equatable/equatable.dart';
 
+// ignore: must_be_immutable
 class TestStep extends Equatable {
   String action;
   String data;
   String expected;
 
-  TestStep({
-    required this.action,
-    this.data = '',
-    this.expected = '',
-  });
+  TestStep({required this.action, this.data = '', this.expected = ''});
 
   factory TestStep.fromJson(Map<String, dynamic> json) {
     return TestStep(
@@ -20,10 +17,10 @@ class TestStep extends Equatable {
   }
 
   Map<String, dynamic> toJson() => {
-        'action': action,
-        'data': data,
-        'expected': expected,
-      };
+    'action': action,
+    'data': data,
+    'expected': expected,
+  };
 
   TestStep copyWith({String? action, String? data, String? expected}) {
     return TestStep(

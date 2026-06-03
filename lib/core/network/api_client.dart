@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:qa_genie/core/error/exceptions.dart';
 import 'package:qa_genie/core/network/connectivity_service.dart';
+import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 // ============================================================
 // FILE: lib/core/network/api_client.dart
 // ============================================================
@@ -47,6 +48,7 @@ class ApiClient {
     print('API_CLIENT_DEBUG: Loaded API Key (length: ${value?.length})');
 
     if (value == null || value.trim().isEmpty) {
+      PipelineForensics.instance.onTraceEvent('\n[AI ERROR]\nerror=Missing GEMINI_API_KEY in .env');
       throw const ConfigurationException('Missing GEMINI_API_KEY in .env');
     }
 
@@ -87,6 +89,8 @@ class ApiClient {
 
     final uri = Uri.parse(url);
 
+    PipelineForensics.instance.onTraceEvent('\n[AI NETWORK]\nrequestSent=true');
+
     final body = {
       'contents': [
         {
@@ -122,6 +126,7 @@ class ApiClient {
     };
 
     try {
+      final stopwatch = Stopwatch()..start();
       final response = await http
           .post(
             uri,
@@ -133,6 +138,13 @@ class ApiClient {
             body: jsonEncode(body),
           )
           .timeout(_timeout);
+      stopwatch.stop();
+
+      PipelineForensics.instance.onTraceEvent('status=${response.statusCode}\nlatencyMs=${stopwatch.elapsedMilliseconds}');
+
+      PipelineForensics.instance.onTraceEvent('\n[AI RAW RESPONSE]\nlength=${response.body.length}');
+      PipelineForensics.instance.onTraceEvent('first1000=${response.body.length > 1000 ? response.body.substring(0, 1000) : response.body}');
+      PipelineForensics.instance.onTraceEvent('last1000=${response.body.length > 1000 ? response.body.substring(response.body.length - 1000) : response.body}');
 
       print('API_CLIENT_DEBUG: Response status: ${response.statusCode}');
       print('API_CLIENT_DEBUG: Response body: ${response.body}');
@@ -151,6 +163,11 @@ class ApiClient {
   // ============================================================
 
   static String _handleResponse(http.Response response) {
+    print('FORENSIC: HTTP_STATUS: ${response.statusCode}');
+    print('FORENSIC: RAW_RESPONSE_LENGTH: ${response.body.length}');
+    print(
+        'FORENSIC: FIRST_500_CHARS_OF_RESPONSE: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+
     if (response.statusCode >= 500) {
       print('API_CLIENT_DEBUG: Server Error: ${response.statusCode}, Body: ${response.body}');
       throw const ServerException('AI provider unavailable.');
@@ -168,8 +185,18 @@ class ApiClient {
 
     try {
       final decoded = jsonDecode(response.body);
+      final candidates = decoded['candidates'] as List?;
+      print('FORENSIC: CANDIDATE_COUNT: ${candidates?.length ?? 0}');
+
+      if (candidates != null && candidates.isNotEmpty) {
+        final parts = candidates[0]['content']['parts'] as List?;
+        print('FORENSIC: TEXT_PART_COUNT: ${parts?.length ?? 0}');
+      }
+
       final text =
           decoded['candidates'][0]['content']['parts'][0]['text'] as String;
+
+      print('FORENSIC: FINAL_EXTRACTED_TEXT_LENGTH: ${text.length}');
 
       if (text.trim().isEmpty) {
         throw const ApiException('Empty AI response.');

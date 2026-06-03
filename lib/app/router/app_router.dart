@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qa_genie/features/beta/logic/beta_manager.dart';
 import 'package:qa_genie/features/beta/ui/beta_expired_screen.dart';
 import 'package:qa_genie/shared/navigation/main_screen.dart'; // ✅ use MainScreen
@@ -41,6 +42,22 @@ class _StartupGateState extends State<_StartupGate> {
   }
 
   Future<void> _initialize() async {
+    debugPrint('AUTH_START');
+
+    // Anonymous Auth Gate
+    if (FirebaseAuth.instance.currentUser == null) {
+      try {
+        debugPrint('AUTH_SIGNING_IN_ANONYMOUSLY');
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (e, st) {
+        debugPrint('AUTH_FAILED: $e');
+        debugPrint('AUTH_STACK: $st');
+      }
+    }
+
+    debugPrint('AUTH_UID=${FirebaseAuth.instance.currentUser?.uid}');
+    debugPrint('AUTH_COMPLETE');
+
     final expired = await BetaManager.isExpired();
     final updateRequired = await BetaManager.isUpdateRequired();
     if (!mounted) return;

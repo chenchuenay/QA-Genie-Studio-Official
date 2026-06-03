@@ -97,13 +97,21 @@ Each testcase object MUST contain EXACTLY:
 
   {
 
-    "id": "",
+	    "id": "",
 
-    "title": "",
+	    "title": "",
 
-    "preconditions": [],
+	    "module": "",
 
-    "steps": [
+	    "feature": "",
+
+	    "platform": "",
+
+	    "preconditions": [],
+
+	    "testData": "",
+
+	    "steps": [
 
       {
 
@@ -119,11 +127,15 @@ Each testcase object MUST contain EXACTLY:
 
     "expectedResult": "",
 
-    "priority": "",
+	    "priority": "",
 
-    "type": ""
+	    "type": "",
 
-  }
+	    "categoryLock": "",
+
+	    "intent_id": ""
+
+	  }
 
 ]
 
