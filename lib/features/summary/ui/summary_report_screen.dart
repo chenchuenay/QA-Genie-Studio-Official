@@ -3,10 +3,9 @@ import 'package:qa_genie/app/theme/app_text.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
-import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
-import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
+import 'package:qa_genie/features/summary/ui/summary_report_preview_screen.dart';
 
 class SummaryReportScreen extends StatefulWidget {
   final GenerationSession session;
@@ -31,7 +30,6 @@ class SummaryReportScreen extends StatefulWidget {
 class _SummaryReportScreenState extends State<SummaryReportScreen> {
   final _testerCtrl = TextEditingController(text: 'QA Tester');
   final _envCtrl = TextEditingController(text: 'Staging');
-  final _exportUseCase = ExportTestCasesUseCase();
   bool _editing = false;
 
   @override
@@ -61,37 +59,20 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
 
   void _toggleEdit() => setState(() => _editing = !_editing);
 
-  Future<void> _export() async {
-    try {
-      // Inside _export() method of SummaryReportScreen, change the call to:
-await _exportUseCase.exportSummaryReport(
-  cases: widget.session.testCases,
-  moduleName: widget.moduleName,
-  featureName: widget.feature,
-  platform: widget.platform,
-  testerName: _tester,
-  environment: _environment,
-  context: context, // add this line
-);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Summary report exported!'),
-          backgroundColor: AppColors.success,
+  void _navigateToPreview() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SummaryReportPreviewScreen(
+          session: widget.session,
+          moduleName: widget.moduleName,
+          feature: widget.feature,
+          platform: widget.platform,
+          testerName: _tester,
+          environment: _environment,
         ),
-      );
-    } catch (e, stack) {
-      UiErrorService.logAndShow(
-        context: context,
-        source: ErrorSource.exportEngine,
-        screen: 'SummaryReportScreen',
-        stage: ErrorStage.export,
-        severity: ErrorSeverity.error,
-        userMessage: 'Export failed: $e',
-        error: e,
-        stack: stack,
-      );
-    }
+      ),
+    );
   }
 
   @override
@@ -185,7 +166,7 @@ await _exportUseCase.exportSummaryReport(
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton.icon(
-                  onPressed: _editing ? null : _export,
+                  onPressed: _editing ? null : _navigateToPreview,
                   icon: const Icon(Icons.picture_as_pdf, color: Colors.black),
                   label: const Text(
                     'Export Summary Report',
@@ -501,9 +482,7 @@ await _exportUseCase.exportSummaryReport(
               .toList(),
           onChanged: (v) {
             if (v == null) return;
-            setState(() {
-              tc.status = v;
-            });
+            setState(() => tc.status = v);
           },
         ),
       ),
