@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
-import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
+import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 
 typedef AiCaller =
@@ -10,77 +9,72 @@ typedef AiCaller =
 
 class AiGenerationStage {
   static AiCaller? _testCaller;
-
-  static void useTestCaller(AiCaller caller) {
-    _testCaller = caller;
-  }
+  static void useTestCaller(AiCaller caller) => _testCaller = caller;
 
   final AiCaller _aiCaller;
-
   AiGenerationStage() : _aiCaller = _testCaller ?? _callCloudFunction;
 
   Future<AiStageResult> execute({
     required String prompt,
     required GenerationRequest request,
   }) async {
-    debugPrint('REACHED_AIGENERATION_STAGE');
     final startTime = DateTime.now();
+    int? totalRetries = 0;
+    Map<String, dynamic>? lastErrorDetails;
+
     try {
       final response = await _aiCaller(prompt, request);
       final latencyMs = DateTime.now().difference(startTime).inMilliseconds;
+      final structured = jsonDecode(response) as Map<String, dynamic>;
 
-      try {
-        final decoded = jsonDecode(response);
-        final candidates = decoded['candidates'] as List? ?? [];
-        final parts = candidates.isNotEmpty
-            ? (candidates[0]['content']['parts'] as List? ?? [])
-            : [];
-        final finishReason = candidates.isNotEmpty
-            ? candidates[0]['finishReason']
-            : 'unknown';
-        final safetyBlocks = candidates.isNotEmpty
-            ? (candidates[0]['safetyRatings'] as List? ?? [])
-            : [];
-
-        PipelineForensics.instance.onTraceEvent(
-          '\n[AI PAYLOAD]\ncandidateCount=${candidates.length}',
-        );
-        PipelineForensics.instance.onTraceEvent('partCount=${parts.length}');
-        PipelineForensics.instance.onTraceEvent('finishReason=$finishReason');
-        PipelineForensics.instance.onTraceEvent(
-          'safetyBlocks=${safetyBlocks.length}',
-        );
-      } catch (e) {
-        PipelineForensics.instance.onTraceEvent(
-          '\n[AI PAYLOAD]\nerror=Failed to parse for Section 4: $e',
-        );
-      }
+      debugPrint(
+        '✅ AI_STAGE_SUCCESS: ${structured['success'] == true ? 'AI returned data' : 'Cloud function returned error'}',
+      );
 
       return AiStageResult(
-        rawResponse: response,
-        statusCode: 200,
+        rawResponse: structured['success'] == true
+            ? jsonEncode(structured['data'])
+            : response,
+        statusCode: structured['success'] == true
+            ? 200
+            : (structured['error']?['code'] == 'RATE_LIMIT' ? 429 : 500),
         hasTransportError: false,
         latencyMs: latencyMs,
+        structuredResponse: structured,
+        errorDetails: structured['success'] == true
+            ? null
+            : (structured['error'] as Map<String, dynamic>?),
+        modelName: structured['metadata']?['model'] as String?,
+        apiUrl: 'https://api.deepseek.com/v1/chat/completions', // configurable
+        totalRetries: totalRetries,
       );
     } catch (e, st) {
-      debugPrint('==============================');
-      debugPrint('AI_STAGE_EXCEPTION=$e');
-      debugPrint('AI_STAGE_STACK=$st');
-      debugPrint('==============================');
-
-      final error = e.toString();
-
-      PipelineForensics.instance.onTraceEvent(
-        '\n[AI STAGE ERROR]\nerror=$error',
+      final errorType = ErrorCaptureUtils.extractNetworkErrorType(e);
+      final httpStatus = ErrorCaptureUtils.extractHttpStatusCode(e);
+      lastErrorDetails = {
+        'exceptionType': e.runtimeType.toString(),
+        'message': e.toString(),
+        'stackTrace': st.toString(),
+        'networkErrorType': errorType,
+        'httpStatus': httpStatus,
+      };
+      ErrorCaptureUtils.logError(
+        source: 'AiGenerationStage',
+        error: e,
+        stack: st,
+        additionalInfo: 'Request traceId: ${request.traceId}',
       );
-
-      final statusCode = _extractStatusCode(error);
 
       return AiStageResult(
         rawResponse: '',
-        statusCode: statusCode,
+        statusCode: httpStatus ?? _extractStatusCode(e.toString()),
         hasTransportError: true,
-        errorMessage: error,
+        errorMessage: e.toString(),
+        latencyMs: DateTime.now().difference(startTime).inMilliseconds,
+        errorDetails: lastErrorDetails,
+        modelName: null,
+        apiUrl: null,
+        totalRetries: totalRetries,
       );
     }
   }
@@ -89,12 +83,6 @@ class AiGenerationStage {
     String prompt,
     GenerationRequest request,
   ) async {
-    debugPrint('CF_MODULE=${request.module}');
-    debugPrint('CF_FEATURE=${request.feature}');
-    debugPrint('CF_PLATFORM=${request.platform}');
-    debugPrint('CF_MODE=${request.generationMode}');
-    debugPrint('CF_NOTES=${request.constraints}');
-
     final result = await FunctionsService.call(
       functionName: 'generate',
       payload: {
@@ -104,25 +92,15 @@ class AiGenerationStage {
         'platform': request.platform,
         'notes': request.constraints,
         'isPro': request.generationMode.toLowerCase() == 'pro',
+        'adToken': request.adToken,
       },
     );
-
-    // LOGS
-    debugPrint('--- AI TRANSPORT DIAGNOSTIC ---');
-    debugPrint('LOG_A: result runtimeType=${result.runtimeType}');
-    debugPrint('LOG_B: result.keys=${result.keys}');
-    debugPrint('LOG_C: result raw payload=$result');
-
-    final stringResult = jsonEncode(result);
-    debugPrint('LOG_D: returned string length=${stringResult.length}');
-    debugPrint('---------------------------------');
-
     return jsonEncode(result);
   }
 
   int? _extractStatusCode(String error) {
-    if (error.contains('429') || error.contains('Quota exhausted')) return 429;
-    if (error.contains('503') || error.contains('unavailable')) return 503;
+    if (error.contains('429') || error.contains('Quota')) return 429;
+    if (error.contains('503')) return 503;
     if (error.contains('500')) return 500;
     return null;
   }
@@ -134,6 +112,11 @@ class AiStageResult {
   final bool hasTransportError;
   final String? errorMessage;
   final int? latencyMs;
+  final Map<String, dynamic>? structuredResponse;
+  final Map<String, dynamic>? errorDetails;
+  final String? modelName;
+  final String? apiUrl;
+  final int? totalRetries;
 
   const AiStageResult({
     required this.rawResponse,
@@ -141,5 +124,10 @@ class AiStageResult {
     required this.hasTransportError,
     this.errorMessage,
     this.latencyMs,
+    this.structuredResponse,
+    this.errorDetails,
+    this.modelName,
+    this.apiUrl,
+    this.totalRetries,
   });
 }

@@ -15,7 +15,6 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
         multiDexEnabled = true
     }
 
@@ -23,13 +22,12 @@ android {
     productFlavors {
         create("dev") {
             dimension = "mode"
-            // applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
+            versionName = "${flutter.versionName}-dev"
+            // applicationIdSuffix = ".dev"  // optional
         }
         create("prod") {
             dimension = "mode"
-            applicationIdSuffix = ""
-            versionNameSuffix = ""
+            versionName = flutter.versionName
         }
     }
 

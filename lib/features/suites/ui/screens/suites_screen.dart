@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
+import '../../../monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/core/database/database_service.dart';
-import '../../../monetization/ui/upgrade_coming_soon_screen.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
 // lib/features/suites/ui/screens/suites_screen.dart
@@ -49,40 +49,28 @@ class SuitesScreenState extends State<SuitesScreen> {
     _refreshSuites();
   }
 
-  // ... (rest of the file remains same, keeping legacy logic inside _suiteCard for now)
-
   Future<bool?> _confirmDelete(int id) async {
     return showDialog<bool>(
       context: context,
-
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-
         title: const Text(
           'Delete Suite?',
-
           style: TextStyle(color: Colors.white),
         ),
-
         content: const Text(
           'All test cases will be permanently deleted.',
-
           style: TextStyle(color: AppColors.textSecondary),
         ),
-
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-
             child: const Text('Cancel'),
           ),
-
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-
             child: const Text(
               'Delete',
-
               style: TextStyle(color: AppColors.error),
             ),
           ),
@@ -93,110 +81,79 @@ class SuitesScreenState extends State<SuitesScreen> {
 
   Future<void> _deleteSuite(int id) async {
     await DatabaseService.deleteSuite(id);
-
     refresh();
   }
 
   Future<void> _renameSuite(int id, String current) async {
     final ctrl = TextEditingController(text: current);
-
     final newName = await showDialog<String>(
       context: context,
-
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-
         title: const Text(
           'Rename Suite',
-
           style: TextStyle(color: Colors.white),
         ),
-
         content: TextField(
           controller: ctrl,
-
           style: const TextStyle(color: Colors.white),
         ),
-
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-
             child: const Text('Cancel'),
           ),
-
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-
             child: const Text('Rename'),
           ),
         ],
       ),
     );
-
-    if (newName == null || newName.isEmpty) {
-      return;
-    }
-
+    if (newName == null || newName.isEmpty) return;
     final db = await DatabaseService.db;
-
     await db.update(
       'suites',
       {'moduleName': newName},
-
       where: 'id = ?',
       whereArgs: [id],
     );
-
     refresh();
   }
 
   Widget _adPlaceholder() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-
       child: Card(
         color: AppColors.card,
-
         elevation: 4,
-
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 8,
           ),
-
           leading: Container(
             padding: const EdgeInsets.all(10),
-
             decoration: BoxDecoration(
               color: AppColors.warning.withOpacity(0.15),
-
               borderRadius: BorderRadius.circular(10),
             ),
-
             child: const Icon(
               Icons.ad_units,
               color: AppColors.warning,
               size: 28,
             ),
           ),
-
           title: const Text(
             'Sponsored',
-
             style: TextStyle(
               color: AppColors.textSecondary,
-
               fontWeight: FontWeight.w500,
             ),
           ),
-
           subtitle: const Text(
             'Ad',
-
             style: TextStyle(color: AppColors.textHint, fontSize: 12),
           ),
         ),
@@ -207,98 +164,72 @@ class SuitesScreenState extends State<SuitesScreen> {
   Widget _proBanner() {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-
       child: Card(
         color: AppColors.card,
-
         elevation: 4,
-
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-
         child: Padding(
           padding: const EdgeInsets.all(16),
-
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-
             children: [
               Row(
                 children: [
                   const Icon(Icons.stars, color: AppColors.warning, size: 32),
-
                   const SizedBox(width: 12),
-
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-
                       children: [
                         Text(
                           'Unlock Pro',
-
                           style: TextStyle(
                             color: Colors.white,
-
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-
                         SizedBox(height: 4),
-
                         Text(
                           '15 requests/day · Unlimited exports',
-
                           style: TextStyle(
                             color: AppColors.textSecondary,
-
                             fontSize: 12,
                           ),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(width: 12),
-
                   ElevatedButton(
                     onPressed: () {
                       Navigator.push(
                         context,
-
                         MaterialPageRoute(
-                          builder: (_) => const UpgradeComingSoonScreen(),
+                          builder: (_) => const UpgradeScreen(),
                         ),
                       );
                     },
-
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
-
                       foregroundColor: Colors.black,
-
                       padding: const EdgeInsets.symmetric(
                         horizontal: 18,
                         vertical: 12,
                       ),
-
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-
                     child: const Text(
                       'Upgrade Now',
-
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-
                         fontSize: 13,
                       ),
                     ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 10),
             ],
           ),
@@ -309,7 +240,6 @@ class SuitesScreenState extends State<SuitesScreen> {
 
   Widget _suiteCard(Map<String, dynamic> s) {
     final id = s['id'] as int;
-
     return Dismissible(
       key: Key(id.toString()),
       direction: DismissDirection.endToStart,
@@ -373,11 +303,9 @@ class SuitesScreenState extends State<SuitesScreen> {
             },
           ),
           onTap: () async {
-            // DatabaseService.getTestCasesForSuite now returns List<FinalizedTestCase>
             final canonicalCases = await DatabaseService.getTestCasesForSuite(
               id,
             );
-
             final session = GenerationSession(
               traceId:
                   'HISTORICAL_LOAD_${DateTime.now().millisecondsSinceEpoch}',
@@ -386,9 +314,7 @@ class SuitesScreenState extends State<SuitesScreen> {
                 traceId: 'HISTORICAL_LOAD',
               ),
             );
-
             if (!mounted) return;
-
             await Navigator.push(
               context,
               MaterialPageRoute(
@@ -412,83 +338,61 @@ class SuitesScreenState extends State<SuitesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-
       body: Column(
         children: [
           Expanded(
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _suitesFuture,
-
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(color: AppColors.accent),
                   );
                 }
-
                 final suites = snapshot.data ?? [];
-
                 if (suites.isEmpty) {
                   return ListView(
                     padding: const EdgeInsets.all(16),
-
                     children: [
                       if (!_isPro) _adPlaceholder(),
-
                       const SizedBox(height: 24),
-
                       Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-
                           children: [
                             const Icon(
                               Icons.folder_open,
                               size: 64,
                               color: AppColors.textHint,
                             ),
-
                             const SizedBox(height: 16),
-
                             const Text(
                               'No test suites yet',
-
                               style: TextStyle(
                                 color: AppColors.textSecondary,
-
                                 fontSize: 16,
                               ),
                             ),
-
                             const SizedBox(height: 24),
-
                             ElevatedButton.icon(
                               onPressed: () {
                                 widget.onGenerate?.call();
                               },
-
                               icon: const Icon(Icons.bolt, color: Colors.black),
-
                               label: const Text(
                                 'Generate now',
-
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-
                                   color: Colors.black,
                                 ),
                               ),
-
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.accent,
-
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 32,
                                   vertical: 14,
                                 ),
-
                                 elevation: 4,
-
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
@@ -500,42 +404,31 @@ class SuitesScreenState extends State<SuitesScreen> {
                     ],
                   );
                 }
-
                 final children = <Widget>[];
-
                 children.add(_suiteCard(suites.first));
-
                 if (!_isPro) {
                   children.add(_adPlaceholder());
                 }
-
                 for (int i = 1; i < suites.length; i++) {
                   children.add(_suiteCard(suites[i]));
                 }
-
                 return RefreshIndicator(
                   onRefresh: () async {
                     refresh();
                   },
-
                   child: ListView(
                     padding: const EdgeInsets.all(16),
-
                     children: children,
                   ),
                 );
               },
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-
             child: Text(
               'Your data stays local.',
-
               textAlign: TextAlign.center,
-
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey.shade500,
@@ -543,7 +436,6 @@ class SuitesScreenState extends State<SuitesScreen> {
               ),
             ),
           ),
-
           if (!_isPro) _proBanner(),
         ],
       ),
@@ -551,16 +443,9 @@ class SuitesScreenState extends State<SuitesScreen> {
   }
 
   String _fmtDate(String? iso) {
-    if (iso == null) {
-      return '';
-    }
-
+    if (iso == null) return '';
     final d = DateTime.tryParse(iso);
-
-    if (d == null) {
-      return '';
-    }
-
+    if (d == null) return '';
     return '${d.day}/${d.month}/${d.year}';
   }
 }

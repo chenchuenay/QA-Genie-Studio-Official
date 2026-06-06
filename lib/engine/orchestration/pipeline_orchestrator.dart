@@ -2,6 +2,7 @@ import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 import 'package:qa_genie/engine/parsers/response_classifier.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
+import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 import 'package:qa_genie/engine/orchestration/stages/repair_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/parsing_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/fallback_stage.dart';
@@ -14,7 +15,6 @@ class PipelineExecutionResult {
   final List<FinalizedTestCase> cases;
   final PipelineAuditReport auditReport;
   final String traceId;
-
   PipelineExecutionResult({
     required this.cases,
     required this.auditReport,
@@ -69,7 +69,6 @@ class PipelineOrchestrator {
     final parsingResult = _parsingStage.execute(
       rawResponse: aiResult.rawResponse,
     );
-
     PipelineForensics.instance.onTraceEvent(
       '\n[SECTION 6 — PARSER OUTPUT]\nparsedCasesCount=${parsingResult.parsedCases.length}',
     );
@@ -77,13 +76,15 @@ class PipelineOrchestrator {
       PipelineForensics.instance.onTraceEvent('salvagerInvoked=true');
       PipelineForensics.instance.onTraceEvent('salvagerRecoveredCount=0');
     }
+    for (final err in parsingResult.parserErrors) {
+      PipelineForensics.instance.onTraceEvent('PARSER_ERROR: $err');
+    }
 
     final aiReturnedCount = parsingResult.parsedCases.length;
     final aiWorkingCases = _hydrateParsedCases(
       parsingResult.parsedCases,
       request,
     );
-
     final repairResult = _repairStage.execute(
       cases: aiWorkingCases,
       targetCount: request.requestedCaseCount,
@@ -99,16 +100,15 @@ class PipelineOrchestrator {
     final validationResult = _validationStage.execute(
       cases: repairResult.cases,
     );
-
+    final structuralRejected = validationResult.structuralRejectedCount;
     PipelineForensics.instance.onTraceEvent(
-      '\n[SECTION 8 — VALIDATION OUTPUT]\nstructuralValidCount=${repairResult.cases.length - validationResult.structuralRejectedCount}',
+      '\n[SECTION 8 — VALIDATION OUTPUT]\nstructuralValidCount=${repairResult.cases.length - structuralRejected}',
     );
     PipelineForensics.instance.onTraceEvent(
-      'semanticValidCount=${repairResult.cases.length - (validationResult.structuralRejectedCount ?? 0) - validationResult.semanticRejectedCount}',
+      'semanticValidCount=${repairResult.cases.length - structuralRejected - validationResult.semanticRejectedCount}',
     );
 
     final acceptedAiCases = validationResult.validCases;
-
     final outcomeType = _responseClassifier.classify(
       rawResponse: aiResult.rawResponse,
       validCaseCount: acceptedAiCases.length,
@@ -122,7 +122,6 @@ class PipelineOrchestrator {
       request: request,
       acceptedCases: acceptedAiCases,
     );
-
     PipelineForensics.instance.onTraceEvent(
       '\n[SECTION 9 — COVERAGE OUTPUT]\nrequiredCount=${request.requestedCaseCount}',
     );
@@ -138,7 +137,6 @@ class PipelineOrchestrator {
       existing: acceptedAiCases,
       coverage: coverage,
     );
-
     PipelineForensics.instance.onTraceEvent(
       '\n[SECTION 10 — FALLBACK OUTPUT]\nfallbackGeneratedCount=${fallbackCases.length}',
     );
@@ -147,7 +145,6 @@ class PipelineOrchestrator {
       ...acceptedAiCases,
       ...fallbackCases,
     ].take(request.requestedCaseCount).toList();
-
     final finalized = _finalizationStage.execute(
       cases: finalWorkingCases,
       module: request.module,
@@ -162,12 +159,17 @@ class PipelineOrchestrator {
     PipelineForensics.instance.onTraceEvent(
       'finalCaseCount=${finalized.length}',
     );
-
     for (final tc in finalized) {
       PipelineForensics.instance.onTraceEvent(
         '\n[FINAL CASE]\ntitle=${tc.title}\nsource=${tc.source.name}',
       );
     }
+
+    // Extract structured metadata if available
+    final structured = aiResult.structuredResponse;
+    final metadata = structured?['metadata'] as Map<String, dynamic>?;
+    final error = structured?['error'] as Map<String, dynamic>?;
+    final usage = structured?['data']?['usage'] as Map<String, dynamic>?;
 
     final auditReport = PipelineAuditReport(
       traceId: request.traceId,
@@ -196,6 +198,27 @@ class PipelineOrchestrator {
       exportSafetyRejectedCount: validationResult.exportSafetyRejectedCount,
       repairedCount: repairResult.repairedCount,
       fallbackCount: fallbackCases.length,
+      cloudRequestId: metadata?['requestId'],
+      cloudFunctionVersion: metadata?['functionVersion'],
+      cloudLatencyMs: metadata?['latencyMs'],
+      aiPromptTokens: usage?['promptTokens'],
+      aiCompletionTokens: usage?['completionTokens'],
+      aiTotalTokens: usage?['totalTokens'],
+      aiErrorCode: error?['code'],
+      aiErrorMessage: error?['message'],
+      // New fields
+      aiModelName: aiResult.modelName,
+      aiApiUrl: aiResult.apiUrl,
+      aiHttpStatusCode: aiResult.statusCode,
+      aiErrorDetails: aiResult.errorDetails,
+      cloudFunctionName: 'generate',
+      cloudFunctionRegion: 'us-central1',
+      networkErrorType: aiResult.hasTransportError
+          ? ErrorCaptureUtils.extractNetworkErrorType(aiResult.errorMessage)
+          : null,
+      totalRetriesAttempted: aiResult.totalRetries,
+      wasResponseMalformed: parsingResult.malformed,
+      parserErrorMessages: parsingResult.parserErrors,
     );
 
     return PipelineExecutionResult(
@@ -210,7 +233,6 @@ class PipelineOrchestrator {
     GenerationRequest request,
   ) {
     final hydratedCases = <WorkingCase>[];
-
     for (int i = 0; i < parsedCases.length; i++) {
       final plan = i < request.plan.length
           ? request.plan[i]
@@ -219,7 +241,6 @@ class PipelineOrchestrator {
       final category = _normalizeCategory(
         _firstText(raw['categoryLock'], raw['category'], plan['category']),
       );
-
       raw['id'] = _firstText(raw['id'], _buildAiCaseId(request.module, i + 1));
       raw['module'] = _firstText(raw['module'], request.module);
       raw['feature'] = _firstText(raw['feature'], request.feature);
@@ -238,10 +259,8 @@ class PipelineOrchestrator {
         plan['intent_id'],
         '__unknown__',
       );
-
       hydratedCases.add(WorkingCase.fromJson(raw, traceId: request.traceId));
     }
-
     return hydratedCases;
   }
 
@@ -250,7 +269,6 @@ class PipelineOrchestrator {
     required CoverageAnalysisResult coverage,
   }) {
     if (!coverage.needsFallback) return const [];
-
     final mode = coverage.requiresFullFallback ? 'full' : 'partial';
     final outcomes = coverage.missingOutcomes.isEmpty
         ? 'no specific outcomes'

@@ -1,7 +1,7 @@
 name: qa_genie
 description: "QA Genie – AI-powered test flow generator"
 publish_to: "none"
-version: 1.2.181
+version: 1.2.194
 
 environment:
   sdk: ^3.11.0
@@ -40,6 +40,7 @@ dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  url_launcher: ^6.3.2
 
 flutter:
   uses-material-design: true

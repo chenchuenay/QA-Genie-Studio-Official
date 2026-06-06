@@ -3,6 +3,7 @@ import 'upgrade_coming_soon_screen.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/features/forensics/production_diagnostics_screen.dart';
 
 class ProBenefitsScreen extends StatefulWidget {
   final VoidCallback? onRestart;
@@ -104,10 +105,7 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                     "Generation requests per day",
                     _isPro ? "15" : "Ad Sponsored",
                   ),
-                  _row(
-                    "Exports",
-                    _isPro ? "Unlimited" : "Ad Sponsored",
-                  ),
+                  _row("Exports", _isPro ? "Unlimited" : "Ad Sponsored"),
                   _row("Ads", _isPro ? "No" : "Yes"),
                   _row(
                     "Test summary reports",
@@ -143,6 +141,36 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                         ),
                         label: const Text(
                           "Reset generation limits",
+                          style: TextStyle(color: AppColors.accent),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.accent),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const ProductionDiagnosticsScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.analytics,
+                          color: AppColors.accent,
+                        ),
+                        label: const Text(
+                          "Latest Generation Diagnostics",
                           style: TextStyle(color: AppColors.accent),
                         ),
                         style: OutlinedButton.styleFrom(

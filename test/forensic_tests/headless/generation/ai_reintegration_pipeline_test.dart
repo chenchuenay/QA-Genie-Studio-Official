@@ -3,11 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qa_genie/data/dto/generation_dto.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
-import 'package:qa_genie/engine/parsers/schema_normalizer.dart';
 import 'package:qa_genie/engine/recovery/ai_repair_engine.dart';
 import 'package:qa_genie/engine/parsers/ai_response_parser.dart';
-import 'package:qa_genie/engine/parsers/partial_case_extractor.dart';
-import 'package:qa_genie/engine/parsers/malformed_json_salvager.dart';
 import 'package:qa_genie/engine/recovery/partial_suite_expander.dart';
 import 'package:qa_genie/engine/orchestration/stages/repair_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/parsing_stage.dart';
@@ -20,28 +17,22 @@ import 'package:qa_genie/engine/orchestration/stages/finalization_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/ai_generation_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/coverage_analysis_stage.dart';
 
-
 void main() {
   test(
     'AI partial suite is preserved and fallback fills only missing cases',
-() async {
-var aiCalled = false;
-AiGenerationStage.useTestCaller((prompt) async {
-  aiCalled = true;
-  expect(prompt, contains('Generate EXACTLY 16 testcases.'));
-  return jsonEncode(_aiCases(12));
-  });
+    () async {
+      var aiCalled = false;
+      AiGenerationStage.useTestCaller((prompt, _) async {
+        aiCalled = true;
+        expect(prompt, contains('Generate EXACTLY 16 testcases.'));
+        return jsonEncode(_aiCases(12));
+      });
 
       final generator = DeterministicCaseGenerator();
       final useCase = GenerateTestCasesUseCase(
         orchestrator: PipelineOrchestrator(
           aiGenerationStage: AiGenerationStage(),
-          parsingStage: const ParsingStage(
-            parser: AiResponseParser(),
-            salvager: MalformedJsonSalvager(),
-            extractor: PartialCaseExtractor(),
-            normalizer: SchemaNormalizer(),
-          ),
+          parsingStage: const ParsingStage(parser: AiResponseParser()),
           repairStage: const RepairStage(repairEngine: AiRepairEngine()),
           validationStage: ValidationStage(),
           coverageAnalysisStage: const CoverageAnalysisStage(),

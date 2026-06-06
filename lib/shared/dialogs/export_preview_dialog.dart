@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
 import 'package:qa_genie/features/monetization/ads/ad_service.dart';
@@ -13,7 +14,7 @@ class ExportPreviewDialog extends StatefulWidget {
   final String moduleName;
   final String featureName;
   final Function(List<FinalizedTestCase> updatedCases) onSave;
-  final Function(List<FinalizedTestCase> updatedCases) onShare;
+  final Function(List<FinalizedTestCase> updatedCases, String? adToken) onShare;
 
   const ExportPreviewDialog({
     super.key,
@@ -35,19 +36,20 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   bool _editing = false;
   int? _statusColumnIndex;
   int? _priorityColumnIndex;
+  bool _savedSuccess = false;
 
   static const List<double> _colWidths = [
+    100,
+    90,
+    90,
+    180,
+    140,
     120,
+    320,
+    140,
     100,
-    100,
-    200,
-    150,
-    130,
-    350,
-    160,
-    120,
-    100,
-    100,
+    90,
+    90,
   ];
   static const List<String> _statusOptions = [
     'Pass',
@@ -90,10 +92,10 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     if (_data.isNotEmpty) {
       final headers = _data.first;
       _statusColumnIndex = headers.indexWhere(
-        (h) => h.toLowerCase() == 'status',
+        (h) => h.toLowerCase().contains('status'),
       );
       _priorityColumnIndex = headers.indexWhere(
-        (h) => h.toLowerCase() == 'priority',
+        (h) => h.toLowerCase().contains('priority'),
       );
     }
   }
@@ -190,17 +192,77 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   List<List<String>> _collectEditedData() =>
       _controllers.map((row) => row.map((ctrl) => ctrl.text).toList()).toList();
 
+  // ============================================================
+  // Helper to parse multi‑line steps text back into List<TestStep>
+  // ============================================================
+  List<TestStep> _parseSteps(String stepsText) {
+    final lines = stepsText.split('\n');
+    final steps = <TestStep>[];
+    String? currentAction;
+    String? currentData;
+    String? currentExpected;
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+
+      // Check if line starts with a number (e.g., "1.", "2.")
+      final numberMatch = RegExp(r'^\d+\.').hasMatch(trimmed);
+      if (numberMatch) {
+        // Save previous step if exists
+        if (currentAction != null) {
+          steps.add(
+            TestStep(
+              action: currentAction,
+              data: currentData ?? '',
+              expected: currentExpected ?? '',
+            ),
+          );
+        }
+        // Start new step: remove the number and dot
+        currentAction = trimmed.replaceFirst(RegExp(r'^\d+\.\s*'), '');
+        currentData = null;
+        currentExpected = null;
+      } else if (trimmed.toLowerCase().startsWith('data:')) {
+        currentData = trimmed.substring(5).trim();
+      } else if (trimmed.toLowerCase().startsWith('expected:')) {
+        currentExpected = trimmed.substring(8).trim();
+      } else {
+        // If no number and not data/expected, it might be continuation of action
+        if (currentAction != null) {
+          currentAction += ' $trimmed';
+        }
+      }
+    }
+    // Add last step
+    if (currentAction != null) {
+      steps.add(
+        TestStep(
+          action: currentAction,
+          data: currentData ?? '',
+          expected: currentExpected ?? '',
+        ),
+      );
+    }
+    return steps;
+  }
+
+  // ============================================================
+  // Update original test cases from edited table data
+  // ============================================================
   List<FinalizedTestCase> _updateOriginalCasesFromEditedData(
     List<List<String>> editedData,
   ) {
     if (editedData.length <= 1) return widget.cases;
     final headers = editedData.first;
     final updatedCases = <FinalizedTestCase>[];
+
     for (int rowIdx = 0; rowIdx < editedData.length - 1; rowIdx++) {
       if (rowIdx >= widget.cases.length) break;
       final original = widget.cases[rowIdx];
       final row = editedData[rowIdx + 1];
       var updated = original;
+
       for (
         int colIdx = 0;
         colIdx < headers.length && colIdx < row.length;
@@ -208,55 +270,54 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       ) {
         final header = headers[colIdx].toLowerCase();
         final newValue = row[colIdx];
+        // Skip if unchanged
         if (newValue == _data[rowIdx + 1][colIdx]) continue;
-        switch (header) {
-          case "id":
-          case "issueid":
-            updated = updated.copyWith(id: newValue);
-            break;
-          case "title":
-          case "summary":
-            updated = updated.copyWith(title: newValue);
-            break;
-          case "module":
-            updated = updated.copyWith(module: newValue);
-            break;
-          case "feature":
-            updated = updated.copyWith(feature: newValue);
-            break;
-          case "platform":
-            updated = updated.copyWith(platform: newValue);
-            break;
-          case "priority":
-            updated = updated.copyWith(priority: newValue);
-            break;
-          case "type":
-          case "testtype":
-            updated = updated.copyWith(type: newValue);
-            break;
-          case "preconditions":
-          case "precondition":
-          case "description":
-            updated = updated.copyWith(
-              preconditions: newValue
-                  .split('\n')
-                  .map((s) => s.trim())
-                  .where((s) => s.isNotEmpty)
-                  .toList(),
-            );
-            break;
-          case "expected result":
-            updated = updated.copyWith(expectedResult: newValue);
-            break;
-          case "actual result":
-          case "actual":
-            updated = updated.copyWith(actualResult: newValue);
-            break;
-          case "status":
-            updated = updated.copyWith(status: newValue);
-            break;
+
+        // Keyword‑based mapping (supports all export formats)
+        if (header.contains('id')) {
+          updated = updated.copyWith(id: newValue);
+        } else if (header.contains('title') || header.contains('summary')) {
+          updated = updated.copyWith(title: newValue);
+        } else if (header.contains('module')) {
+          updated = updated.copyWith(module: newValue);
+        } else if (header.contains('feature')) {
+          updated = updated.copyWith(feature: newValue);
+        } else if (header.contains('platform')) {
+          updated = updated.copyWith(platform: newValue);
+        } else if (header.contains('priority')) {
+          updated = updated.copyWith(priority: _normalizePriority(newValue));
+        } else if (header.contains('type') || header.contains('testtype')) {
+          updated = updated.copyWith(type: newValue);
+        } else if (header.contains('precondition') ||
+            header.contains('preconditions') ||
+            header.contains('description')) {
+          // Preconditions are stored as a list; we split by newline or semicolon
+          final preList = newValue
+              .split('\n')
+              .expand((s) => s.split(';'))
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          updated = updated.copyWith(preconditions: preList);
+        } else if (header.contains('step')) {
+          // Steps are stored as a multi‑line string; we need to parse them back to List<TestStep>
+          final newSteps = _parseSteps(newValue);
+          if (newSteps.isNotEmpty) {
+            updated = updated.copyWith(steps: newSteps);
+          }
+        } else if (header.contains('test data') ||
+            header.contains('testdata')) {
+          updated = updated.copyWith(testData: newValue);
+        } else if (header.contains('expected result')) {
+          updated = updated.copyWith(expectedResult: newValue);
+        } else if (header.contains('actual result') ||
+            header.contains('actual')) {
+          updated = updated.copyWith(actualResult: newValue);
+        } else if (header.contains('status')) {
+          updated = updated.copyWith(status: _normalizeStatus(newValue));
         }
       }
+
       if (original.dbId != null)
         updated = updated.copyWith(dbId: original.dbId);
       updatedCases.add(updated);
@@ -268,25 +329,36 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     final editedData = _collectEditedData();
     final updatedCases = _updateOriginalCasesFromEditedData(editedData);
     widget.onSave(updatedCases);
+    setState(() {
+      _data = editedData; // update internal cache so next diff works
+      _editing = false;
+      _savedSuccess = true;
+    });
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _savedSuccess = false);
+    });
   }
 
-  void _performExport() async {
+  void _cancelEdit() {
+    setState(() => _editing = false);
+  }
+
+  Future<void> _performExport() async {
     final isPro = await UsageManager.isPro();
-    if (!isPro && await UsageManager.isFirstExportFreeUsed()) {
-      final watched = await AdService.showRewardedAd(
-        adUnitId: 'ca-app-pub-.../export_preview_share',
-        onRewarded: () async {
-          await UsageManager.incrementExport();
-        },
+    String? adToken;
+    if (!isPro) {
+      adToken = await AdService.showRewardedAd(
+        adUnitId: 'ca-app-pub-.../export_reward',
         context: context,
       );
-      if (!watched) return;
-    } else if (!isPro) {
-      await UsageManager.markFirstExportUsed();
+      if (adToken == null) return;
     }
     final editedData = _collectEditedData();
     final updatedCases = _updateOriginalCasesFromEditedData(editedData);
-    widget.onShare(updatedCases);
+    Navigator.of(context, rootNavigator: true).pop();
+    Future.delayed(const Duration(milliseconds: 50), () {
+      widget.onShare(updatedCases, adToken);
+    });
   }
 
   String _getButtonText() {
@@ -336,125 +408,128 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
 
     final dataRows = <Widget>[];
     for (int rowIdx = 0; rowIdx < rowCount; rowIdx++) {
+      final rowChildren = <Widget>[];
+      for (int col = 0; col < headers.length; col++) {
+        final w = col < _colWidths.length ? _colWidths[col] : 100.0;
+        final isStatus =
+            (_statusColumnIndex != null && col == _statusColumnIndex);
+        final isPriority =
+            (_priorityColumnIndex != null && col == _priorityColumnIndex);
+        final controller = _controllers[rowIdx + 1][col];
+        final cell = _editing
+            ? (isStatus
+                  ? Container(
+                      width: w,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: DropdownButton<String>(
+                        value: _normalizeStatus(controller.text),
+                        isExpanded: true,
+                        dropdownColor: AppColors.card,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                        underline: const SizedBox(),
+                        items: _statusOptions
+                            .map(
+                              (opt) => DropdownMenuItem(
+                                value: opt,
+                                child: Text(opt),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (newVal) {
+                          if (newVal != null) {
+                            controller.text = newVal;
+                            setState(() {});
+                          }
+                        },
+                      ),
+                    )
+                  : isPriority
+                  ? Container(
+                      width: w,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: DropdownButton<String>(
+                        value: _normalizePriority(controller.text),
+                        isExpanded: true,
+                        dropdownColor: AppColors.card,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                        underline: const SizedBox(),
+                        items: _priorityOptions
+                            .map(
+                              (opt) => DropdownMenuItem(
+                                value: opt,
+                                child: Text(opt),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (newVal) {
+                          if (newVal != null) {
+                            controller.text = newVal;
+                            setState(() {});
+                          }
+                        },
+                      ),
+                    )
+                  : Container(
+                      width: w,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: TextField(
+                        controller: controller,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: null,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ))
+            : Container(
+                width: w,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Text(
+                  controller.text,
+                  style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  textAlign: TextAlign.center,
+                  softWrap: true,
+                ),
+              );
+        rowChildren.add(cell);
+      }
       dataRows.add(
         Row(
-          children: List.generate(headers.length, (col) {
-            final w = col < _colWidths.length ? _colWidths[col] : 100.0;
-            final isStatus =
-                (_statusColumnIndex != null && col == _statusColumnIndex);
-            final isPriority =
-                (_priorityColumnIndex != null && col == _priorityColumnIndex);
-            final controller = _controllers[rowIdx + 1][col];
-            final cellContent = _editing
-                ? (isStatus
-                      ? Container(
-                          width: w,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: DropdownButton<String>(
-                            value: _normalizeStatus(controller.text),
-                            isExpanded: true,
-                            dropdownColor: AppColors.card,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                            ),
-                            underline: const SizedBox(),
-                            items: _statusOptions
-                                .map(
-                                  (opt) => DropdownMenuItem(
-                                    value: opt,
-                                    child: Text(opt),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (newVal) {
-                              if (newVal != null) {
-                                controller.text = newVal;
-                                setState(() {});
-                              }
-                            },
-                          ),
-                        )
-                      : isPriority
-                      ? Container(
-                          width: w,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: DropdownButton<String>(
-                            value: _normalizePriority(controller.text),
-                            isExpanded: true,
-                            dropdownColor: AppColors.card,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                            ),
-                            underline: const SizedBox(),
-                            items: _priorityOptions
-                                .map(
-                                  (opt) => DropdownMenuItem(
-                                    value: opt,
-                                    child: Text(opt),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (newVal) {
-                              if (newVal != null) {
-                                controller.text = newVal;
-                                setState(() {});
-                              }
-                            },
-                          ),
-                        )
-                      : Container(
-                          width: w,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          child: TextField(
-                            controller: controller,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                            ),
-                            maxLines: null,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 4,
-                              ),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ))
-                : Container(
-                    width: w,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 4,
-                    ),
-                    child: Text(
-                      controller.text,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 10,
-                      ),
-                      softWrap: true,
-                    ),
-                  );
-            return cellContent;
-          }),
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: rowChildren,
         ),
       );
       if (rowIdx < rowCount - 1) {
         dataRows.add(
-          const Divider(height: 1, thickness: 1, color: Color(0xFF2A2A3A)),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: AppColors.border.withOpacity(0.8),
+          ),
         );
       }
     }
@@ -505,12 +580,37 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                 ),
               ),
             ),
+            if (_savedSuccess) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      color: AppColors.success,
+                      size: 16,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Changes saved',
+                      style: TextStyle(color: AppColors.success, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             if (!_editing)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  ElevatedButton(
+              Center(
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
                     onPressed: _performExport,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
@@ -520,14 +620,14 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                       style: const TextStyle(color: Colors.black),
                     ),
                   ),
-                ],
+                ),
               ),
             if (_editing)
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _cancelEdit,
                     child: const Text(
                       "Cancel",
                       style: TextStyle(color: AppColors.textSecondary),

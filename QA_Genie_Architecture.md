@@ -1203,17 +1203,14 @@ QA_Genie:
 │ └── test_data_factory.dart
 ├── data/
 │ ├── datasources/
-│ │ ├── local/
-│ │ │ └── local_db_source.dart
-│ │ └── remote/
-│ │ └── remote_api_source.dart
+│ │ └── local/
+│ │ └── local_db_source.dart
 │ ├── dto/
 │ │ └── generation_dto.dart
 │ ├── models/
 │ │ └── test_case_model.dart
 │ └── repositories/
 │ ├── export_repository.dart
-│ ├── generation_repository.dart
 │ └── suite_repository.dart
 ├── domain/
 │ ├── entities/
@@ -1234,139 +1231,161 @@ QA_Genie:
 │ ├── get_history_use_case.dart
 │ └── save_suite_use_case.dart
 ├── engine/
+│ ├── adapters/
+│ │ └── platform_adapter.dart
 │ ├── builders/
-│ │ ├── expected_result_builder.dart
-│ │ ├── preconditions_builder.dart
-│ │ └── step_builder.dart
-│ ├── forensics/
-│ │ ├── models/
-│ │ │ └── pipeline_event.dart
-│ │ ├── pipeline_audit_logger.dart
-│ │ ├── pipeline_audit_report.dart
-│ │ └── trace_id_generator.dart
-│ ├── humanization/
-│ │ ├── qa_heuristics_engine.dart
-│ │ └── qa_realism_enforcer.dart
-│ ├── knowledge/
-│ │ └── intent_registry.dart
-│ ├── models/
-│ │ ├── generation_outcome.dart
-│ │ └── pipeline_models.dart
-│ ├── orchestration/
-│ │ ├── pipeline_orchestrator.dart
-│ │ ├── policies/
-│ │ │ └── pipeline_policy.dart
-│ │ └── stages/
-│ │ ├── ai_generation_stage.dart
-│ │ ├── fallback_stage.dart
-│ │ ├── finalization_stage.dart
-│ │ ├── parsing_stage.dart
-│ │ ├── repair_stage.dart
-│ │ └── validation_stage.dart
-│ ├── parsers/
-│ │ ├── ai_response_parser.dart
-│ │ ├── malformed_json_salvager.dart
-│ │ ├── partial_case_extractor.dart
-│ │ ├── response_classifier.dart
-│ │ └── schema_normalizer.dart
-│ ├── planners/
-│ │ └── scenario_planner.dart
-│ ├── prompts/
-│ │ ├── prompt_cache_manager.dart
-│ │ ├── prompt_composer.dart
-│ │ └── system_prompt.dart
-│ ├── recovery/
-│ │ ├── deterministic_case_generator.dart
-│ │ ├── deterministic_repair.dart
-│ │ ├── failure_classifier.dart
-│ │ ├── fallback_template_registry.dart
-│ │ ├── intent_recovery.dart
-│ │ ├── partial_suite_expander.dart
-│ │ ├── repair_engine.dart
-│ │ └── retry_policy.dart
-│ ├── services/
-│ │ ├── generation_metrics.dart
-│ │ └── generation_service.dart
-│ └── validators/
-│ ├── contracts/
-│ │ └── pipeline_contract_validator.dart
-│ ├── coverage_contract_validator.dart
-│ ├── export_safety_validator.dart
-│ ├── realism_validator.dart
-│ ├── semantic_validator.dart
-│ └── structural_validator.dart
-├── features/
-│ ├── auth/
-│ │ └── ui/
-│ │ └── auth_screen.dart
-│ ├── beta/
-│ │ ├── logic/
-│ │ │ └── beta_manager.dart
-│ │ └── ui/
-│ │ └── beta_expired_screen.dart
-│ ├── bugs/
-│ │ └── ui/
-│ │ └── bug_report_overlay.dart
-│ ├── export/
-│ │ ├── adapters/
-│ │ │ ├── csv_adapter.dart
-│ │ │ ├── excel_adapter.dart
-│ │ │ ├── json_adapter.dart
-│ │ │ └── pdf_adapter.dart
-│ │ ├── common/
-│ │ │ └── export_mapper.dart
-│ │ ├── folder/
-│ │ │ └── export_folder_service.dart
-│ │ └── writers/
-│ │ ├── file_writer.dart
-│ │ └── share_service.dart
-│ ├── generation/
-│ │ └── ui/
-│ │ ├── screens/
-│ │ │ └── home_screen.dart
-│ │ └── widgets/
-│ │ └── master_table.dart
-│ ├── monetization/
-│ │ ├── ads/
-│ │ │ └── ad_service.dart
-│ │ ├── logic/
-│ │ │ └── usage_manager.dart
-│ │ └── ui/
-│ │ ├── test_mode_screen.dart
-│ │ └── upgrade_coming_soon_screen.dart
-│ ├── suites/
-│ │ └── ui/
-│ │ └── screens/
-│ │ ├── suite_preview_screen.dart
-│ │ └── suites_screen.dart
-│ └── summary/
-│ └── ui/
-│ └── summary_report_screen.dart
-├── firebase/
-│ ├── analytics/
-│ │ └── analytics_service.dart
-│ ├── app_check/
-│ │ └── app_check_service.dart
-│ ├── cloud_functions/
-│ │ └── functions_service.dart
-│ └── firebase_options.dart
-├── main.dart
-└── shared/
-├── animations/
-│ └── shimmer_loading.dart
-├── badges/
-│ └── pro_badge.dart
-├── dialogs/
-│ ├── export_bottom_sheet.dart
-│ ├── export_preview_dialog.dart
-│ ├── export_success_dialog.dart
-│ └── guidelines_dialog.dart
-├── effects/
-│ └── press_effect.dart
-├── navigation/
-│ └── main_screen.dart
-└── widgets/
-└── qa_button.dart
+
+    │   ├── business/
+    │   │   └── business_area.dart
+    │   ├── expected_result/
+    │   │   └── composer.dart
+    │   ├── flows/
+    │   │   ├── generic_flow.dart
+    │   │   └── scenario_expander.dart
+    │   ├── forensics/
+    │   │   ├── models/
+    │   │   │   └── pipeline_event.dart
+    │   │   ├── pipeline_audit_logger.dart
+    │   │   ├── pipeline_audit_report.dart
+    │   │   ├── pipeline_observer.dart
+    │   │   └── trace_id_generator.dart
+    │   ├── generators/
+    │   │   └── data_generator.dart
+    │   ├── humanization/
+    │   │   └── qa_heuristics_engine.dart
+    │   ├── knowledge/
+
+    │   ├── models/
+    │   │   ├── generation_outcome.dart
+    │   │   └── pipeline_models.dart
+    │   ├── observations/
+    │   │   └── observation_generator.dart
+    │   ├── orchestration/
+    │   │   ├── pipeline_orchestrator.dart
+    │   │   └── stages/
+    │   │       ├── ai_generation_stage.dart
+    │   │       ├── coverage_analysis_stage.dart
+    │   │       ├── fallback_stage.dart
+    │   │       ├── finalization_stage.dart
+    │   │       ├── parsing_stage.dart
+    │   │       ├── repair_stage.dart
+    │   │       └── validation_stage.dart
+    │   ├── parsers/
+    │   │   ├── ai_response_parser.dart
+    │   │   ├── malformed_json_salvager.dart
+    │   │   ├── partial_case_extractor.dart
+    │   │   ├── response_classifier.dart
+    │   │   └── schema_normalizer.dart
+    │   ├── planners/
+    │   │   ├── coverage_planner.dart
+    │   │   └── prompt_planner.dart
+    │   ├── prompts/
+    │   │   ├── prompt_cache_manager.dart
+    │   │   ├── prompt_composer.dart
+    │   │   └── system_prompt.dart
+    │   ├── recovery/
+    │   │   ├── ai_repair_engine.dart
+    │   │   ├── deterministic_case_generator.dart
+    │   │   └── partial_suite_expander.dart
+    │   ├── scenario/
+    │   │   ├── scenario_engine.dart
+    │   │   └── scenario_rules.dart
+    │   ├── services/
+    │   │   └── generation_metrics.dart
+    │   ├── title/
+    │   │   └── title_composer.dart
+    │   ├── utils/
+    │   │   └── pdf_text_sanitizer.dart
+    │   └── validators/
+    │       ├── export_safety_validator.dart
+    │       ├── realism_validator.dart
+    │       ├── semantic_validator.dart
+    │       └── structural_validator.dart
+    ├── features/
+    │   ├── auth/
+    │   │   └── ui/
+    │   │       └── auth_screen.dart
+    │   ├── beta/
+    │   │   ├── logic/
+    │   │   │   └── beta_manager.dart
+    │   │   └── ui/
+    │   │       └── beta_expired_screen.dart
+    │   ├── bugs/
+    │   │   └── ui/
+    │   │       └── bug_report_overlay.dart
+    │   ├── export/
+    │   │   ├── adapters/
+    │   │   │   ├── csv_adapter.dart
+    │   │   │   ├── excel_adapter.dart
+    │   │   │   ├── json_adapter.dart
+    │   │   │   └── pdf_adapter.dart
+    │   │   ├── common/
+    │   │   │   └── export_mapper.dart
+    │   │   ├── folder/
+    │   │   │   └── export_folder_service.dart
+    │   │   └── writers/
+    │   │       ├── file_writer.dart
+    │   │       └── share_service.dart
+    │   ├── forensics/
+    │   │   ├── diagnostics_persistence_service.dart
+    │   │   └── production_diagnostics_screen.dart
+    │   ├── generation/
+    │   │   └── ui/
+    │   │       ├── screens/
+    │   │       │   └── home_screen.dart
+    │   │       └── widgets/
+    │   │           └── master_table.dart
+    │   ├── monetization/
+    │   │   ├── ads/
+    │   │   │   └── ad_service.dart
+    │   │   ├── logic/
+    │   │   │   └── usage_manager.dart
+    │   │   └── ui/
+    │   │       ├── rate_us_dialog.dart
+    │   │       ├── test_mode_screen.dart
+    │   │       ├── upgrade_coming_soon_screen.dart
+    │   │       └── upgrade_screen.dart
+    │   ├── suites/
+    │   │   └── ui/
+    │   │       └── screens/
+    │   │           ├── suite_preview_screen.dart
+    │   │           └── suites_screen.dart
+    │   └── summary/
+    │       └── ui/
+    │           ├── summary_report_preview_screen.dart
+    │           └── summary_report_screen.dart
+    ├── firebase/
+    │   ├── analytics/
+    │   │   └── analytics_service.dart
+    │   ├── app_check/
+    │   │   └── app_check_service.dart
+    │   ├── cloud_functions/
+    │   │   └── functions_service.dart
+    │   └── firebase_options.dart
+    ├── main.dart
+    └── shared/
+        ├── animations/
+        │   └── shimmer_loading.dart
+        ├── badges/
+        │   └── pro_badge.dart
+        ├── dialogs/
+        │   ├── export_bottom_sheet.dart
+        │   ├── export_preview_dialog.dart
+        │   ├── export_success_dialog.dart
+        │   └── guidelines_dialog.dart
+        ├── effects/
+        │   └── press_effect.dart
+        ├── navigation/
+        │   └── main_screen.dart
+        └── widgets/
+            └── qa_button.dart
+
+firebase:
+QA_Genie:
+└── functions/
+├── index.js
+├── package-lock.json
+└── package.json
 
 FORENSIC TESTS FOR DEVLOPMENT AND TESTING/
 lib:

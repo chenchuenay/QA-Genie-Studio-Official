@@ -40,19 +40,14 @@ class SummaryReportPreviewScreen extends StatelessWidget {
 
   Future<void> _exportPDF(BuildContext context) async {
     final isPro = await UsageManager.isPro();
-    if (!isPro && await UsageManager.isFirstExportFreeUsed()) {
-      final watched = await AdService.showRewardedAd(
+    String? adToken;
+    if (!isPro) {
+      adToken = await AdService.showRewardedAd(
         adUnitId: 'ca-app-pub-.../summary_export',
-        onRewarded: () async {
-          await UsageManager.incrementExport();
-        },
         context: context,
       );
-      if (!watched) return;
-    } else if (!isPro) {
-      await UsageManager.markFirstExportUsed();
+      if (adToken == null) return;
     }
-
     try {
       final exportUseCase = ExportTestCasesUseCase();
       await exportUseCase.exportSummaryReport(
@@ -63,6 +58,7 @@ class SummaryReportPreviewScreen extends StatelessWidget {
         testerName: testerName,
         environment: environment,
         context: context,
+        adToken: adToken,
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

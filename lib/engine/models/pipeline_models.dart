@@ -179,6 +179,49 @@ class GenerationSession {
   int get count => testCases.length;
 }
 
+class RejectedCaseInfo {
+  final String title;
+  final String reason;
+  final String stage;
+  const RejectedCaseInfo({
+    required this.title,
+    required this.reason,
+    required this.stage,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'reason': reason,
+    'stage': stage,
+  };
+}
+
+class GenerationRequest {
+  final String module;
+  final String feature;
+  final String platform;
+  final String generationMode;
+  final int requestedCaseCount;
+  final String constraints;
+  final String domain;
+  final List<Map<String, dynamic>> plan;
+  final String traceId;
+  final String? adToken; // optional for rewarded generations
+
+  const GenerationRequest({
+    required this.module,
+    required this.feature,
+    required this.platform,
+    required this.generationMode,
+    required this.requestedCaseCount,
+    this.constraints = '',
+    this.domain = 'general',
+    this.plan = const [],
+    required this.traceId,
+    this.adToken,
+  });
+}
+
 class PipelineAuditReport {
   final String traceId;
   final List<RejectedCaseInfo> rejectedCases;
@@ -192,7 +235,7 @@ class PipelineAuditReport {
   final int rejectedCount;
   final List<String>? missingIntentIds;
 
-  // Forensic fields
+  // Existing forensic fields
   final String? prompt;
   final String? rawAiResponse;
   final int? aiLatencyMs;
@@ -207,6 +250,26 @@ class PipelineAuditReport {
   final int? exportSafetyRejectedCount;
   final int? repairedCount;
   final int? fallbackCount;
+
+  // New cloud & AI detailed fields
+  final String? cloudRequestId;
+  final String? cloudFunctionVersion;
+  final int? cloudLatencyMs;
+  final int? aiPromptTokens;
+  final int? aiCompletionTokens;
+  final int? aiTotalTokens;
+  final String? aiErrorCode;
+  final String? aiErrorMessage;
+  final String? aiModelName;
+  final String? aiApiUrl;
+  final int? aiHttpStatusCode;
+  final Map<String, dynamic>? aiErrorDetails;
+  final String? cloudFunctionName;
+  final String? cloudFunctionRegion;
+  final String? networkErrorType;
+  final int? totalRetriesAttempted;
+  final bool? wasResponseMalformed;
+  final List<String> parserErrorMessages;
 
   const PipelineAuditReport({
     required this.traceId,
@@ -234,43 +297,80 @@ class PipelineAuditReport {
     this.exportSafetyRejectedCount,
     this.repairedCount,
     this.fallbackCount,
+    this.cloudRequestId,
+    this.cloudFunctionVersion,
+    this.cloudLatencyMs,
+    this.aiPromptTokens,
+    this.aiCompletionTokens,
+    this.aiTotalTokens,
+    this.aiErrorCode,
+    this.aiErrorMessage,
+    this.aiModelName,
+    this.aiApiUrl,
+    this.aiHttpStatusCode,
+    this.aiErrorDetails,
+    this.cloudFunctionName,
+    this.cloudFunctionRegion,
+    this.networkErrorType,
+    this.totalRetriesAttempted,
+    this.wasResponseMalformed,
+    this.parserErrorMessages = const [],
   });
 
   bool get hasFailures => rejectedCases.isNotEmpty;
-}
 
-class RejectedCaseInfo {
-  final String title;
-  final String reason;
-  final String stage;
-  const RejectedCaseInfo({
-    required this.title,
-    required this.reason,
-    required this.stage,
-  });
-}
+  Map<String, dynamic> toJson() {
+    return {
+      'traceId': traceId,
+      'rejectedCases': rejectedCases.map((e) => e.toJson()).toList(),
+      'repairLog': repairLog,
+      'diversityBalance': diversityBalance,
+      'averageConfidence': averageConfidence,
+      'fallbackTriggers': fallbackTriggers,
+      'totalInputCases': totalInputCases,
+      'finalizedCases': finalizedCases,
+      'repairedCases': repairedCases,
+      'rejectedCount': rejectedCount,
+      'missingIntentIds': missingIntentIds,
+      'prompt': _truncate(prompt),
+      'rawAiResponse': _truncate(rawAiResponse, 5000),
+      'aiLatencyMs': aiLatencyMs,
+      'aiModel': aiModel,
+      'aiEndpoint': aiEndpoint,
+      'aiStatusCode': aiStatusCode,
+      'aiReturnedCount': aiReturnedCount,
+      'aiAcceptedCount': aiAcceptedCount,
+      'structuralRejectedCount': structuralRejectedCount,
+      'semanticRejectedCount': semanticRejectedCount,
+      'realismRejectedCount': realismRejectedCount,
+      'exportSafetyRejectedCount': exportSafetyRejectedCount,
+      'repairedCount': repairedCount,
+      'fallbackCount': fallbackCount,
+      'cloudRequestId': cloudRequestId,
+      'cloudFunctionVersion': cloudFunctionVersion,
+      'cloudLatencyMs': cloudLatencyMs,
+      'aiPromptTokens': aiPromptTokens,
+      'aiCompletionTokens': aiCompletionTokens,
+      'aiTotalTokens': aiTotalTokens,
+      'aiErrorCode': aiErrorCode,
+      'aiErrorMessage': aiErrorMessage,
+      'aiModelName': aiModelName,
+      'aiApiUrl': aiApiUrl,
+      'aiHttpStatusCode': aiHttpStatusCode,
+      'aiErrorDetails': aiErrorDetails,
+      'cloudFunctionName': cloudFunctionName,
+      'cloudFunctionRegion': cloudFunctionRegion,
+      'networkErrorType': networkErrorType,
+      'totalRetriesAttempted': totalRetriesAttempted,
+      'wasResponseMalformed': wasResponseMalformed,
+      'parserErrorMessages': parserErrorMessages,
+    };
+  }
 
-class GenerationRequest {
-  final String module;
-  final String feature;
-  final String platform;
-  final String generationMode;
-  final int requestedCaseCount;
-  final String constraints;
-  final String domain;
-  final List<Map<String, dynamic>> plan;
-  final String
-  traceId; // <-- ADDED (required for deterministic seeding and auditing)
-
-  const GenerationRequest({
-    required this.module,
-    required this.feature,
-    required this.platform,
-    required this.generationMode,
-    required this.requestedCaseCount,
-    this.constraints = '',
-    this.domain = 'general',
-    this.plan = const [],
-    required this.traceId,
-  });
+  String? _truncate(String? value, [int max = 1000]) {
+    if (value == null) return null;
+    return value.length <= max
+        ? value
+        : '${value.substring(0, max)}...[truncated]';
+  }
 }

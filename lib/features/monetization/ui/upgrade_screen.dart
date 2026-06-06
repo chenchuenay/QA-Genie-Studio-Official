@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/features/monetization/ui/upgrade_coming_soon_screen.dart';
 
 class UpgradeScreen extends StatelessWidget {
   const UpgradeScreen({super.key});
@@ -53,39 +53,6 @@ class UpgradeScreen extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 32),
-
-            // Feature cards row (grid)
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.2,
-              children: const [
-                _FeatureCard(
-                  icon: Icons.flash_on,
-                  title: "16 Test Cases",
-                  subtitle: "Per Generation",
-                ),
-                _FeatureCard(
-                  icon: Icons.description,
-                  title: "Unlimited Exports",
-                  subtitle: "Export freely",
-                ),
-                _FeatureCard(
-                  icon: Icons.bar_chart,
-                  title: "Unlimited Reports",
-                  subtitle: "Summary reports",
-                ),
-                _FeatureCard(
-                  icon: Icons.block,
-                  title: "Ad-Free",
-                  subtitle: "No interruptions",
-                ),
-              ],
             ),
             const SizedBox(height: 32),
 
@@ -205,17 +172,13 @@ class UpgradeScreen extends StatelessWidget {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
-                onPressed: () async {
-                  await UsageManager.setPro(true);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Pro activated (mock)"),
-                        backgroundColor: AppColors.success,
-                      ),
-                    );
-                    Navigator.pop(context);
-                  }
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const UpgradeComingSoonScreen(),
+                    ),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accent,
@@ -236,7 +199,6 @@ class UpgradeScreen extends StatelessWidget {
             Center(
               child: TextButton(
                 onPressed: () {
-                  // Placeholder: restore purchase logic
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text("Restore purchase (mock)"),
@@ -253,61 +215,6 @@ class UpgradeScreen extends StatelessWidget {
             const SizedBox(height: 8),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _FeatureCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  const _FeatureCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.accent.withOpacity(0.3)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.accent.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: AppColors.accent, size: 32),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -377,7 +284,6 @@ class _ComparisonRow extends StatelessWidget {
   final String core;
   final String pro;
   final bool isHeader;
-
   const _ComparisonRow({
     required this.feature,
     required this.core,

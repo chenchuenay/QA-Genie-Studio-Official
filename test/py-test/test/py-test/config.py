@@ -1,0 +1,3 @@
+EXPECTED_CASE_COUNT = 5
+AI_MODEL = "llama-3.1-8b-instant"
+MAX_RETRIES = 3

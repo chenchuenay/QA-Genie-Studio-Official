@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/app.dart';
-import 'package:qa_genie/features/monetization/ui/test_mode_screen.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import 'package:qa_genie/features/bugs/ui/bug_report_overlay.dart';
 import 'package:qa_genie/shared/dialogs/guidelines_dialog.dart';
+import 'package:qa_genie/features/bugs/ui/bug_report_overlay.dart';
+import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/features/suites/ui/screens/suites_screen.dart';
+import 'package:qa_genie/features/monetization/ui/test_mode_screen.dart';
 import 'package:qa_genie/features/generation/ui/screens/home_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -210,16 +212,25 @@ class MainScreenState extends State<MainScreen> {
           IconButton(
             key: _starKey,
             icon: const Icon(Icons.stars, color: Color(0xFF46DFFF)),
-            tooltip: 'Account',
+            tooltip: 'Upgrade',
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => ProBenefitsScreen(
-                  onRestart: () => QaGenieApp.restartApp(context),
+              MaterialPageRoute(builder: (_) => const UpgradeScreen()),
+            ),
+          ),
+          if (!AppConfig.isProduction)
+            IconButton(
+              icon: const Icon(Icons.science, color: Color(0xFF46DFFF)),
+              tooltip: 'Test Mode',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProBenefitsScreen(
+                    onRestart: () => QaGenieApp.restartApp(context),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
       body: IndexedStack(

@@ -10,24 +10,25 @@ import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/adapters/csv_adapter.dart';
 import 'package:qa_genie/features/export/adapters/pdf_adapter.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
-import 'package:qa_genie/features/monetization/ads/ad_service.dart';
 import 'package:qa_genie/features/export/adapters/json_adapter.dart';
 import 'package:qa_genie/features/export/adapters/excel_adapter.dart';
 import 'package:qa_genie/domain/usecases/export_validation_service.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/features/export/folder/export_folder_service.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart'; // ADDED
 
 class ExportTestCasesUseCase {
   const ExportTestCasesUseCase();
 
   // ============================================================
-  // MAIN EXECUTION (unchanged)
+  // MAIN EXECUTION (with ad token)
   // ============================================================
   Future<void> execute({
     required String type,
     required List<FinalizedTestCase> cases,
     String? moduleName,
     String? featureName,
+    String? adToken,
   }) async {
     try {
       _validateOrThrow(cases);
@@ -39,6 +40,16 @@ class ExportTestCasesUseCase {
       final safeModule = _safeModulePrefix(effectiveModule);
       final code = _shortCode();
       final fileName = 'TC_${safeModule}_${normalizedType}_$code';
+
+      // Call cloud function to track export (with token)
+      await FunctionsService.call(
+        functionName: 'exportTrack',
+        payload: {
+          'isPro': await UsageManager.isPro(),
+          'adToken': adToken,
+          'exportType': normalizedType,
+        },
+      );
 
       switch (normalizedType) {
         case 'excel':
@@ -76,14 +87,13 @@ class ExportTestCasesUseCase {
         default:
           throw ExportException('Unsupported export format: $type');
       }
-      await AdService.maybeShowInterstitial();
     } catch (e) {
       throw ExportException('Export execution failed: $e');
     }
   }
 
   // ============================================================
-  // SUMMARY REPORT (updated layout, with sanitizer)
+  // SUMMARY REPORT (with ad token)
   // ============================================================
   Future<void> exportSummaryReport({
     required List<FinalizedTestCase> cases,
@@ -93,6 +103,7 @@ class ExportTestCasesUseCase {
     required String testerName,
     required String environment,
     required BuildContext context,
+    String? adToken,
   }) async {
     try {
       final effectiveModule =
@@ -100,19 +111,15 @@ class ExportTestCasesUseCase {
       final effectiveFeature =
           featureName ?? (cases.isNotEmpty ? cases.first.feature : 'Unknown');
 
-      final isPro = await UsageManager.isPro();
-      if (!isPro && await UsageManager.isFirstExportFreeUsed()) {
-        final watched = await AdService.showRewardedAd(
-          adUnitId: 'ca-app-pub-.../summary_reward',
-          onRewarded: () async {
-            await UsageManager.incrementExport();
-          },
-          context: context,
-        );
-        if (!watched) return;
-      } else if (!isPro) {
-        await UsageManager.markFirstExportUsed();
-      }
+      // Call cloud function to track export (with token)
+      await FunctionsService.call(
+        functionName: 'exportTrack',
+        payload: {
+          'isPro': await UsageManager.isPro(),
+          'adToken': adToken,
+          'exportType': 'summary',
+        },
+      );
 
       final data = ExportMapper.toSummaryReport(
         cases,
@@ -155,19 +162,18 @@ class ExportTestCasesUseCase {
       final file = File('${dir.path}/TSR_${safeModule}_$code.pdf');
       await file.writeAsBytes(await pdf.save());
       await Share.shareXFiles([XFile(file.path)]);
-      await AdService.maybeShowInterstitial();
     } catch (e) {
       throw ExportException('Summary export failed: $e');
     }
   }
 
+  // Helper methods (unchanged from original)
   pw.Widget _buildHeader(Map<String, dynamic> data) {
     final suiteName = _toString(data['suiteName']);
     final platformVal = _toString(data['platform']);
     final dateVal = _toString(data['date']);
     final testerVal = _toString(data['testerName']);
     final envVal = _toString(data['environment']);
-
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -206,13 +212,12 @@ class ExportTestCasesUseCase {
   }
 
   pw.Widget _buildExecutionSummary(Map<String, dynamic> data) {
-    final total = _toInt(data['total']);
-    final passed = _toInt(data['passed']);
-    final failed = _toInt(data['failed']);
-    final blocked = _toInt(data['blocked']);
-    final notExecuted = _toInt(data['notExecuted']);
+    final total = _toString(data['total']);
+    final passed = _toString(data['passed']);
+    final failed = _toString(data['failed']);
+    final blocked = _toString(data['blocked']);
+    final notExecuted = _toString(data['notExecuted']);
     final passRate = _toString(data['passRate']);
-
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -243,21 +248,14 @@ class ExportTestCasesUseCase {
     );
   }
 
-  pw.TableRow _metricRow(String label, dynamic value) {
-    return pw.TableRow(
-      children: [
-        _cell(PdfTextSanitizer.sanitize(label)),
-        _cell(_toString(value)),
-      ],
-    );
-  }
+  pw.TableRow _metricRow(String label, dynamic value) =>
+      pw.TableRow(children: [_cell(label), _cell(_toString(value))]);
 
   pw.Widget _buildPriorityBreakdown(Map<String, dynamic> data) {
     final breakdown = data['priorityBreakdown'] as Map<String, dynamic>? ?? {};
-    final high = _toInt(breakdown['HIGH']);
-    final medium = _toInt(breakdown['MEDIUM']);
-    final low = _toInt(breakdown['LOW']);
-
+    final high = _toString(breakdown['HIGH']);
+    final medium = _toString(breakdown['MEDIUM']);
+    final low = _toString(breakdown['LOW']);
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -273,25 +271,18 @@ class ExportTestCasesUseCase {
     );
   }
 
-  pw.Widget _priorityLine(String label, int count) {
-    return pw.Row(
-      children: [
-        pw.SizedBox(
-          width: 60,
-          child: pw.Text(
-            PdfTextSanitizer.sanitize(label),
-            style: pw.TextStyle(fontSize: 10),
-          ),
+  pw.Widget _priorityLine(String label, String count) => pw.Row(
+    children: [
+      pw.SizedBox(
+        width: 60,
+        child: pw.Text(
+          PdfTextSanitizer.sanitize(label),
+          style: pw.TextStyle(fontSize: 10),
         ),
-        pw.Expanded(
-          child: pw.Text(
-            PdfTextSanitizer.sanitize(count.toString()),
-            style: pw.TextStyle(fontSize: 10),
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+      pw.Expanded(child: pw.Text(count, style: pw.TextStyle(fontSize: 10))),
+    ],
+  );
 
   pw.Widget _buildDetailedResults(List<dynamic> details) {
     if (details.isEmpty) return pw.Container();
@@ -339,30 +330,17 @@ class ExportTestCasesUseCase {
     );
   }
 
-  // ------------------------------------------------------------------
-  // Helpers
-  // ------------------------------------------------------------------
-  String _toString(dynamic value) {
-    return (value ?? '').toString();
-  }
-
-  int _toInt(dynamic value) {
-    if (value is int) return value;
-    return int.tryParse(_toString(value)) ?? 0;
-  }
-
-  pw.Widget _cell(String text, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(
-        PdfTextSanitizer.sanitize(text),
-        style: pw.TextStyle(
-          fontSize: 9,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
+  String _toString(dynamic value) => (value ?? '').toString();
+  pw.Widget _cell(String text, {bool bold = false}) => pw.Padding(
+    padding: const pw.EdgeInsets.all(6),
+    child: pw.Text(
+      PdfTextSanitizer.sanitize(text),
+      style: pw.TextStyle(
+        fontSize: 9,
+        fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
       ),
-    );
-  }
+    ),
+  );
 
   void _validateOrThrow(List<FinalizedTestCase> cases) {
     final validation = ExportValidationService.validate(cases);

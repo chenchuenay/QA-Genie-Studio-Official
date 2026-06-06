@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/features/monetization/ui/rate_us_dialog.dart';
 
 class ExportSuccessDialog extends StatelessWidget {
   final String type;
@@ -33,11 +34,13 @@ class ExportSuccessDialog extends StatelessWidget {
         ElevatedButton(
           onPressed: () {
             Navigator.pop(context);
-            // TODO: Open Play Store review page later
+            showRateUsDialog(context);
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.accent,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
           child: const Text('Rate us', style: TextStyle(color: Colors.black)),
         ),
@@ -47,7 +50,9 @@ class ExportSuccessDialog extends StatelessWidget {
           },
           style: OutlinedButton.styleFrom(
             side: const BorderSide(color: Colors.white54),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
           child: const Text('Done', style: TextStyle(color: Colors.white)),
         ),

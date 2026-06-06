@@ -1,15 +1,20 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/shared/dialogs/export_preview_dialog.dart';
 
-class ExportBottomSheet extends StatelessWidget {
+class ExportBottomSheet extends StatefulWidget {
   final List<FinalizedTestCase> cases;
   final String moduleName;
   final String featureName;
   final Function(List<FinalizedTestCase> updatedCases) onSave;
-  final Function(String type, List<FinalizedTestCase> updatedCases) onExport;
+  final Function(
+    String type,
+    List<FinalizedTestCase> updatedCases,
+    String? adToken,
+  )
+  onExport;
 
   const ExportBottomSheet({
     super.key,
@@ -21,144 +26,112 @@ class ExportBottomSheet extends StatelessWidget {
   });
 
   @override
+  State<ExportBottomSheet> createState() => _ExportBottomSheetState();
+}
+
+class _ExportBottomSheetState extends State<ExportBottomSheet> {
+  void _openPreview(String type) async {
+    await showDialog<List<FinalizedTestCase>>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (ctx) => ExportPreviewDialog(
+        type: type,
+        cases: widget.cases,
+        moduleName: widget.moduleName,
+        featureName: widget.featureName,
+        onSave: (updated) {
+          widget.onSave(updated);
+          // Do NOT close the dialog here; the dialog itself will close after calling onSave
+        },
+        onShare: (updated, adToken) async {
+          // Close the dialog (already closed by the dialog itself)
+          // Close the bottom sheet ONLY after the export is done? No, we close it now to allow onExport to run.
+          // But we must not close the bottom sheet again later.
+          if (mounted) Navigator.of(context).pop(); // close bottom sheet
+          // Call the parent export function
+          widget.onExport(type, updated, adToken);
+        },
+      ),
+    );
+    // If the dialog returned updated cases (e.g., after save), we already called onSave above.
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
+    // ... same UI as before
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 16)],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(2),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              "Export Options",
+          ),
+          const SizedBox(height: 16),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'Export Options',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
                 color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 20),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.3,
-              physics: const NeverScrollableScrollPhysics(),
+          ),
+          const SizedBox(height: 16),
+          _optionCard('Excel', Icons.table_chart, () => _openPreview('excel')),
+          _optionCard(
+            'Jira (CSV)',
+            Icons.description,
+            () => _openPreview('jira'),
+          ),
+          _optionCard('Xray (JSON)', Icons.code, () => _openPreview('xray')),
+          _optionCard('PDF', Icons.picture_as_pdf, () => _openPreview('pdf')),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _optionCard(String title, IconData icon, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
               children: [
-                _card(
-                  "Excel",
-                  Icons.table_chart,
-                  AppColors.success,
-                  ".xlsx",
-                  () => _showPreview(context, "excel"),
+                Icon(icon, color: AppColors.accent, size: 26),
+                const SizedBox(width: 16),
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
-                _card(
-                  "Jira",
-                  Icons.bug_report,
-                  AppColors.blue,
-                  ".csv",
-                  () => _showPreview(context, "jira"),
-                ),
-                _card(
-                  "Xray",
-                  Icons.analytics,
-                  AppColors.orange,
-                  ".json",
-                  () => _showPreview(context, "xray"),
-                ),
-                _card(
-                  "PDF (Print & Share)",
-                  Icons.picture_as_pdf,
-                  Colors.redAccent,
-                  ".pdf",
-                  () => _showPreview(context, "pdf"),
-                ),
+                const Spacer(),
+                const Icon(Icons.chevron_right, color: AppColors.textHint),
               ],
             ),
-            const SizedBox(height: 16),
-            const Text(
-              "Exports are formatted per tool specification. No data leaves this device.",
-              style: TextStyle(color: AppColors.textHint, fontSize: 11),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showPreview(BuildContext context, String type) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (ctx) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-        child: ExportPreviewDialog(
-          type: type,
-          cases: cases,
-          moduleName: moduleName,
-          featureName: featureName,
-          onSave: onSave,
-          onShare: (updatedCases) => onExport(type, updatedCases),
-        ),
-      ),
-    );
-  }
-
-  Widget _card(
-    String label,
-    IconData icon,
-    Color color,
-    String extension,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.5)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              extension,
-              style: const TextStyle(
-                color: AppColors.textHint,
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+          ),
         ),
       ),
     );

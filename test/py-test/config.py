@@ -1,0 +1,3 @@
+EXPECTED_CASE_COUNT = 5
+AI_MODEL = "gpt-4o-mini"
+MAX_RETRIES = 3

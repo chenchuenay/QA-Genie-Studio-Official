@@ -1,133 +1,153 @@
-import 'dart:convert';
-import 'package:qa_genie/engine/forensics/pipeline_audit_logger.dart';
+class PipelineAuditReport {
+  final String traceId;
+  final List<RejectedCaseInfo> rejectedCases;
+  final List<String> repairLog;
+  final Map<String, int> diversityBalance;
+  final double averageConfidence;
+  final List<String> fallbackTriggers;
+  final int totalInputCases;
+  final int finalizedCases;
+  final int repairedCases;
+  final int rejectedCount;
+  final List<String>? missingIntentIds;
+  final String? prompt;
+  final String? rawAiResponse;
+  final int? aiLatencyMs;
+  final int? aiStatusCode;
+  final int? aiReturnedCount;
+  final int? aiAcceptedCount;
+  final int? structuralRejectedCount;
+  final int? semanticRejectedCount;
+  final int? realismRejectedCount;
+  final int? exportSafetyRejectedCount;
+  final int? fallbackCount;
+  final String? cloudRequestId;
+  final String? cloudFunctionVersion;
+  final int? cloudLatencyMs;
+  final int? aiPromptTokens;
+  final int? aiCompletionTokens;
+  final int? aiTotalTokens;
+  final String? aiErrorCode;
+  final String? aiErrorMessage;
 
-class PipelineAuditReportFormatter {
-  const PipelineAuditReportFormatter._();
+  // New live error fields (must exist)
+  final String? aiModelName;
+  final String? aiApiUrl;
+  final int? aiHttpStatusCode;
+  final Map<String, dynamic>? aiErrorDetails;
+  final String? cloudFunctionName;
+  final String? cloudFunctionRegion;
+  final String? networkErrorType;
+  final int? totalRetriesAttempted;
+  final bool? wasResponseMalformed;
+  final List<String> parserErrorMessages;
 
-  static String buildReplayText({
-    required String traceId,
-    required String module,
-    required String feature,
-    required String platform,
-    required PipelineAuditLogger logger,
-    required String rawPrompt,
-    required String rawResponse,
-    required List<Map<String, dynamic>> parsedCases,
-    required List<Map<String, dynamic>> finalizedCases,
-  }) {
-    final data = logger.toJson();
+  const PipelineAuditReport({
+    required this.traceId,
+    this.rejectedCases = const [],
+    this.repairLog = const [],
+    this.diversityBalance = const {},
+    this.averageConfidence = 0.0,
+    this.fallbackTriggers = const [],
+    this.totalInputCases = 0,
+    this.finalizedCases = 0,
+    this.repairedCases = 0,
+    this.rejectedCount = 0,
+    this.missingIntentIds,
+    this.prompt,
+    this.rawAiResponse,
+    this.aiLatencyMs,
+    this.aiStatusCode,
+    this.aiReturnedCount,
+    this.aiAcceptedCount,
+    this.structuralRejectedCount,
+    this.semanticRejectedCount,
+    this.realismRejectedCount,
+    this.exportSafetyRejectedCount,
+    this.fallbackCount,
+    this.cloudRequestId,
+    this.cloudFunctionVersion,
+    this.cloudLatencyMs,
+    this.aiPromptTokens,
+    this.aiCompletionTokens,
+    this.aiTotalTokens,
+    this.aiErrorCode,
+    this.aiErrorMessage,
+    this.aiModelName,
+    this.aiApiUrl,
+    this.aiHttpStatusCode,
+    this.aiErrorDetails,
+    this.cloudFunctionName,
+    this.cloudFunctionRegion,
+    this.networkErrorType,
+    this.totalRetriesAttempted,
+    this.wasResponseMalformed,
+    this.parserErrorMessages = const [],
+  });
 
-    final buffer = StringBuffer()
-      ..writeln('[QA GENIE END-TO-END FORENSIC REPLAY]')
-      ..writeln('')
-      ..writeln('=== TRACE ===')
-      ..writeln(traceId)
-      ..writeln('')
-      ..writeln('=== INPUT ===')
-      ..writeln('Module: $module')
-      ..writeln('Feature: $feature')
-      ..writeln('Platform: $platform')
-      ..writeln('')
-      ..writeln('=== FINAL API PROMPT ===')
-      ..writeln(rawPrompt)
-      ..writeln('')
-      ..writeln('=== RAW AI RESPONSE ===')
-      ..writeln(rawResponse)
-      ..writeln('')
-      ..writeln('=== PARSED TEST CASES ===')
-      ..writeln(const JsonEncoder.withIndent('  ').convert(parsedCases))
-      ..writeln('')
-      ..writeln('=== FINAL OUTPUT ===')
-      ..writeln(const JsonEncoder.withIndent('  ').convert(finalizedCases))
-      ..writeln('')
-      ..writeln('=== VALIDATOR REJECTED ===');
-
-    final rejected = (data['rejectedCases'] as List<dynamic>? ?? []);
-
-    if (rejected.isEmpty) {
-      buffer.writeln('NONE');
-    } else {
-      for (final item in rejected) {
-        buffer.writeln(
-          '- ${item['title']} '
-          '[${item['stage']}] '
-          '${item['reason']}',
-        );
-      }
-    }
-
-    buffer
-      ..writeln('')
-      ..writeln('=== REPAIR LOG ===');
-
-    final repairLog = (data['repairLog'] as List<dynamic>? ?? []);
-
-    if (repairLog.isEmpty) {
-      buffer.writeln('NONE');
-    } else {
-      for (final item in repairLog) {
-        buffer.writeln('- $item');
-      }
-    }
-
-    buffer
-      ..writeln('')
-      ..writeln('=== FALLBACK TRIGGERS ===');
-
-    final fallback = (data['fallbackTriggers'] as List<dynamic>? ?? []);
-
-    if (fallback.isEmpty) {
-      buffer.writeln('NONE');
-    } else {
-      for (final item in fallback) {
-        buffer.writeln('- $item');
-      }
-    }
-
-    buffer
-      ..writeln('')
-      ..writeln('=== PIPELINE METRICS ===')
-      ..writeln(
-        'Average Confidence: '
-        '${(data['averageConfidence'] ?? 0).toString()}',
-      )
-      ..writeln('')
-      ..writeln('=== DIVERSITY BALANCE ===')
-      ..writeln(
-        const JsonEncoder.withIndent('  ').convert(data['diversityBalance']),
-      )
-      ..writeln('')
-      ..writeln('=== LINEAGE BALANCE ===')
-      ..writeln(
-        const JsonEncoder.withIndent('  ').convert(data['lineageBalance']),
-      )
-      ..writeln('')
-      ..writeln('=== SECURITY EVENTS ===');
-
-    final security = (data['securityEvents'] as List<dynamic>? ?? []);
-
-    if (security.isEmpty) {
-      buffer.writeln('NONE');
-    } else {
-      for (final item in security) {
-        buffer.writeln('- $item');
-      }
-    }
-
-    buffer
-      ..writeln('')
-      ..writeln('=== TIMELINE ===');
-
-    final timeline = (data['timeline'] as List<dynamic>? ?? []);
-
-    if (timeline.isEmpty) {
-      buffer.writeln('NONE');
-    } else {
-      for (final item in timeline) {
-        buffer.writeln(item.toString());
-      }
-    }
-
-    return buffer.toString();
+  Map<String, dynamic> toJson() {
+    return {
+      'traceId': traceId,
+      'rejectedCases': rejectedCases.map((e) => e.toJson()).toList(),
+      'repairLog': repairLog,
+      'diversityBalance': diversityBalance,
+      'averageConfidence': averageConfidence,
+      'fallbackTriggers': fallbackTriggers,
+      'totalInputCases': totalInputCases,
+      'finalizedCases': finalizedCases,
+      'repairedCases': repairedCases,
+      'rejectedCount': rejectedCount,
+      'missingIntentIds': missingIntentIds,
+      'prompt': _truncate(prompt),
+      'rawAiResponse': _truncate(rawAiResponse, 5000),
+      'aiLatencyMs': aiLatencyMs,
+      'aiStatusCode': aiStatusCode,
+      'aiReturnedCount': aiReturnedCount,
+      'aiAcceptedCount': aiAcceptedCount,
+      'structuralRejectedCount': structuralRejectedCount,
+      'semanticRejectedCount': semanticRejectedCount,
+      'realismRejectedCount': realismRejectedCount,
+      'exportSafetyRejectedCount': exportSafetyRejectedCount,
+      'fallbackCount': fallbackCount,
+      'cloudRequestId': cloudRequestId,
+      'cloudFunctionVersion': cloudFunctionVersion,
+      'cloudLatencyMs': cloudLatencyMs,
+      'aiPromptTokens': aiPromptTokens,
+      'aiCompletionTokens': aiCompletionTokens,
+      'aiTotalTokens': aiTotalTokens,
+      'aiErrorCode': aiErrorCode,
+      'aiErrorMessage': aiErrorMessage,
+      'aiModelName': aiModelName,
+      'aiApiUrl': aiApiUrl,
+      'aiHttpStatusCode': aiHttpStatusCode,
+      'aiErrorDetails': aiErrorDetails,
+      'cloudFunctionName': cloudFunctionName,
+      'cloudFunctionRegion': cloudFunctionRegion,
+      'networkErrorType': networkErrorType,
+      'totalRetriesAttempted': totalRetriesAttempted,
+      'wasResponseMalformed': wasResponseMalformed,
+      'parserErrorMessages': parserErrorMessages,
+    };
   }
+
+  String? _truncate(String? s, [int max = 1000]) {
+    if (s == null) return null;
+    return s.length <= max ? s : '${s.substring(0, max)}...[truncated]';
+  }
+}
+
+class RejectedCaseInfo {
+  final String title;
+  final String reason;
+  final String stage;
+  RejectedCaseInfo({
+    required this.title,
+    required this.reason,
+    required this.stage,
+  });
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'reason': reason,
+    'stage': stage,
+  };
 }

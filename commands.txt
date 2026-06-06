@@ -3,7 +3,14 @@
 flutter run --flavor dev
 
 
-flutter run --flavor prod
+flutter run --release --flavor prod
+
+
+adb pull /sdcard/Download/QA_Genie_Forensics/latest_run.json ~/Desktop/
+adb pull /sdcard/Download/QA_Genie_Forensics/latest_run.log ~/Desktop/
+
+
+
 
 
 
@@ -27,6 +34,26 @@ flutter test test/forensic_tests/headless/exports/full_export_test.dart
 
 
 
+
+Summary of recommended usage
+Purpose	Command
+Daily development (with forensic tools)	flutter run
+Performance testing (with forensic tools)	flutter run --profile
+Building a test APK for QA (with forensic tools)	flutter build apk --debug
+Testing production behaviour on a device (no tools)	flutter run --release
+Building final customer APK (no tools)	flutter build apk --release
+
+
+
+
+
+
+
+
+
+
+
+
 firebase deploy --only functions
 firebase functions:log --only generate
 
@@ -40,6 +67,11 @@ flutter build apk --release --flavor dev
 
 # Prod APK
 flutter build apk --release --flavor prod
+
+
+
+adb pull /storage/emulated/0/Download/QA_Genie_Forensics/latest_run.json ~/Desktop/QA_genie/latest_run/
+adb pull /storage/emulated/0/Download/QA_Genie_Forensics/latest_run.log ~/Desktop/QA_genie/latest_run/
 
 
 
@@ -84,3 +116,6 @@ UI:
 
 Hidden:
 ✗ Account Test Page
+
+
+

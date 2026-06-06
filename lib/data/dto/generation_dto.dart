@@ -3,7 +3,6 @@ import 'package:qa_genie/domain/enums/generation_mode.dart';
 // FILE: lib/data/dto/generation_dto.dart
 // ============================================================
 
-
 /// ===============================================================
 ///
 /// GENERATION DTO
@@ -43,6 +42,7 @@ class GenerationDto {
   final bool enableBoundaryCases;
 
   final bool enableUsabilityCases;
+  final String? adToken;
 
   const GenerationDto({
     required this.module,
@@ -51,6 +51,8 @@ class GenerationDto {
     required this.mode,
     required this.count,
     required this.traceId,
+
+    this.adToken,
 
     this.constraints = '',
 
