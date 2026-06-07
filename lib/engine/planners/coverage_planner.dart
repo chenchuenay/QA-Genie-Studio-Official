@@ -26,6 +26,89 @@ class CoveragePlanner {
   });
 
   CoverageRequest plan() {
+    // If constraints are present, try to detect intent
+    if (constraints.trim().isNotEmpty) {
+      final intent = _parseConstraintIntent(constraints.toLowerCase());
+      if (intent != null) {
+        return _planForIntent(intent);
+      }
+    }
+
+    // Default category distribution (80/20, with mixed categories)
+    return _defaultPlan();
+  }
+
+  String? _parseConstraintIntent(String c) {
+    // Exact overrides
+    if (c.contains('only security') || c == 'security') return 'security';
+    if (c.contains('only validation') || c == 'validation') return 'validation';
+    if (c.contains('only boundary') || c == 'boundary') return 'boundary';
+    if (c.contains('only session') || c == 'session') return 'session';
+    if (c.contains('only positive') || c == 'positive') return 'positive';
+    if (c.contains('only negative') || c == 'negative') return 'negative';
+    if (c.contains('oauth') || c.contains('social login')) return 'oauth';
+    if (c.contains('expiry') || c.contains('concurrent'))
+      return 'session_expiry';
+    // Mixed positive+negative
+    if (c.contains('positive and negative')) return 'positive_negative';
+    // Default fallback – not overriding
+    return null;
+  }
+
+  CoverageRequest _planForIntent(String intent) {
+    switch (intent) {
+      case 'security':
+        return CoverageRequest(
+          totalCount: totalCount,
+          categoryCounts: {'security': totalCount},
+          riskFocus: ['HIGH'],
+        );
+      case 'validation':
+        return CoverageRequest(
+          totalCount: totalCount,
+          categoryCounts: {'validation': totalCount},
+        );
+      case 'boundary':
+        return CoverageRequest(
+          totalCount: totalCount,
+          categoryCounts: {'boundary': totalCount},
+        );
+      case 'session':
+      case 'session_expiry':
+        return CoverageRequest(
+          totalCount: totalCount,
+          categoryCounts: {'session': totalCount},
+          riskFocus: ['HIGH'],
+        );
+      case 'positive':
+        return CoverageRequest(
+          totalCount: totalCount,
+          categoryCounts: {'positive': totalCount},
+        );
+      case 'negative':
+        return CoverageRequest(
+          totalCount: totalCount,
+          categoryCounts: {'negative': totalCount},
+        );
+      case 'positive_negative':
+        final pos = (totalCount / 2).ceil();
+        final neg = totalCount - pos;
+        return CoverageRequest(
+          totalCount: totalCount,
+          categoryCounts: {'positive': pos, 'negative': neg},
+        );
+      case 'oauth':
+        // For OAuth, we still use positive category but the outcome will be social_login
+        return CoverageRequest(
+          totalCount: totalCount,
+          categoryCounts: {'positive': totalCount},
+        );
+      default:
+        return _defaultPlan();
+    }
+  }
+
+  CoverageRequest _defaultPlan() {
     bool securityFocused = constraints.toLowerCase().contains('security');
     bool negativeFocused = constraints.toLowerCase().contains('negative');
     bool sessionFocused = constraints.toLowerCase().contains('session');

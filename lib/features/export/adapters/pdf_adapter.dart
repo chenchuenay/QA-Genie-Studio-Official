@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qa_genie/core/error/exceptions.dart';
 import 'package:qa_genie/engine/utils/pdf_text_sanitizer.dart';
@@ -8,6 +9,8 @@ import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
 import 'package:qa_genie/features/export/folder/export_folder_service.dart';
 
+/// PDF ADAPTER
+/// Generates a professional PDF table with pagination.
 class PdfAdapter {
   const PdfAdapter._();
 
@@ -17,6 +20,8 @@ class PdfAdapter {
     required String moduleName,
     required String featureName,
   }) async {
+    final startTime = DateTime.now();
+    debugPrint('📄 PDF_ADAPTER: Started export for ${cases.length} cases');
     try {
       final mapped = ExportMapper.toPdf(cases);
       final pdf = pw.Document();
@@ -35,7 +40,13 @@ class PdfAdapter {
       final file = File('${dir.path}/$fileName.pdf');
       await file.writeAsBytes(await pdf.save());
       await Share.shareXFiles([XFile(file.path)]);
-    } catch (e) {
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('✅ PDF_ADAPTER: Success in ${duration}ms');
+    } catch (e, stack) {
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('❌ PDF_ADAPTER: Failed after ${duration}ms');
+      debugPrint('❌ PDF_ADAPTER error: $e');
+      debugPrint('❌ PDF_ADAPTER stack: $stack');
       throw ExportException('PDF export failed: $e');
     }
   }
@@ -116,7 +127,10 @@ class PdfAdapter {
       data: rows
           .map(
             (row) => [
-              PdfTextSanitizer.sanitize(_toString(row['ID'])),
+              // ID fallback: ExportMapper uses 'ID' key, but we also accept 'Test Case ID'
+              PdfTextSanitizer.sanitize(
+                _toString(row['ID'] ?? row['Test Case ID'] ?? ''),
+              ),
               PdfTextSanitizer.sanitize(_toString(row['Title'])),
               PdfTextSanitizer.sanitize(_toString(row['Preconditions'])),
               PdfTextSanitizer.sanitize(_toString(row['Steps'])),

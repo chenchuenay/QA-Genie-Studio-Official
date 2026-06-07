@@ -1,8 +1,8 @@
 import 'package:qa_genie/engine/models/pipeline_models.dart';
-import 'package:qa_genie/engine/validators/export_safety_validator.dart';
 import 'package:qa_genie/engine/validators/realism_validator.dart';
 import 'package:qa_genie/engine/validators/semantic_validator.dart';
 import 'package:qa_genie/engine/validators/structural_validator.dart';
+import 'package:qa_genie/engine/validators/export_safety_validator.dart';
 
 class ValidationStage {
   final StructuralValidator _structuralValidator;
@@ -17,7 +17,10 @@ class ValidationStage {
        _semanticValidator = semanticValidator ?? SemanticValidator(),
        _exportSafetyValidator = exportSafetyValidator;
 
-  ValidationStageResult execute({required List<WorkingCase> cases}) {
+  ValidationStageResult execute({
+    required List<WorkingCase> cases,
+    String constraints = '', // receive constraints from orchestrator
+  }) {
     final rejected = <RejectedCaseInfo>[];
     final structurallyValid = <WorkingCase>[];
     var structuralRejectedCount = 0;
@@ -45,7 +48,12 @@ class ValidationStage {
     );
     rejected.addAll(semanticRejected);
 
-    final realismValid = RealismValidator.validate(semanticResult.validCases);
+    // Realism validation
+    final realismValid = RealismValidator.validate(
+      semanticResult.validCases,
+      constraints,
+      (info) => rejected.add(info),
+    );
 
     final exportSafe = <WorkingCase>[];
     var exportSafetyRejectedCount = 0;

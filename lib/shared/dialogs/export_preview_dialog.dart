@@ -169,14 +169,15 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       case "pdf":
         final pdfData = ExportMapper.toPdf(widget.cases);
         if (pdfData.isEmpty) return [];
+        // Use the exact keys returned by ExportMapper.toPdf
         final keys = [
-          "ID",
+          "Test Case ID",
           "Title",
           "Preconditions",
           "Steps",
           "Test Data",
           "Expected Result",
-          "Actual",
+          "Actual Result",
           "Status",
           "Priority",
         ];
@@ -206,10 +207,8 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
 
-      // Check if line starts with a number (e.g., "1.", "2.")
       final numberMatch = RegExp(r'^\d+\.').hasMatch(trimmed);
       if (numberMatch) {
-        // Save previous step if exists
         if (currentAction != null) {
           steps.add(
             TestStep(
@@ -219,7 +218,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
             ),
           );
         }
-        // Start new step: remove the number and dot
         currentAction = trimmed.replaceFirst(RegExp(r'^\d+\.\s*'), '');
         currentData = null;
         currentExpected = null;
@@ -228,13 +226,11 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       } else if (trimmed.toLowerCase().startsWith('expected:')) {
         currentExpected = trimmed.substring(8).trim();
       } else {
-        // If no number and not data/expected, it might be continuation of action
         if (currentAction != null) {
           currentAction += ' $trimmed';
         }
       }
     }
-    // Add last step
     if (currentAction != null) {
       steps.add(
         TestStep(
@@ -270,10 +266,8 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       ) {
         final header = headers[colIdx].toLowerCase();
         final newValue = row[colIdx];
-        // Skip if unchanged
         if (newValue == _data[rowIdx + 1][colIdx]) continue;
 
-        // Keyword‑based mapping (supports all export formats)
         if (header.contains('id')) {
           updated = updated.copyWith(id: newValue);
         } else if (header.contains('title') || header.contains('summary')) {
@@ -291,7 +285,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
         } else if (header.contains('precondition') ||
             header.contains('preconditions') ||
             header.contains('description')) {
-          // Preconditions are stored as a list; we split by newline or semicolon
           final preList = newValue
               .split('\n')
               .expand((s) => s.split(';'))
@@ -300,7 +293,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
               .toList();
           updated = updated.copyWith(preconditions: preList);
         } else if (header.contains('step')) {
-          // Steps are stored as a multi‑line string; we need to parse them back to List<TestStep>
           final newSteps = _parseSteps(newValue);
           if (newSteps.isNotEmpty) {
             updated = updated.copyWith(steps: newSteps);
@@ -330,7 +322,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     final updatedCases = _updateOriginalCasesFromEditedData(editedData);
     widget.onSave(updatedCases);
     setState(() {
-      _data = editedData; // update internal cache so next diff works
+      _data = editedData;
       _editing = false;
       _savedSuccess = true;
     });
@@ -424,29 +416,31 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                         horizontal: 4,
                         vertical: 4,
                       ),
-                      child: DropdownButton<String>(
-                        value: _normalizeStatus(controller.text),
-                        isExpanded: true,
-                        dropdownColor: AppColors.card,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
+                      child: Center(
+                        child: DropdownButton<String>(
+                          value: _normalizeStatus(controller.text),
+                          isExpanded: true,
+                          dropdownColor: AppColors.card,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
+                          underline: const SizedBox(),
+                          items: _statusOptions
+                              .map(
+                                (opt) => DropdownMenuItem(
+                                  value: opt,
+                                  child: Center(child: Text(opt)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (newVal) {
+                            if (newVal != null) {
+                              controller.text = newVal;
+                              setState(() {});
+                            }
+                          },
                         ),
-                        underline: const SizedBox(),
-                        items: _statusOptions
-                            .map(
-                              (opt) => DropdownMenuItem(
-                                value: opt,
-                                child: Text(opt),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (newVal) {
-                          if (newVal != null) {
-                            controller.text = newVal;
-                            setState(() {});
-                          }
-                        },
                       ),
                     )
                   : isPriority
@@ -456,29 +450,31 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                         horizontal: 4,
                         vertical: 4,
                       ),
-                      child: DropdownButton<String>(
-                        value: _normalizePriority(controller.text),
-                        isExpanded: true,
-                        dropdownColor: AppColors.card,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
+                      child: Center(
+                        child: DropdownButton<String>(
+                          value: _normalizePriority(controller.text),
+                          isExpanded: true,
+                          dropdownColor: AppColors.card,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
+                          underline: const SizedBox(),
+                          items: _priorityOptions
+                              .map(
+                                (opt) => DropdownMenuItem(
+                                  value: opt,
+                                  child: Center(child: Text(opt)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (newVal) {
+                            if (newVal != null) {
+                              controller.text = newVal;
+                              setState(() {});
+                            }
+                          },
                         ),
-                        underline: const SizedBox(),
-                        items: _priorityOptions
-                            .map(
-                              (opt) => DropdownMenuItem(
-                                value: opt,
-                                child: Text(opt),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (newVal) {
-                          if (newVal != null) {
-                            controller.text = newVal;
-                            setState(() {});
-                          }
-                        },
                       ),
                     )
                   : Container(

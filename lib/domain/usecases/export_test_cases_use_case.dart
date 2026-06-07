@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:pdf/pdf.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qa_genie/core/error/exceptions.dart';
 import 'package:qa_genie/core/utils/priority_utils.dart';
@@ -10,18 +11,19 @@ import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/adapters/csv_adapter.dart';
 import 'package:qa_genie/features/export/adapters/pdf_adapter.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
+import 'package:qa_genie/features/monetization/ads/ad_service.dart';
 import 'package:qa_genie/features/export/adapters/json_adapter.dart';
 import 'package:qa_genie/features/export/adapters/excel_adapter.dart';
 import 'package:qa_genie/domain/usecases/export_validation_service.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/features/export/folder/export_folder_service.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart'; // ADDED
 
 class ExportTestCasesUseCase {
   const ExportTestCasesUseCase();
 
   // ============================================================
-  // MAIN EXECUTION (with ad token)
+  // MAIN EXECUTION (with ad token and forensic logging)
   // ============================================================
   Future<void> execute({
     required String type,
@@ -30,8 +32,16 @@ class ExportTestCasesUseCase {
     String? featureName,
     String? adToken,
   }) async {
+    final startTime = DateTime.now();
+    final exportId = '${DateTime.now().millisecondsSinceEpoch}_$type';
+    debugPrint(
+      '📤 EXPORT_START: id=$exportId, type=$type, caseCount=${cases.length}',
+    );
+    debugPrint('📤 EXPORT_CASE_IDS: ${cases.map((c) => c.id).join(', ')}');
     try {
       _validateOrThrow(cases);
+      debugPrint('✅ EXPORT_VALIDATION_PASSED');
+
       final effectiveModule =
           moduleName ?? (cases.isNotEmpty ? cases.first.module : 'Unknown');
       final effectiveFeature =
@@ -87,13 +97,22 @@ class ExportTestCasesUseCase {
         default:
           throw ExportException('Unsupported export format: $type');
       }
-    } catch (e) {
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('✅ EXPORT_SUCCESS: id=$exportId, duration=${duration}ms');
+      await AdService.maybeShowInterstitial();
+    } catch (e, stack) {
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint(
+        '❌ EXPORT_FAILED: id=$exportId, type=$type, duration=${duration}ms',
+      );
+      debugPrint('❌ EXPORT_ERROR: $e');
+      debugPrint('❌ EXPORT_STACK: $stack');
       throw ExportException('Export execution failed: $e');
     }
   }
 
   // ============================================================
-  // SUMMARY REPORT (with ad token)
+  // SUMMARY REPORT (with ad token and forensic logging)
   // ============================================================
   Future<void> exportSummaryReport({
     required List<FinalizedTestCase> cases,
@@ -105,6 +124,11 @@ class ExportTestCasesUseCase {
     required BuildContext context,
     String? adToken,
   }) async {
+    final startTime = DateTime.now();
+    final exportId = '${DateTime.now().millisecondsSinceEpoch}_summary';
+    debugPrint(
+      '📤 SUMMARY_EXPORT_START: id=$exportId, caseCount=${cases.length}',
+    );
     try {
       final effectiveModule =
           moduleName ?? (cases.isNotEmpty ? cases.first.module : 'Unknown');
@@ -162,7 +186,19 @@ class ExportTestCasesUseCase {
       final file = File('${dir.path}/TSR_${safeModule}_$code.pdf');
       await file.writeAsBytes(await pdf.save());
       await Share.shareXFiles([XFile(file.path)]);
-    } catch (e) {
+
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint(
+        '✅ SUMMARY_EXPORT_SUCCESS: id=$exportId, duration=${duration}ms',
+      );
+      await AdService.maybeShowInterstitial();
+    } catch (e, stack) {
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint(
+        '❌ SUMMARY_EXPORT_FAILED: id=$exportId, duration=${duration}ms',
+      );
+      debugPrint('❌ SUMMARY_EXPORT_ERROR: $e');
+      debugPrint('❌ SUMMARY_EXPORT_STACK: $stack');
       throw ExportException('Summary export failed: $e');
     }
   }

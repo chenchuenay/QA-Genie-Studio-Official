@@ -8,7 +8,34 @@ flutter run --release --flavor prod
 
 adb pull /sdcard/Download/QA_Genie_Forensics/latest_run.json ~/Desktop/
 adb pull /sdcard/Download/QA_Genie_Forensics/latest_run.log ~/Desktop/
+adb shell ls /storage/emulated/0/Download/QA_Genie_Forensics/full_dump_*.json
 
+
+''' 
+## full file dumps 
+mkdir -p ~/Desktop/QA_Genie/full_dumps
+adb shell "ls /storage/emulated/0/Download/QA_Genie_Forensics/full_dump_*.json" | while read file; do
+  adb pull "$file" ~/Desktop/QA_Genie/full_dumps/
+ 
+done
+
+
+
+
+#delete
+adb shell "rm /storage/emulated/0/Download/QA_Genie_Forensics/full_dump_*.json"
+
+
+#verify
+
+adb shell "ls /storage/emulated/0/Download/QA_Genie_Forensics/full_dump_*.json" 2>/dev/null
+
+
+#zip
+cd ~/Desktop/QA_Genie
+zip -r full_dumps.zip full_dumps/
+
+'''
 
 
 

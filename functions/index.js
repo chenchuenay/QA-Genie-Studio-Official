@@ -214,7 +214,7 @@ function transformTestCases(rawCases) {
 // MAIN GENERATION ENDPOINT
 // ------------------------------------------------------------------
 exports.generate = functions
-  .runWith({ secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60 })
+  .runWith({ secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 120 })
   .https.onCall(async (data, context) => {
     try {
       const requestId = generateRequestId();

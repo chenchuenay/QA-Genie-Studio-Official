@@ -185,13 +185,13 @@ class ExportMapper {
   }
 
   // ============================================================
-  // PDF
+  // PDF (traditional QA table format)
   // ============================================================
 
   static List<Map<String, dynamic>> toPdf(List<FinalizedTestCase> cases) {
     return cases.map((tc) {
       return {
-        'ID': safe(tc.id),
+        'Test Case ID': safe(tc.id), // Changed from 'ID' to 'Test Case ID'
         'Title': safe(tc.title),
         'Preconditions': tc.preconditions.map(safe).join('; '),
         'Steps': _stepsOnly(tc),

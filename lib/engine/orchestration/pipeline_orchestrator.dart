@@ -99,6 +99,7 @@ class PipelineOrchestrator {
 
     final validationResult = _validationStage.execute(
       cases: repairResult.cases,
+      constraints: request.constraints,
     );
     final structuralRejected = validationResult.structuralRejectedCount;
     PipelineForensics.instance.onTraceEvent(

@@ -10,11 +10,19 @@ import 'package:qa_genie/engine/expected_result/composer.dart';
 import 'package:qa_genie/engine/adapters/platform_adapter.dart';
 import 'package:qa_genie/engine/generators/data_generator.dart';
 import 'package:qa_genie/engine/planners/coverage_planner.dart';
+import 'package:qa_genie/engine/generators/banking_data_generator.dart';
+import 'package:qa_genie/engine/generators/medical_data_generator.dart';
 import 'package:qa_genie/engine/observations/observation_generator.dart';
+import 'package:qa_genie/engine/generators/ecommerce_data_generator.dart';
+import 'package:qa_genie/engine/generators/telehealth_data_generator.dart';
 
 class DeterministicCaseGenerator {
   final Map<String, DataGenerator> _dataGenerators = {
     'authentication': AuthenticationDataGenerator(),
+    'ecommerce': EcommerceDataGenerator(),
+    'banking': BankingDataGenerator(),
+    'medical': MedicalDataGenerator(),
+    'telehealth': TelehealthDataGenerator(),
   };
 
   // ------------------------------------------------------------------
@@ -120,31 +128,43 @@ class DeterministicCaseGenerator {
         : <String, dynamic>{};
 
     final adapter = _adapterForPlatform(request.platform);
-    final steps = adapter.toSteps(expandedNodes, testData);
+    final steps = adapter.toSteps(
+      expandedNodes,
+      testData,
+      outcome: outcome,
+      constraints: request.constraints,
+    );
 
-    final observations = <String>[];
+    // Collect scored observations
+    final observations = <Map<String, dynamic>>[];
     for (final node in expandedNodes) {
-      final obs = ObservationGenerator.generate(
+      final obsList = ObservationGenerator.generate(
         outcome: outcome,
         entity: node.entity,
         platform: request.platform,
         businessArea: businessArea,
+        module: request.module,
+        feature: request.feature,
+        constraints: request.constraints,
       );
-      observations.addAll(obs);
+      observations.addAll(obsList);
     }
-    final uniqueObservations = observations.toSet().toList();
+
+    // Extract primary observation text (first observation's 'text' field)
+    final primaryObservation = observations.isNotEmpty
+        ? (observations.first['text'] as String?) ?? ''
+        : '';
 
     final expectedResult = ExpectedResultComposer.compose(
       outcome: outcome,
       businessArea: businessArea,
-      observations: uniqueObservations,
+      observations: observations,
       platform: request.platform,
+      module: request.module,
       feature: request.feature,
+      constraints: request.constraints,
     );
 
-    final primaryObservation = uniqueObservations.isNotEmpty
-        ? uniqueObservations.first
-        : '';
     final title = TitleComposer.compose(
       outcome: outcome,
       businessArea: businessArea,
@@ -254,6 +274,8 @@ class DeterministicCaseGenerator {
         return ApiAdapter();
       case 'WEB':
         return WebAdapter();
+      case 'MOBILE':
+        return MobileAdapter();
       default:
         return ApiAdapter();
     }
@@ -264,19 +286,50 @@ class DeterministicCaseGenerator {
     String outcome,
     String platform,
   ) {
+    // BASELINE PRECONDITIONS (always present)
     final pre = <String>[];
     if (platform == 'API') {
       pre.add('API service is reachable');
-      pre.add('Authentication token is available');
+      pre.add('Valid authentication token is available');
     } else {
-      pre.add('User is logged into the application');
+      pre.add('Application is accessible and responsive');
       pre.add('Network connectivity is stable');
     }
+
+    // OUTCOME‑SPECIFIC PRECONDITIONS
     if (area.id == 'authentication') {
-      pre.add('Test user account exists in system');
+      if (outcome == 'valid_login' ||
+          outcome == 'social_login' ||
+          outcome == 'mfa_login') {
+        pre.add('User account exists with valid credentials');
+      } else if (outcome == 'locked_account') {
+        pre.add('User account is locked due to multiple failed attempts');
+      } else if (outcome == 'nonexistent_user') {
+        pre.add('User account does not exist in the system');
+      }
+      if (outcome == 'mfa_login') {
+        pre.add('Multi‑factor authentication is enabled for the account');
+      }
+      if (outcome == 'social_login') {
+        pre.add('Social login provider is properly configured');
+      }
     } else if (area.id == 'ecommerce') {
-      pre.add('Test product is in stock');
-      pre.add('Valid payment method is configured');
+      if (outcome == 'valid_checkout') {
+        pre.add('Cart contains at least one item');
+        pre.add('Valid payment method is saved or entered');
+      } else if (outcome == 'insufficient_stock') {
+        pre.add('Selected item has low inventory');
+      }
+      if (outcome.contains('coupon')) {
+        pre.add('Coupon code is available');
+      }
+    } else if (area.id == 'banking') {
+      if (outcome == 'valid_transfer') {
+        pre.add('User has sufficient balance');
+        pre.add('Beneficiary account is valid');
+      } else if (outcome == 'insufficient_funds') {
+        pre.add('User balance is less than transfer amount');
+      }
     }
     return pre;
   }

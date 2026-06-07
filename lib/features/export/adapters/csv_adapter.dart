@@ -1,30 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:qa_genie/core/error/exceptions.dart';
 import 'package:qa_genie/features/export/writers/file_writer.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
-// ============================================================
-// FILE: lib/features/export/adapters/csv_adapter.dart
-// ============================================================
 
-/// ===============================================================
-///
 /// CSV ADAPTER
-///
-/// PURPOSE:
-/// - Jira-compatible CSV export
-/// - RFC4180-safe escaping
-///
-/// ARCHITECTURAL ROLE:
-/// - Pure reader of FinalizedTestCase.
-/// - Guarantees invariant field ordering via ExportMapper.
-///
-/// ===============================================================
+/// Jira‑compatible CSV export with RFC4180‑safe escaping.
 class CsvAdapter {
   const CsvAdapter._();
-
-  // ============================================================
-  // EXPORT
-  // ============================================================
 
   static Future<void> export(
     List<FinalizedTestCase> cases, {
@@ -32,30 +15,29 @@ class CsvAdapter {
     required String moduleName,
     required String featureName,
   }) async {
+    final startTime = DateTime.now();
+    debugPrint('📄 CSV_ADAPTER: Started export for ${cases.length} cases');
     try {
-      /// Forensic logic: Direct consumption of FinalizedTestCase to ensure
-      /// session edits (actualResult/status) are reflected instantly.
       final rows = ExportMapper.toJira(cases, featureName: featureName);
-
       final buffer = StringBuffer();
-
       for (final row in rows) {
         buffer.writeln(row.map(_escape).join(','));
       }
-
       await FileWriter.writeAndShare(
         buffer.toString(),
         fileName,
         extension: 'csv',
       );
-    } catch (e) {
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('✅ CSV_ADAPTER: Success in ${duration}ms');
+    } catch (e, stack) {
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('❌ CSV_ADAPTER: Failed after ${duration}ms');
+      debugPrint('❌ CSV_ADAPTER error: $e');
+      debugPrint('❌ CSV_ADAPTER stack: $stack');
       throw ExportException('CSV export failed: $e');
     }
   }
-
-  // ============================================================
-  // ESCAPE
-  // ============================================================
 
   static String _escape(String field) {
     return '"${field.replaceAll('\n', ' ').replaceAll('\r', ' ').replaceAll('"', '""')}"';

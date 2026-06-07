@@ -27,6 +27,8 @@ class ScenarioEngine {
     required BusinessArea businessArea,
   }) {
     final assignments = <ScenarioAssignment>[];
+    final usedOutcomes = <String>{};
+
     for (final entry in categoryCounts.entries) {
       final category = entry.key;
       final count = entry.value;
@@ -36,11 +38,15 @@ class ScenarioEngine {
       );
       if (possibleOutcomes.isEmpty) continue;
 
-      // Deterministic order based on seed
       final ordered = _deterministicOrder(possibleOutcomes, '$seed|$category');
 
       for (int i = 0; i < count; i++) {
-        final outcome = _pickUnused(ordered, businessArea.id, category);
+        final outcome = _pickUnused(
+          ordered,
+          businessArea.id,
+          category,
+          usedOutcomes,
+        );
         assignments.add(
           ScenarioAssignment(
             businessArea: businessArea,
@@ -68,18 +74,21 @@ class ScenarioEngine {
     List<String> ordered,
     String businessAreaId,
     String category,
+    Set<String> usedOutcomes,
   ) {
     for (final outcome in ordered) {
       final key = '$businessAreaId:$category:$outcome';
-      if (!_usedKeys.contains(key)) {
+      if (!_usedKeys.contains(key) && !usedOutcomes.contains(outcome)) {
         _usedKeys.add(key);
+        usedOutcomes.add(outcome);
         return outcome;
       }
     }
-    // All used – pick first (allow repeat, but we log later)
+    // If all unique outcomes exhausted, allow repeat but log (realism validator will catch)
     final fallback = ordered.first;
     final fallbackKey = '$businessAreaId:$category:$fallback';
     _usedKeys.add(fallbackKey);
+    usedOutcomes.add(fallback);
     return fallback;
   }
 

@@ -12,7 +12,7 @@ class FunctionsService {
   static Future<Map<String, dynamic>> call({
     required String functionName,
     Map<String, dynamic>? payload,
-    Duration timeout = const Duration(seconds: 45),
+    Duration timeout = const Duration(seconds: 120),
   }) async {
     debugPrint('📡 FUNCTIONS_SERVICE: Calling $functionName');
     final startTime = DateTime.now();

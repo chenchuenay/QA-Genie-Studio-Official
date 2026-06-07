@@ -175,12 +175,12 @@ class AuthenticationDataGenerator implements DataGenerator {
 
   // ---------- OTP pools ----------
   String _randomValidOtp(Random random) {
-    const otps = [
-      'otp_generated_now',
-      'otp_recently_generated',
-      'otp_valid_2min',
-    ];
-    return otps[random.nextInt(otps.length)];
+    // const otps = [
+    //   'otp_generated_now',
+    //   'otp_recently_generated',
+    //   'otp_valid_2min',
+    // ];
+    return (100000 + random.nextInt(900000)).toString();
   }
 
   // ---------- Account status pools ----------
