@@ -6,14 +6,12 @@ import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/domain/usecases/get_history_use_case.dart';
 import 'package:qa_genie/engine/parsers/partial_case_extractor.dart';
 import 'package:qa_genie/data/datasources/local/local_db_source.dart';
-import 'package:qa_genie/engine/recovery/partial_suite_expander.dart';
 import 'package:qa_genie/engine/parsers/malformed_json_salvager.dart';
 import 'package:qa_genie/engine/orchestration/stages/repair_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/parsing_stage.dart';
 import 'package:qa_genie/engine/orchestration/pipeline_orchestrator.dart';
 import 'package:qa_genie/engine/orchestration/stages/fallback_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/validation_stage.dart';
-import 'package:qa_genie/engine/recovery/deterministic_case_generator.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
 import 'package:qa_genie/engine/orchestration/stages/finalization_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/ai_generation_stage.dart';
@@ -34,32 +32,29 @@ class AppDependencies {
     repository: suiteRepository,
   );
 
-  static final DeterministicCaseGenerator deterministicGenerator =
-      DeterministicCaseGenerator();
-
-  static final PartialSuiteExpander partialSuiteExpander = PartialSuiteExpander(
-    deterministicGenerator: deterministicGenerator,
-  );
-
-  static final FallbackStage fallbackStage = FallbackStage(
-    generator: deterministicGenerator,
-    expander: partialSuiteExpander,
-  );
+  static final FallbackStage fallbackStage = FallbackStage();
 
   static final AiGenerationStage aiGenerationStage = AiGenerationStage();
+
   static const AiResponseParser aiResponseParser = AiResponseParser();
   static const MalformedJsonSalvager malformedJsonSalvager =
       MalformedJsonSalvager();
   static const PartialCaseExtractor partialCaseExtractor =
       PartialCaseExtractor();
   static const SchemaNormalizer schemaNormalizer = SchemaNormalizer();
-  static const AiRepairEngine aiRepairEngine = AiRepairEngine();
+
+  // 🔧 FIX: AiRepairEngine is not const, so use final
+  static final AiRepairEngine aiRepairEngine = AiRepairEngine();
+
   static final ParsingStage parsingStage = ParsingStage(
     parser: aiResponseParser,
   );
-  static const RepairStage repairStage = RepairStage(
+
+  // 🔧 FIX: RepairStage constructor is not const because it receives a non-const argument
+  static final RepairStage repairStage = RepairStage(
     repairEngine: aiRepairEngine,
   );
+
   static final ValidationStage validationStage = ValidationStage();
   static const CoverageAnalysisStage coverageAnalysisStage =
       CoverageAnalysisStage();

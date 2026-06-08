@@ -1,3 +1,4 @@
+import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 import 'package:qa_genie/engine/parsers/response_classifier.dart';
@@ -133,7 +134,7 @@ class PipelineOrchestrator {
       'missingCount=${coverage.missingCount}',
     );
 
-    final fallbackCases = _fallbackStage.fillMissing(
+    final fallbackCases = await _fallbackStage.fillMissing(
       request: request,
       existing: acceptedAiCases,
       coverage: coverage,
@@ -260,7 +261,14 @@ class PipelineOrchestrator {
         plan['intent_id'],
         '__unknown__',
       );
-      hydratedCases.add(WorkingCase.fromJson(raw, traceId: request.traceId));
+      final workingCase = WorkingCase.fromJson(raw, traceId: request.traceId);
+
+      // If testData is empty, extract from steps
+      if (workingCase.testData.trim().isEmpty && workingCase.steps.isNotEmpty) {
+        workingCase.testData = _extractTestDataFromSteps(workingCase.steps);
+      }
+
+      hydratedCases.add(workingCase);
     }
     return hydratedCases;
   }
@@ -326,5 +334,23 @@ class PipelineOrchestrator {
     if (value.contains('security')) return 'security';
     if (value.contains('session')) return 'session';
     return value.isEmpty ? 'positive' : value;
+  }
+
+  String _extractTestDataFromSteps(List<TestStep> steps) {
+    final buffer = StringBuffer();
+    for (final step in steps) {
+      final data = step.data.trim();
+      if (data.isNotEmpty) {
+        // Only include data that looks like test input (email, password, etc.)
+        if (data.contains('@') ||
+            data.toLowerCase().contains('pass') ||
+            data.contains('user') ||
+            data.length > 3) {
+          if (buffer.isNotEmpty) buffer.write('&');
+          buffer.write(data);
+        }
+      }
+    }
+    return buffer.toString();
   }
 }

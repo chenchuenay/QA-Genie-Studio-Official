@@ -69,14 +69,10 @@ class _StartupGateState extends State<_StartupGate> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF020409),
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF46DFFF)),
-        ),
-      );
+      return const MainScreen();
     }
 
     if (_expired || _updateRequired) {

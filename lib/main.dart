@@ -7,10 +7,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qa_genie/engine/prompts/prompt_cache_manager.dart';
 import 'package:flutter/foundation.dart'; // ADDED for kReleaseMode
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await PromptCacheManager.warmup(); // ✅ warm up prompt cache
 
   try {
     await dotenv.load(fileName: kReleaseMode ? ".env.prod" : ".env.dev");
@@ -84,11 +86,6 @@ class _AnonymousAuthWrapperState extends State<AnonymousAuthWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const MaterialApp(
-        home: Scaffold(body: Center(child: CircularProgressIndicator())),
-      );
-    }
     if (_error != null) {
       return MaterialApp(
         home: Scaffold(

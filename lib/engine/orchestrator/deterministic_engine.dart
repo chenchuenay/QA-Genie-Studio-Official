@@ -1,0 +1,140 @@
+import '../ontology/entities.dart';
+import '../planners/domain_detector.dart';
+import '../planners/coverage_planner.dart';
+import '../planners/scenario_planner.dart';
+import '../generators/step_generator.dart';
+import '../generators/data_generator.dart';
+import '../planners/constraint_parser.dart';
+import '../generators/title_generator.dart';
+import '../../domain/enums/case_source.dart';
+import '../validators/realism_validator.dart';
+import '../../domain/entities/test_step.dart';
+import '../../domain/enums/generation_mode.dart';
+import '../generators/precondition_generator.dart';
+import '../generators/expected_result_generator.dart';
+import '../../domain/entities/finalized_test_case.dart';
+
+class DeterministicEngine {
+  final String module;
+  final String feature;
+  final String platform;
+  final String? constraints;
+  final int targetCount;
+
+  DeterministicEngine({
+    required this.module,
+    required this.feature,
+    required this.platform,
+    this.constraints,
+    required this.targetCount,
+  });
+
+  Future<List<FinalizedTestCase>> generate() async {
+    final domain = DomainDetector.detect(module, feature);
+    final seedEntities = _detectSeedEntities(feature);
+    if (seedEntities.isEmpty) return [];
+
+    final parser = ConstraintParser(constraints ?? '');
+    final constraintResult = parser.parse();
+
+    final coveragePlanner = CoveragePlanner(
+      totalCount: targetCount,
+      mode: GenerationMode.pro,
+      constraints: constraints ?? '',
+      seed: 'fallback_${DateTime.now().millisecondsSinceEpoch}',
+    );
+    final coverageRequest = coveragePlanner.plan();
+
+    final scenarioPlanner = ScenarioPlanner(
+      domain: domain,
+      categoryCounts: coverageRequest.categoryCounts,
+      constraintKeywords: constraintResult.keywords,
+      seedEntities: seedEntities,
+      constraints: constraints ?? '',
+    );
+    final scenarios = scenarioPlanner.plan();
+
+    final testCases = <FinalizedTestCase>[];
+    for (int i = 0; i < scenarios.length; i++) {
+      final scenario = scenarios[i];
+      final title = TitleGenerator.generate(scenario, feature);
+      final preconditions = PreconditionGenerator.generate(scenario);
+      final testDataMap = DataGenerator.generate(scenario, constraints ?? '');
+      final testData = testDataMap.entries
+          .map((e) => '${e.key}=${e.value}')
+          .join('&');
+      final steps = StepGenerator.generate(scenario, platform, testDataMap)
+          .map(
+            (s) => TestStep(
+              action: s['action']!,
+              data: s['data']!,
+              expected: s['expected']!,
+            ),
+          )
+          .toList();
+      final expectedResult = ExpectedResultGenerator.generate(scenario);
+      final priority = _priorityFromCategory(scenario.category);
+      final type = scenario.category.toUpperCase();
+
+      testCases.add(
+        FinalizedTestCase(
+          id: 'TC_${module.replaceAll(' ', '')}_${(i + 1).toString().padLeft(3, '0')}',
+          title: title,
+          module: module,
+          feature: feature,
+          platform: platform,
+          priority: priority,
+          type: type,
+          preconditions: preconditions,
+          testData: testData,
+          steps: steps,
+          expectedResult: expectedResult,
+          actualResult: '',
+          status: 'Not Executed',
+          source: CaseSource.fallback,
+        ),
+      );
+    }
+    return testCases.where((tc) => RealismValidator.isValid(tc)).toList();
+  }
+
+  String _priorityFromCategory(String category) {
+    switch (category) {
+      case 'security':
+      case 'session':
+        return 'High';
+      case 'negative':
+      case 'validation':
+        return 'Medium';
+      default:
+        return 'Low';
+    }
+  }
+
+  Set<EntityType> _detectSeedEntities(String feature) {
+    final f = feature.toLowerCase();
+    if (f.contains('login') || f.contains('signin') || f.contains('auth'))
+      return {EntityType.account, EntityType.credential};
+    if (f.contains('reset') && f.contains('password'))
+      return {EntityType.account, EntityType.resetToken};
+    if (f.contains('refresh') || f.contains('session'))
+      return {EntityType.session};
+    if (f.contains('promo') || f.contains('coupon')) return {EntityType.coupon};
+    if (f.contains('payment') || f.contains('checkout'))
+      return {EntityType.payment};
+    if (f.contains('cart') || f.contains('item'))
+      return {EntityType.cart, EntityType.item};
+    if (f.contains('transfer') || f.contains('wire'))
+      return {EntityType.transfer, EntityType.balance};
+    if (f.contains('beneficiary')) return {EntityType.beneficiary};
+    if (f.contains('appointment') || f.contains('schedule'))
+      return {EntityType.appointment, EntityType.provider};
+    if (f.contains('prescription') || f.contains('refill'))
+      return {EntityType.prescription};
+    if (f.contains('lab') || f.contains('result'))
+      return {EntityType.labResult};
+    if (f.contains('telehealth') || f.contains('consultation'))
+      return {EntityType.consultation, EntityType.webhook};
+    return {};
+  }
+}

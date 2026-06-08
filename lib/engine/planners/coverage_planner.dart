@@ -26,6 +26,20 @@ class CoveragePlanner {
   });
 
   CoverageRequest plan() {
+    // Edge cases: totalCount must be positive
+    if (totalCount <= 0) {
+      return CoverageRequest(totalCount: 0, categoryCounts: {}, riskFocus: []);
+    }
+
+    // If totalCount is 1, simplest is a single positive case
+    if (totalCount == 1) {
+      return CoverageRequest(
+        totalCount: 1,
+        categoryCounts: {'positive': 1},
+        riskFocus: [],
+      );
+    }
+
     // If constraints are present, try to detect intent
     if (constraints.trim().isNotEmpty) {
       final intent = _parseConstraintIntent(constraints.toLowerCase());
@@ -34,7 +48,7 @@ class CoveragePlanner {
       }
     }
 
-    // Default category distribution (80/20, with mixed categories)
+    // Default category distribution according to user specification
     return _defaultPlan();
   }
 
@@ -51,7 +65,6 @@ class CoveragePlanner {
       return 'session_expiry';
     // Mixed positive+negative
     if (c.contains('positive and negative')) return 'positive_negative';
-    // Default fallback – not overriding
     return null;
   }
 
@@ -98,7 +111,6 @@ class CoveragePlanner {
           categoryCounts: {'positive': pos, 'negative': neg},
         );
       case 'oauth':
-        // For OAuth, we still use positive category but the outcome will be social_login
         return CoverageRequest(
           totalCount: totalCount,
           categoryCounts: {'positive': totalCount},
@@ -109,72 +121,87 @@ class CoveragePlanner {
   }
 
   CoverageRequest _defaultPlan() {
-    bool securityFocused = constraints.toLowerCase().contains('security');
-    bool negativeFocused = constraints.toLowerCase().contains('negative');
-    bool sessionFocused = constraints.toLowerCase().contains('session');
+    final securityFocused = constraints.toLowerCase().contains('security');
+    final negativeFocused = constraints.toLowerCase().contains('negative');
+    final sessionFocused = constraints.toLowerCase().contains('session');
+    final validationFocused = constraints.toLowerCase().contains('validation');
+    final boundaryFocused = constraints.toLowerCase().contains('boundary');
 
     Map<String, int> categoryCounts = {};
 
-    if (securityFocused) {
-      categoryCounts = {
-        'positive': (totalCount * 0.2).floor(),
-        'security': (totalCount * 0.6).floor(),
-        'negative': (totalCount * 0.2).floor(),
-      };
-    } else if (negativeFocused) {
-      categoryCounts = {
-        'positive': (totalCount * 0.5).floor(),
-        'negative': (totalCount * 0.3).floor(),
-        'validation': (totalCount * 0.2).floor(),
-      };
-    } else if (sessionFocused) {
-      categoryCounts = {
-        'positive': (totalCount * 0.6).floor(),
-        'session': (totalCount * 0.4).floor(),
-      };
+    // Constraint overrides (if only one type is requested, honor it)
+    if (securityFocused &&
+        !negativeFocused &&
+        !sessionFocused &&
+        !validationFocused &&
+        !boundaryFocused) {
+      categoryCounts = {'security': totalCount};
+    } else if (negativeFocused &&
+        !securityFocused &&
+        !sessionFocused &&
+        !validationFocused &&
+        !boundaryFocused) {
+      categoryCounts = {'negative': totalCount};
+    } else if (validationFocused &&
+        !securityFocused &&
+        !negativeFocused &&
+        !sessionFocused &&
+        !boundaryFocused) {
+      categoryCounts = {'validation': totalCount};
+    } else if (boundaryFocused &&
+        !securityFocused &&
+        !negativeFocused &&
+        !sessionFocused &&
+        !validationFocused) {
+      categoryCounts = {'boundary': totalCount};
+    } else if (sessionFocused &&
+        !securityFocused &&
+        !negativeFocused &&
+        !validationFocused &&
+        !boundaryFocused) {
+      categoryCounts = {'session': totalCount};
     } else {
-      int positive = (totalCount * 0.8).floor();
-      int others = totalCount - positive;
-      categoryCounts = {
-        'positive': positive,
-        'negative': (others * 0.5).ceil(),
-        'validation': (others * 0.3).ceil(),
-        'boundary': (others * 0.2).ceil(),
-      };
+      // Default distribution based on mode (Core vs Pro)
+      if (mode == GenerationMode.core) {
+        // Core: 6 Positive, 1 Negative, 1 Edge (boundary or security)
+        categoryCounts = {'positive': 6, 'negative': 1};
+        // If constraints mention security, use security as the edge; otherwise boundary
+        if (constraints.toLowerCase().contains('security')) {
+          categoryCounts['security'] = 1;
+        } else {
+          categoryCounts['boundary'] = 1;
+        }
+      } else {
+        // PRO: 10 Positive, 4 Negative, 2 Edge (boundary or security)
+        categoryCounts = {'positive': 10, 'negative': 4};
+        if (constraints.toLowerCase().contains('security')) {
+          categoryCounts['security'] = 2;
+        } else {
+          categoryCounts['boundary'] = 2;
+        }
+      }
     }
 
-    // Minimum guarantees for Core/Pro
-    if (mode == GenerationMode.core) {
-      categoryCounts['negative'] = (categoryCounts['negative'] ?? 0).clamp(
-        1,
-        totalCount,
-      );
-      categoryCounts['validation'] = (categoryCounts['validation'] ?? 0).clamp(
-        1,
-        totalCount,
-      );
-    } else if (mode == GenerationMode.pro) {
-      categoryCounts['negative'] = (categoryCounts['negative'] ?? 0).clamp(
-        1,
-        totalCount,
-      );
-      categoryCounts['validation'] = (categoryCounts['validation'] ?? 0).clamp(
-        1,
-        totalCount,
-      );
-      categoryCounts['boundary'] = (categoryCounts['boundary'] ?? 0).clamp(
-        1,
-        totalCount,
-      );
-    }
+    // Remove any zero counts (optional but cleaner)
+    categoryCounts.removeWhere((key, value) => value <= 0);
 
+    // Ensure total matches totalCount (adjust positive up/down if necessary)
     int sum = categoryCounts.values.reduce((a, b) => a + b);
-    if (sum < totalCount)
-      categoryCounts['positive'] =
-          (categoryCounts['positive'] ?? 0) + (totalCount - sum);
-    if (sum > totalCount)
-      categoryCounts['positive'] =
-          (categoryCounts['positive'] ?? 0) - (sum - totalCount);
+    if (sum != totalCount) {
+      int diff = totalCount - sum;
+      categoryCounts['positive'] = (categoryCounts['positive'] ?? 0) + diff;
+      // Clamp positive to non-negative
+      if (categoryCounts['positive']! < 0) {
+        categoryCounts['positive'] = 0;
+        // If still not matching, fallback to all positive (should not happen)
+        if (categoryCounts.values.reduce((a, b) => a + b) != totalCount) {
+          categoryCounts = {'positive': totalCount};
+        }
+      }
+    }
+
+    // Final cleanup: remove zeros again after adjustment
+    categoryCounts.removeWhere((key, value) => value <= 0);
 
     return CoverageRequest(
       totalCount: totalCount,

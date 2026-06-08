@@ -14,7 +14,7 @@ const PRO_GEN_LIMIT = 15;
 const FREE_GEN_LIMIT = 3;
 const REWARDED_EXPORT_LIMIT = 50;
 const PRO_EXPORT_LIMIT = 100;
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 1;
 
 // ------------------------------------------------------------------
 // Helper functions
@@ -129,7 +129,6 @@ async function callDeepSeek(prompt, metadata) {
         metadata: { ...metadata, latencyMs },
       };
     }
-
     let parsed;
     try {
       parsed = JSON.parse(jsonArray);

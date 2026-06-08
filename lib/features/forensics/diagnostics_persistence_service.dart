@@ -235,6 +235,8 @@ class DiagnosticsPersistenceService {
         'raw_ai_response': rawAiResponse.isNotEmpty
             ? ErrorCaptureUtils.truncate(rawAiResponse, 5000)
             : null,
+        // NEW: full raw AI response for deep debugging
+        'full_raw_ai_response': rawAiResponse,
       },
       'outputs': {
         'final_test_cases': session.testCases
