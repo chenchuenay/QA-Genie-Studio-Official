@@ -136,12 +136,12 @@ class SuitesScreenState extends State<SuitesScreen> {
           leading: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.warning.withOpacity(0.15),
+              color: AppColors.accent.withOpacity(0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.ad_units,
-              color: AppColors.warning,
+              color: AppColors.accent,
               size: 28,
             ),
           ),
@@ -175,7 +175,7 @@ class SuitesScreenState extends State<SuitesScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.stars, color: AppColors.warning, size: 32),
+                  const Icon(Icons.stars, color: AppColors.accent, size: 32),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Column(
