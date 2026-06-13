@@ -19,6 +19,5 @@ class AppConfig {
   static bool get allowMockAds => !isProduction;
   
   // Ad Units
-  static String get rewardedTcGenerationAdUnit => 
-      isProduction ? 'ca-app-pub-PRO_ID' : 'ca-app-pub-3940256099942544/5224354917';
+  static String get rewardedTcGenerationAdUnit => 'ca-app-pub-3940256099942544/5224354917';
 }

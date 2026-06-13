@@ -15,7 +15,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Ads
-  await MobileAds.instance.initialize();
+  final adsStatus = await MobileAds.instance.initialize();
+  adsStatus.adapterStatuses.forEach((key, value) {
+    debugPrint('AdMob Adapter $key: ${value.state}');
+  });
 
   // Load Environment
   try {
@@ -25,12 +28,6 @@ Future<void> main() async {
   // Initialize Firebase
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.android);
-    
-    // 🛡️ AUTH GATE: Perform anonymous sign-in BEFORE UI starts
-    final auth = FirebaseAuth.instance;
-    if (auth.currentUser == null) {
-      await auth.signInAnonymously();
-    }
   } catch (e) {
     debugPrint("Startup critical error: $e");
   }

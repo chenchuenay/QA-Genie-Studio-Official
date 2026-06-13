@@ -496,6 +496,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return;
       }
     }
+    final stopwatch = Stopwatch()..start();
     stopwatch.stop();
 
     try {

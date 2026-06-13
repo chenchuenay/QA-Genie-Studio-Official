@@ -11,6 +11,7 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/features/support/ui/report_issue_screen.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
@@ -185,7 +186,7 @@ class _AccountScreenState extends State<AccountScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (!isAnonymous)
+          if (_user != null && !_user!.isAnonymous)
             IconButton(
               icon: const Icon(Icons.logout, color: AppColors.accent),
               tooltip: 'Sign Out',
@@ -194,23 +195,75 @@ class _AccountScreenState extends State<AccountScreen> {
         ],
         elevation: 0,
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadData,
-        color: AppColors.accent,
-        backgroundColor: AppColors.card,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Column(
-            children: [
-              _buildInfoCard(isAnonymous, email, displayName),
-              const SizedBox(height: 16),
-              _buildMenuCard(),
-            ],
-          ),
+      body: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Column(
+          children: [
+            _buildInfoCard(isAnonymous, email, displayName),
+            const SizedBox(height: 16),
+            _buildMenuCard(),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final textController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Delete Account?', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'This will permanently delete all your data, including generations and exports. This cannot be undone.',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            const Text('Type "DELETE" to confirm', style: TextStyle(color: AppColors.textHint, fontSize: 12)),
+            TextField(
+              controller: textController,
+              decoration: const InputDecoration(hintText: 'DELETE'),
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (textController.text == 'DELETE') {
+                Navigator.pop(ctx, true);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) _deleteAccount();
+  }
+
+  Future<void> _deleteAccount() async {
+    // 1. Call Backend
+    try {
+      await FunctionsService.call(functionName: 'deleteAccount', payload: {});
+      // 2. Perform local cleanup
+      await _logout();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete account: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
   }
 
   Widget _buildInfoCard(bool isAnonymous, String email, String displayName) {
@@ -322,6 +375,7 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Widget _buildMenuCard() {
+    final isAnonymous = _user?.isAnonymous ?? true;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -369,6 +423,23 @@ class _AccountScreenState extends State<AccountScreen> {
               MaterialPageRoute(builder: (_) => const AboutScreen()),
             ),
           ),
+          if (!isAnonymous) ...[
+            _divider(),
+            _menuItem(
+              icon: Icons.logout,
+              title: 'Sign Out',
+              subtitle: 'Log out of your account',
+              onTap: _confirmLogout,
+            ),
+          ],
+          _divider(),
+          _menuItem(
+            icon: Icons.delete_forever,
+            title: 'Delete Account',
+            subtitle: 'Permanently remove all data',
+            onTap: _confirmDeleteAccount,
+            isDestructive: true,
+          ),
           _divider(),
           Container(
             padding: const EdgeInsets.all(16),
@@ -393,10 +464,11 @@ class _AccountScreenState extends State<AccountScreen> {
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    bool isDestructive = false,
   }) {
     return ListTile(
-      leading: Icon(icon, color: AppColors.accent, size: 24),
-      title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+      leading: Icon(icon, color: isDestructive ? AppColors.error : AppColors.accent, size: 24),
+      title: Text(title, style: TextStyle(color: isDestructive ? AppColors.error : Colors.white, fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle, style: AppText.hint),
       trailing: const Icon(Icons.chevron_right, color: AppColors.textHint, size: 20),
       onTap: onTap,

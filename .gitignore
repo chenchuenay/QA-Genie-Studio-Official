@@ -109,4 +109,5 @@ test_stdout.txt
 
 # Archives
 engine.zip
-gradle-*.zip
+gradle-*.zipandroid/key.properties
+android/app/upload-keystore.jks

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -100,58 +101,53 @@ class UsageManager {
     } catch (_) {}
   }
 
-  static Future<int> freeGensRemaining() async {
+  static Future<Map<String, dynamic>> _getDashboard() async {
     try {
       final result = await FunctionsService.call(
-        functionName: 'getQuotaStatus',
+        functionName: 'getUserDashboard',
+        payload: {'type': 'user'},
       );
-      return result['freeGensRemaining'] ?? 0;
-    } catch (_) {
-      return 0;
+      return result;
+    } catch (e) {
+      debugPrint('Error fetching dashboard: $e');
+      return {};
     }
+  }
+
+  static Future<int> freeGensRemaining() async {
+    final dashboard = await _getDashboard();
+    final metrics = dashboard['metrics'] ?? {};
+    return (AppConfig.coreDailyGenerationLimit - (metrics['coreGenCount'] ?? 0)).toInt();
   }
 
   static Future<int> rewardedGensRemaining() async {
-    try {
-      final result = await FunctionsService.call(
-        functionName: 'getQuotaStatus',
-      );
-      return result['rewardedGensRemaining'] ?? 0;
-    } catch (_) {
-      return 0;
-    }
+    final dashboard = await _getDashboard();
+    final metrics = dashboard['metrics'] ?? {};
+    final used = metrics['rewardedGenCount'] ?? 0;
+    return (AppConfig.rewardedDailyGenerationLimit - used).toInt();
   }
 
   static Future<int> proGensRemaining() async {
-    try {
-      final result = await FunctionsService.call(
-        functionName: 'getQuotaStatus',
-      );
-      return result['proGensRemaining'] ?? 0;
-    } catch (_) {
-      return 0;
-    }
+    final dashboard = await _getDashboard();
+    final metrics = dashboard['metrics'] ?? {};
+    final used = metrics['proGenCount'] ?? 0;
+    return (AppConfig.proDailyGenerationLimit - used).toInt();
   }
 
   static Future<DateTime?> getResetTime() async {
-    try {
-      final result = await FunctionsService.call(
-        functionName: 'getQuotaStatus',
-      );
-      final timestamp = result['resetTimestamp'] as String?;
-      if (timestamp != null) return DateTime.parse(timestamp);
-      return null;
-    } catch (_) {
-      return null;
-    }
+    final dashboard = await _getDashboard();
+    final timestamp = dashboard['resetTimestamp'] as String?;
+    if (timestamp != null) return DateTime.parse(timestamp);
+    return null;
   }
 
   static Future<int> rewardedExportsRemaining() async {
     try {
       final result = await FunctionsService.call(
-        functionName: 'getQuotaStatus',
+        functionName: 'checkExportQuota',
+        payload: {'rewarded': true},
       );
-      return result['rewardedExportsRemaining'] ?? 0;
+      return result['remaining'] ?? 0;
     } catch (_) {
       return 0;
     }
