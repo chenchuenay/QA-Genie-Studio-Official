@@ -90,3 +90,23 @@ windows/
 *.swp
 *~
 .DS_Store
+# macOS
+.DS_Store
+
+# Flutter
+build/
+
+# Node
+functions/node_modules/
+
+# Audit bundles
+QA_Genie_Audit_Bundle*.zip
+audit_bundle*/
+
+# Temp files
+latest_run.json
+test_stdout.txt
+
+# Archives
+engine.zip
+gradle-*.zip
