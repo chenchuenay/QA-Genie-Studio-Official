@@ -4,9 +4,10 @@ import '../../../monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/shared/widgets/native_ad_widget.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
-// lib/features/suites/ui/screens/suites_screen.dart
+import 'package:qa_genie/app/theme/app_colors.dart';
 
 class SuitesScreen extends StatefulWidget {
   final VoidCallback? onGenerate;
@@ -19,9 +20,7 @@ class SuitesScreen extends StatefulWidget {
 
 class SuitesScreenState extends State<SuitesScreen> {
   final _historyUseCase = AppDependencies.getHistoryUseCase;
-
   late Future<List<Map<String, dynamic>>> _suitesFuture;
-
   bool _isPro = false;
 
   @override
@@ -40,9 +39,7 @@ class SuitesScreenState extends State<SuitesScreen> {
   Future<void> _checkPro() async {
     final pro = await UsageManager.isPro();
     if (!mounted) return;
-    setState(() {
-      _isPro = pro;
-    });
+    setState(() => _isPro = pro);
   }
 
   void refresh() {
@@ -127,112 +124,36 @@ class SuitesScreenState extends State<SuitesScreen> {
       child: Card(
         color: AppColors.card,
         elevation: 4,
+        clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 8,
-          ),
-          leading: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          children: [
+            const SizedBox(
+              height: 90,
+              width: double.infinity,
+              child: NativeAdWidget(),
             ),
-            child: const Icon(
-              Icons.ad_units,
-              color: AppColors.accent,
-              size: 28,
-            ),
-          ),
-          title: const Text(
-            'Sponsored',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          subtitle: const Text(
-            'Ad',
-            style: TextStyle(color: AppColors.textHint, fontSize: 12),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _proBanner() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Card(
-        color: AppColors.card,
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.stars, color: AppColors.accent, size: 32),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Unlock Pro',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          '15 requests/day · Unlimited exports',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+                ),
+                child: const Text(
+                  'AD',
+                  style: TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const UpgradeScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Upgrade Now',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 10),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -294,11 +215,14 @@ class SuitesScreenState extends State<SuitesScreen> {
                 child: Text('Delete', style: TextStyle(color: Colors.red)),
               ),
             ],
-            onSelected: (action) {
+            onSelected: (action) async {
               if (action == 'rename') {
                 _renameSuite(id, s['moduleName'] ?? '');
-              } else {
-                _deleteSuite(id);
+              } else if (action == 'delete') {
+                final confirmed = await _confirmDelete(id);
+                if (confirmed == true) {
+                  _deleteSuite(id);
+                }
               }
             },
           ),
@@ -375,9 +299,7 @@ class SuitesScreenState extends State<SuitesScreen> {
                             ),
                             const SizedBox(height: 24),
                             ElevatedButton.icon(
-                              onPressed: () {
-                                widget.onGenerate?.call();
-                              },
+                              onPressed: () => widget.onGenerate?.call(),
                               icon: const Icon(Icons.bolt, color: Colors.black),
                               label: const Text(
                                 'Generate now',
@@ -404,14 +326,21 @@ class SuitesScreenState extends State<SuitesScreen> {
                     ],
                   );
                 }
+                
                 final children = <Widget>[];
+                // First suite card
                 children.add(_suiteCard(suites.first));
+                
+                // Native ad strictly at 2nd position (after the 1st suite)
                 if (!_isPro) {
                   children.add(_adPlaceholder());
                 }
+                
+                // Rest of the suites
                 for (int i = 1; i < suites.length; i++) {
                   children.add(_suiteCard(suites[i]));
                 }
+                
                 return RefreshIndicator(
                   onRefresh: () async {
                     refresh();
@@ -425,18 +354,19 @@ class SuitesScreenState extends State<SuitesScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
             child: Text(
               'Your data stays local.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: Colors.grey.shade500,
                 fontStyle: FontStyle.italic,
               ),
             ),
           ),
-          if (!_isPro) _proBanner(),
+          if (!_isPro) const _ProBanner(),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -447,5 +377,59 @@ class SuitesScreenState extends State<SuitesScreen> {
     final d = DateTime.tryParse(iso);
     if (d == null) return '';
     return '${d.day}/${d.month}/${d.year}';
+  }
+}
+
+class _ProBanner extends StatelessWidget {
+  const _ProBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Card(
+        color: AppColors.card,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.stars, color: AppColors.accent, size: 24),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Unlock Pro · 15 requests/day',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const UpgradeScreen()),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text(
+                  'Upgrade',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

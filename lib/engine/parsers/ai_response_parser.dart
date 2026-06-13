@@ -31,7 +31,9 @@ class AiResponseParser {
 
   ParsedAiResponse parse(String rawResponse) {
     final errors = <String>[];
-    if (rawResponse.trim().isEmpty) {
+    String cleanedResponse = rawResponse.trim();
+
+    if (cleanedResponse.isEmpty) {
       errors.add('Raw AI response is empty.');
       return ParsedAiResponse(
         cases: [],
@@ -41,8 +43,17 @@ class AiResponseParser {
       );
     }
 
+    // Attempt to extract the JSON array if the AI included text around it
+    if (!cleanedResponse.startsWith('[') || !cleanedResponse.endsWith(']')) {
+      final startIndex = cleanedResponse.indexOf('[');
+      final endIndex = cleanedResponse.lastIndexOf(']');
+      if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
+        cleanedResponse = cleanedResponse.substring(startIndex, endIndex + 1);
+      }
+    }
+
     try {
-      return _parseInternal(rawResponse, salvaged: false, errors: errors);
+      return _parseInternal(cleanedResponse, salvaged: false, errors: errors);
     } catch (e) {
       errors.add('Initial parse failed: $e');
       final repaired = _salvager.salvage(rawResponse);

@@ -14,7 +14,7 @@ class ProBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        isPro ? 'PRO' : 'FREE',
+        isPro ? 'PRO' : 'CORE',
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,

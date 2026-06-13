@@ -17,9 +17,9 @@ class UsageManager {
   }
 
   static Future<void> setPro(bool value) async {
+    if (!AppConfig.allowDebugTools) return;
     final prefs = await _prefs();
     await prefs.setBool(_proKey, value);
-    // Also notify cloud function
     try {
       await FunctionsService.call(
         functionName: 'setUserPro',
@@ -28,7 +28,6 @@ class UsageManager {
     } catch (_) {}
   }
 
-  /// Ask the cloud function if generation is allowed.
   static Future<bool> canGenerate({bool afterRewardedAd = false}) async {
     try {
       final result = await FunctionsService.call(
@@ -41,7 +40,6 @@ class UsageManager {
     }
   }
 
-  /// Ask the cloud function if export is allowed.
   static Future<bool> canExport({bool rewarded = false}) async {
     try {
       final result = await FunctionsService.call(
@@ -58,36 +56,50 @@ class UsageManager {
     return canExport(rewarded: rewarded);
   }
 
-  /// Notify cloud function that a generation occurred (with optional ad token).
-  static Future<void> incrementGeneration({bool rewarded = false}) async {
+  static Future<void> incrementGeneration({int count = 8, bool rewarded = false}) async {
     try {
       await FunctionsService.call(
         functionName: 'trackGeneration',
-        payload: {'rewarded': rewarded},
+        payload: {'generatedCount': count},
       );
     } catch (_) {}
   }
 
-  static Future<void> incrementExport({bool rewarded = false}) async {
+  static Future<void> incrementExport({
+    bool summary = false,
+    String target = 'unknown',
+    String extension = '',
+  }) async {
     try {
       await FunctionsService.call(
         functionName: 'trackExport',
-        payload: {'rewarded': rewarded},
+        payload: {
+          'summary': summary,
+          'target': target,
+          'extension': extension,
+        },
       );
     } catch (_) {}
   }
 
-  static Future<void> incrementSummaryExport({bool rewarded = false}) async {
-    return incrementExport(rewarded: rewarded);
+  static Future<void> incrementSummaryExport({
+    String target = 'pdf',
+    String extension = 'pdf',
+  }) async {
+    return incrementExport(
+      summary: true,
+      target: target,
+      extension: extension,
+    );
   }
 
   static Future<void> resetLimits() async {
+    if (!AppConfig.allowDebugTools) return;
     try {
       await FunctionsService.call(functionName: 'resetDailyLimits');
     } catch (_) {}
   }
 
-  // The following methods query the cloud function for UI hints.
   static Future<int> freeGensRemaining() async {
     try {
       final result = await FunctionsService.call(

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
@@ -7,10 +9,12 @@ import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 import 'package:qa_genie/engine/orchestration/stages/repair_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/parsing_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/fallback_stage.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/engine/orchestration/stages/validation_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/finalization_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/ai_generation_stage.dart';
 import 'package:qa_genie/engine/orchestration/stages/coverage_analysis_stage.dart';
+
 
 class PipelineExecutionResult {
   final List<FinalizedTestCase> cases;
@@ -59,6 +63,14 @@ class PipelineOrchestrator {
       prompt: prompt,
       request: request,
     );
+
+    debugPrint('PIPELINE: AI raw response length: ${aiResult.rawResponse.length}');
+    final preview = aiResult.rawResponse.length > 50
+        ? aiResult.rawResponse.substring(0, 50)
+        : aiResult.rawResponse;
+    debugPrint('PIPELINE: AI raw response preview: $preview');
+    debugPrint('PIPELINE: AI transport failure: ${aiResult.hasTransportError}');
+    debugPrint('PIPELINE: AI status code: ${aiResult.statusCode}');
 
     PipelineForensics.instance.onTraceEvent(
       '\n[SECTION 5 — PARSER ENTRY]\nPARSER_INPUT_LENGTH=${aiResult.rawResponse.length}',
@@ -111,6 +123,16 @@ class PipelineOrchestrator {
     );
 
     final acceptedAiCases = validationResult.validCases;
+    final rejectedCount = validationResult.rejectedCount;
+
+    if (rejectedCount > 0) {
+      unawaited(FunctionsService.trackValidatorRejected(rejectedCount));
+    }
+
+    if (acceptedAiCases.isEmpty && aiResult.hasTransportError) {
+      unawaited(FunctionsService.trackAiFailure());
+    }
+
     final outcomeType = _responseClassifier.classify(
       rawResponse: aiResult.rawResponse,
       validCaseCount: acceptedAiCases.length,
@@ -147,6 +169,12 @@ class PipelineOrchestrator {
       ...acceptedAiCases,
       ...fallbackCases,
     ].take(request.requestedCaseCount).toList();
+
+    final totalFinalized = finalWorkingCases.length;
+    if (totalFinalized > 0) {
+      unawaited(FunctionsService.trackGeneration(totalFinalized));
+    }
+
     final finalized = _finalizationStage.execute(
       cases: finalWorkingCases,
       module: request.module,

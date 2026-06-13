@@ -145,7 +145,6 @@ class _PreviewScreenState extends State<PreviewScreen>
         builder: (_) => ExportSuccessDialog(
           type: type,
           moduleName: widget.moduleName,
-          onShareAgain: () => _export(type, null),
         ),
       );
     } catch (e, stackTrace) {
@@ -197,8 +196,10 @@ class _PreviewScreenState extends State<PreviewScreen>
             suiteId: widget.suiteId,
             cases: widget.session.testCases,
           );
-          if (mounted) Navigator.pop(context); // close bottom sheet
+          // Trigger the export
           await _export(type, adToken);
+          // Finally pop the bottom sheet
+          if (mounted) Navigator.of(context).pop();
         },
       ),
     );

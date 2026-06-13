@@ -5,14 +5,14 @@ import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/forensics/production_diagnostics_screen.dart';
 
-class ProBenefitsScreen extends StatefulWidget {
+class TestModeScreen extends StatefulWidget {
   final VoidCallback? onRestart;
-  const ProBenefitsScreen({super.key, this.onRestart});
+  const TestModeScreen({super.key, this.onRestart});
   @override
-  State<ProBenefitsScreen> createState() => _ProBenefitsScreenState();
+  State<TestModeScreen> createState() => _TestModeScreenState();
 }
 
-class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
+class _TestModeScreenState extends State<TestModeScreen> {
   bool _isPro = false;
 
   @override
@@ -27,6 +27,7 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
   }
 
   Future<void> _togglePro(bool v) async {
+    if (!AppConfig.allowDebugTools) return;
     await UsageManager.setPro(v);
     setState(() => _isPro = v);
     if (mounted) {
@@ -46,6 +47,7 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
   }
 
   Future<void> _resetGenLimits() async {
+    if (!AppConfig.allowDebugTools) return;
     await UsageManager.resetLimits();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,7 +92,7 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                   const SizedBox(height: 16),
                   Text(
                     _isPro ? "You are a Pro" : "Core User",
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -112,7 +114,7 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                     _isPro ? "Unlimited" : "Ad Sponsored",
                   ),
                   const SizedBox(height: 30),
-                  if (!AppConfig.isProduction)
+                  if (AppConfig.allowDebugTools) ...[
                     SwitchListTile(
                       title: const Text(
                         "Test Mode: Pro",
@@ -126,10 +128,9 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                         ),
                       ),
                       value: _isPro,
-                      onChanged: AppConfig.isProduction ? null : _togglePro,
+                      onChanged: _togglePro,
                       activeColor: AppColors.accent,
                     ),
-                  if (!AppConfig.isProduction) ...[
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -156,7 +157,7 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: () {
+                        onPressed: AppConfig.isProduction ? null : () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -170,7 +171,7 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                           color: AppColors.accent,
                         ),
                         label: const Text(
-                          "Latest Generation Diagnostics",
+                          "Production Diagnostics",
                           style: TextStyle(color: AppColors.accent),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -188,7 +189,6 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
               ),
             ),
           ),
-
           if (!_isPro)
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -218,7 +218,6 @@ class _ProBenefitsScreenState extends State<ProBenefitsScreen> {
                 ),
               ),
             ),
-
           if (_isPro) const SizedBox(height: 16),
         ],
       ),

@@ -7,15 +7,16 @@ class AppConfig {
 
   static const int maxConstraintsLength = 100;
 
-  static const int freeDailyGenerationLimit = 1;
-
-  static const int rewardedDailyGenerationLimit = 5;
-
+  static const int freeDailyGenerationLimit = 0;
+  static const int rewardedDailyGenerationLimit = 6;
   static const int proDailyGenerationLimit = 15;
 
   static const int rewardedDailyExportLimit = 50;
+  static const int freeLifetimeExports = 0;
+  static const int freeLifetimeSummaryExports = 0;
 
-  static const int freeLifetimeExports = 1;
-
-  static const int freeLifetimeSummaryExports = 1;
+  // NEW: Feature flags based on build flavor
+  static bool get allowOfflineGeneration => !isProduction;
+  static bool get allowDebugTools => !isProduction;
+  static bool get allowMockAds => !isProduction;
 }

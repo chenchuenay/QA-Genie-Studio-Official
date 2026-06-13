@@ -27,15 +27,8 @@ class _ProductionDiagnosticsScreenState
 
   Future<void> _loadData() async {
     try {
-      Directory forensicsDir;
-      if (Platform.isAndroid) {
-        forensicsDir = Directory(
-          '/storage/emulated/0/Download/QA_Genie_Forensics',
-        );
-      } else {
-        final dir = await getApplicationDocumentsDirectory();
-        forensicsDir = Directory('${dir.path}/QA_Genie/Forensics');
-      }
+      final dir = await getApplicationDocumentsDirectory();
+      final forensicsDir = Directory('${dir.path}/QA_Genie/Forensics');
       final file = File('${forensicsDir.path}/latest_run.json');
       if (!await file.exists()) {
         setState(() {
@@ -45,9 +38,9 @@ class _ProductionDiagnosticsScreenState
         return;
       }
       final jsonString = await file.readAsString();
-      final data = jsonDecode(jsonString) as Map<String, dynamic>;
+      final json = jsonDecode(jsonString);
       setState(() {
-        _data = data;
+        _data = json;
         _loading = false;
       });
     } catch (e) {
@@ -89,6 +82,14 @@ class _ProductionDiagnosticsScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _sectionTitle('ENVIRONMENT CONTEXT'),
+                  _infoRow('App Tier', _getString('generation_info.app_tier')),
+                  _infoRow('Quota Snapshot', _getString('generation_info.quota_snapshot')),
+                  _infoRow('Ad Latency (ms)', _getString('generation_info.ad_load_latency_ms')),
+                  _infoRow('Constraints Hash', _getString('generation_info.constraints_hash')),
+                  _infoRow('App Version', _getString('generation_info.app_version')),
+
+                  const SizedBox(height: 16),
                   _sectionTitle('GENERATION INFO'),
                   _infoRow('Trace ID', _getString('generation_info.trace_id')),
                   _infoRow(

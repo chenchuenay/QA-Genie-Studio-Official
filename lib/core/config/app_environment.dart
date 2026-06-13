@@ -32,6 +32,8 @@
 /// ===============================================================
 library;
 
+import 'package:qa_genie/app/config/app_config.dart';
+
 enum AppEnvironment { dev, prod }
 
 /// ===============================================================
@@ -87,7 +89,10 @@ class EnvironmentAuthority {
 
   static bool get allowVerboseErrors => isDev;
 
-  static bool get allowMockAds => isDev;
+  /// 🛡️ PRODUCTION SAFETY LOCK:
+  /// Mock ads are allowed ONLY in the DEV environment AND when NOT in a Release build.
+  /// This ensures that any Release build (Dev or Prod) strictly uses real AdMob logic.
+  static bool get allowMockAds => isDev && !AppConfig.isProduction;
 
   static bool get allowLocalQuotaReset => isDev;
 

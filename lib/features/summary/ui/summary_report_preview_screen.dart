@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
+import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
+import 'package:qa_genie/features/monetization/ads/ad_units.dart';
 import 'package:qa_genie/features/monetization/ads/ad_service.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
+import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/shared/widgets/animated_dots.dart';
+import 'dart:ui';
 
-class SummaryReportPreviewScreen extends StatelessWidget {
+class SummaryReportPreviewScreen extends StatefulWidget {
   final GenerationSession session;
   final String moduleName;
   final String feature;
@@ -25,11 +33,20 @@ class SummaryReportPreviewScreen extends StatelessWidget {
     required this.environment,
   });
 
-  int get _total => session.testCases.length;
-  int get _passed => session.testCases.where((c) => c.status == 'Pass').length;
-  int get _failed => session.testCases.where((c) => c.status == 'Fail').length;
+  @override
+  State<SummaryReportPreviewScreen> createState() =>
+      _SummaryReportPreviewScreenState();
+}
+
+class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen> {
+  bool _isProcessing = false;
+  bool _isSharing = false;
+
+  int get _total => widget.session.testCases.length;
+  int get _passed => widget.session.testCases.where((c) => c.status == 'Pass').length;
+  int get _failed => widget.session.testCases.where((c) => c.status == 'Fail').length;
   int get _blocked =>
-      session.testCases.where((c) => c.status == 'Blocked').length;
+      widget.session.testCases.where((c) => c.status == 'Blocked').length;
 
   String get _passRate {
     final executed = _passed + _failed + _blocked;
@@ -39,36 +56,71 @@ class SummaryReportPreviewScreen extends StatelessWidget {
   }
 
   Future<void> _exportPDF(BuildContext context) async {
+    if (_isProcessing) return;
+    FocusScope.of(context).unfocus();
+
+    final shouldWatch = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) =>
+          const WatchAdDialog(featureName: 'Export Summary Report'),
+    );
+    if (shouldWatch != true) return;
+
+    setState(() => _isProcessing = true);
+
     final isPro = await UsageManager.isPro();
     String? adToken;
     if (!isPro) {
       adToken = await AdService.showRewardedAd(
-        adUnitId: 'ca-app-pub-.../summary_export',
+        adUnitId: AdUnits.rewardedSummaryExport,
         context: context,
       );
-      if (adToken == null) return;
+      if (adToken == null) {
+        if (mounted) setState(() => _isProcessing = false);
+        return;
+      }
     }
     try {
+      setState(() => _isSharing = true);
+      
       final exportUseCase = ExportTestCasesUseCase();
       await exportUseCase.exportSummaryReport(
-        cases: session.testCases,
-        moduleName: moduleName,
-        featureName: feature,
-        platform: platform,
-        testerName: testerName,
-        environment: environment,
+        cases: widget.session.testCases,
+        moduleName: widget.moduleName,
+        featureName: widget.feature,
+        platform: widget.platform,
+        testerName: widget.testerName,
+        environment: widget.environment,
         context: context,
         adToken: adToken,
       );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Summary report exported!'),
-          backgroundColor: AppColors.success,
+      await FunctionsService.trackExport(
+        summary: true,
+        target: 'pdf',
+        extension: 'pdf',
+      );
+      if (!mounted) return;
+      
+      setState(() {
+        _isProcessing = false;
+        _isSharing = false;
+      });
+      
+      showBlurredDialog(
+        context,
+        builder: (ctx) => ExportSuccessDialog(
+          type: 'pdf',
+          moduleName: widget.moduleName,
         ),
       );
-      Navigator.pop(context);
     } catch (e, stack) {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _isSharing = false;
+        });
+      }
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
@@ -84,81 +136,107 @@ class SummaryReportPreviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        title: const Text(
-          'Summary Report Preview',
-          style: TextStyle(color: Colors.white),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'TEST SUMMARY REPORT',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _infoRow('Suite', '$moduleName · $feature'),
-                  _infoRow('Platform', platform),
-                  _infoRow('Date', _currentDate()),
-                  if (testerName.isNotEmpty) _infoRow('Tester', testerName),
-                  if (environment.isNotEmpty)
-                    _infoRow('Environment', environment),
-                  const SizedBox(height: 24),
-                  _executionSummaryTable(),
-                  const SizedBox(height: 24),
-                  _priorityBreakdown(),
-                  const SizedBox(height: 24),
-                  _detailedResultsTable(),
-                  const SizedBox(height: 20),
-                ],
+    return ValueListenableBuilder<bool>(
+      valueListenable: AdService.isAdLoading,
+      builder: (context, isAdLoading, _) {
+        final fullLock = _isProcessing || isAdLoading || _isSharing;
+        
+        Widget content = AbsorbPointer(
+          absorbing: fullLock,
+          child: Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              backgroundColor: AppColors.surface,
+              title: const Text(
+                'Summary Report Preview',
+                style: TextStyle(color: Colors.white),
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
               ),
             ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: () => _exportPDF(context),
-                  icon: const Icon(Icons.picture_as_pdf, color: Colors.black),
-                  label: const Text(
-                    'Export PDF',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+            body: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: fullLock ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'TEST SUMMARY REPORT',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _infoRow('Suite', '${widget.moduleName} · ${widget.feature}'),
+                        _infoRow('Platform', widget.platform),
+                        _infoRow('Date', _currentDate()),
+                        if (widget.testerName.isNotEmpty) _infoRow('Tester', widget.testerName),
+                        if (widget.environment.isNotEmpty)
+                          _infoRow('Environment', widget.environment),
+                        const SizedBox(height: 24),
+                        _executionSummaryTable(),
+                        const SizedBox(height: 24),
+                        _priorityBreakdown(),
+                        const SizedBox(height: 24),
+                        _detailedResultsTable(),
+                        const SizedBox(height: 20),
+                      ],
                     ),
                   ),
                 ),
-              ),
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        onPressed: fullLock ? null : () => _exportPDF(context),
+                        icon: fullLock ? const SizedBox.shrink() : const Icon(Icons.picture_as_pdf, color: Colors.black),
+                        label: fullLock 
+                          ? const AnimatedDots(
+                              label: '⚡ Processing',
+                              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                            )
+                          : const Text(
+                              'Export PDF',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: fullLock 
+                              ? AppColors.accent.withOpacity(0.5) 
+                              : AppColors.accent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        );
+
+        if (_isSharing) {
+          return BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: content,
+          );
+        }
+        return content;
+      },
     );
   }
 
@@ -229,7 +307,7 @@ class SummaryReportPreviewScreen extends StatelessWidget {
   }
 
   Widget _priorityBreakdown() {
-    final cases = session.testCases;
+    final cases = widget.session.testCases;
     final high = cases.where((c) => c.priority == 'High').length;
     final medium = cases.where((c) => c.priority == 'Medium').length;
     final low = cases.where((c) => c.priority == 'Low').length;
@@ -277,7 +355,7 @@ class SummaryReportPreviewScreen extends StatelessWidget {
   }
 
   Widget _detailedResultsTable() {
-    final cases = session.testCases;
+    final cases = widget.session.testCases;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

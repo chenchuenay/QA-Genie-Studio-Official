@@ -27,25 +27,31 @@ class AiGenerationStage {
       final latencyMs = DateTime.now().difference(startTime).inMilliseconds;
       final structured = jsonDecode(response) as Map<String, dynamic>;
 
-      debugPrint(
-        '✅ AI_STAGE_SUCCESS: ${structured['success'] == true ? 'AI returned data' : 'Cloud function returned error'}',
-      );
+      if (structured['success'] != true) {
+        final error = structured['error'] as Map<String, dynamic>?;
+        debugPrint('❌ AI_STAGE_ERROR: Cloud function success=false');
+        debugPrint('   Code: ${error?['code']}');
+        debugPrint('   Message: ${error?['message']}');
+      } else {
+        debugPrint('✅ AI_STAGE_SUCCESS: Cloud function returned data');
+      }
 
       return AiStageResult(
         rawResponse: structured['success'] == true
             ? jsonEncode(structured['data'])
-            : response,
+            : '',
         statusCode: structured['success'] == true
             ? 200
             : (structured['error']?['code'] == 'RATE_LIMIT' ? 429 : 500),
-        hasTransportError: false,
+        hasTransportError: structured['success'] != true,
+        errorMessage: (structured['success'] != true && structured['error'] != null) ? structured['error']['message'] : null,
         latencyMs: latencyMs,
         structuredResponse: structured,
         errorDetails: structured['success'] == true
             ? null
             : (structured['error'] as Map<String, dynamic>?),
         modelName: structured['metadata']?['model'] as String?,
-        apiUrl: 'https://api.deepseek.com/v1/chat/completions', // configurable
+        apiUrl: 'https://api.deepseek.com/v1/chat/completions',
         totalRetries: totalRetries,
       );
     } catch (e, st) {

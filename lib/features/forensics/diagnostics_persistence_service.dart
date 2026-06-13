@@ -2,33 +2,29 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 
 class DiagnosticsPersistenceService {
   static Future<Directory> _getForensicsDir() async {
-    if (Platform.isAndroid) {
-      final downloadsDir = Directory(
-        '/storage/emulated/0/Download/QA_Genie_Forensics',
-      );
-      if (!await downloadsDir.exists()) {
-        await downloadsDir.create(recursive: true);
-      }
-      return downloadsDir;
-    } else {
-      final dir = await getApplicationDocumentsDirectory();
-      final forensicsDir = Directory('${dir.path}/QA_Genie/Forensics');
-      if (!await forensicsDir.exists())
-        await forensicsDir.create(recursive: true);
-      return forensicsDir;
+    final dir = await getApplicationDocumentsDirectory();
+    final forensicsDir = Directory('${dir.path}/QA_Genie/Forensics');
+    if (!await forensicsDir.exists()) {
+      await forensicsDir.create(recursive: true);
     }
+    return forensicsDir;
   }
 
   static Future<void> saveSnapshot({
     required GenerationSession session,
     required PipelineAuditReport auditReport,
     required String rawAiResponse,
+    Map<String, dynamic> forensicsContext = const {},
   }) async {
+    // 🛡️ SECURITY: Never save forensics in production builds
+    if (AppConfig.isProduction) return;
+
     final dir = await _getForensicsDir();
     final timestamp = DateTime.now();
     final isoString = timestamp.toIso8601String();
@@ -48,6 +44,7 @@ class DiagnosticsPersistenceService {
             ? session.testCases.first.platform
             : '',
         'requested_count': auditReport.totalInputCases,
+        ...forensicsContext,
       },
       'pipeline_summary': {
         'ai_returned': auditReport.aiReturnedCount,
@@ -143,7 +140,7 @@ class DiagnosticsPersistenceService {
       );
     }
 
-    // ----- 3. NEW: full_dump_<timestamp>.json (never overwritten) -----
+    // ----- 3. full_dump_<timestamp>.json (never overwritten) -----
     final fullDump = _buildFullDump(session, auditReport, rawAiResponse);
     final timestampStr = timestamp.toIso8601String().replaceAll(':', '-');
     final fullDumpFile = File('${dir.path}/full_dump_$timestampStr.json');
@@ -235,7 +232,6 @@ class DiagnosticsPersistenceService {
         'raw_ai_response': rawAiResponse.isNotEmpty
             ? ErrorCaptureUtils.truncate(rawAiResponse, 5000)
             : null,
-        // NEW: full raw AI response for deep debugging
         'full_raw_ai_response': rawAiResponse,
       },
       'outputs': {

@@ -5,7 +5,8 @@ import 'package:qa_genie/engine/prompts/prompt_composer.dart';
 import 'package:qa_genie/engine/planners/prompt_planner.dart';
 import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 import 'package:qa_genie/engine/orchestration/pipeline_orchestrator.dart';
-import 'package:qa_genie/features/forensics/diagnostics_persistence_service.dart';
+import 'package:qa_genie/core/forensics/forensics_provider.dart';
+import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart'; // new engine
 
 class GenerateTestCasesUseCase {
@@ -65,15 +66,22 @@ class GenerateTestCasesUseCase {
         testCases: result.cases,
         auditReport: result.auditReport,
       );
-      await DiagnosticsPersistenceService.saveSnapshot(
-        session: session,
-        auditReport: result.auditReport,
-        rawAiResponse: result.auditReport.rawAiResponse ?? '',
-      );
+      
+      try {
+        await ForensicsProvider.instance.saveSnapshot(
+          session: session,
+          auditReport: result.auditReport,
+          rawAiResponse: result.auditReport.rawAiResponse ?? '',
+        );
+      } catch (e) {
+        debugPrint('Forensics save failed (non-blocking): $e');
+      }
+
       return session;
-    } catch (e) {
+    } catch (e, st) {
       // ----- AI failed – fall back to deterministic engine -----
       debugPrint('AI generation failed, using deterministic engine: $e');
+      
       final engine = DeterministicEngine(
         module: dto.module,
         feature: dto.feature,
@@ -83,13 +91,22 @@ class GenerateTestCasesUseCase {
       );
       final testCases = await engine.generate();
 
-      // Create a minimal audit report (no AI involved)
+      // Populate rich audit report for forensics
       final auditReport = PipelineAuditReport(
         traceId: dto.traceId,
         totalInputCases: 0,
         finalizedCases: testCases.length,
         fallbackCount: testCases.length,
-        // other fields use defaults (empty lists, nulls)
+        aiErrorCode: 'FALLBACK_TRIGGERED',
+        aiErrorMessage: e.toString(),
+        networkErrorType: ErrorCaptureUtils.extractNetworkErrorType(e),
+        aiHttpStatusCode: ErrorCaptureUtils.extractHttpStatusCode(e),
+        prompt: 'N/A (Deterministic)',
+        rawAiResponse: '',
+        aiModelName: 'Deterministic',
+        aiApiUrl: 'N/A',
+        cloudFunctionName: 'generate',
+        cloudFunctionRegion: 'us-central1',
       );
 
       final session = GenerationSession(
@@ -98,11 +115,16 @@ class GenerateTestCasesUseCase {
         auditReport: auditReport,
       );
 
-      await DiagnosticsPersistenceService.saveSnapshot(
-        session: session,
-        auditReport: auditReport,
-        rawAiResponse: '',
-      );
+      try {
+        await ForensicsProvider.instance.saveSnapshot(
+          session: session,
+          auditReport: auditReport,
+          rawAiResponse: '',
+        );
+      } catch (e) {
+        debugPrint('Forensics fallback save failed: $e');
+      }
+      
       return session;
     }
   }

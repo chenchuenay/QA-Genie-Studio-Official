@@ -1,20 +1,33 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/data/dto/generation_dto.dart';
+import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
+import 'package:qa_genie/core/state/generation_state.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
+import 'package:qa_genie/shared/ui/no_internet_screen.dart';
+import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
 import 'package:qa_genie/features/beta/logic/beta_manager.dart';
+import 'package:qa_genie/features/monetization/ads/ad_units.dart';
 import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
+import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_service.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
+import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
+import 'package:qa_genie/features/forensics/diagnostics_persistence_service.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
+import 'package:qa_genie/shared/widgets/animated_dots.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,59 +51,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final GenerateTestCasesUseCase _generateUseCase =
       AppDependencies.generateTestCasesUseCase;
   final SaveSuiteUseCase _saveSuiteUseCase = AppDependencies.saveSuiteUseCase;
-
-  late final AnimationController _dotCtrl;
-  late final List<Animation<double>> _dotAnims;
+  late StreamSubscription<User?> _authSubscription;
 
   String platform = 'Web';
   bool loading = false;
   bool _isPro = false;
-  int _freeRemaining = 0;
   int _rewardedRemaining = 6;
   int _proRemaining = 15;
 
   @override
   void initState() {
     super.initState();
-    _initializeDots();
+    _authSubscription = AuthService.authStateChanges.listen((user) {
+      if (user != null) _refreshStatus();
+    });
     _refreshStatus();
   }
 
   @override
   void dispose() {
+    _authSubscription.cancel();
     mCtrl.dispose();
     fCtrl.dispose();
     cCtrl.dispose();
-    _dotCtrl.dispose();
     super.dispose();
-  }
-
-  void _initializeDots() {
-    _dotCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-    _dotAnims = [
-      Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(
-          parent: _dotCtrl,
-          curve: const Interval(0.0, 0.4, curve: Curves.easeInOut),
-        ),
-      ),
-      Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(
-          parent: _dotCtrl,
-          curve: const Interval(0.2, 0.6, curve: Curves.easeInOut),
-        ),
-      ),
-      Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(
-          parent: _dotCtrl,
-          curve: const Interval(0.4, 0.8, curve: Curves.easeInOut),
-        ),
-      ),
-    ];
-    _dotCtrl.repeat();
   }
 
   Future<void> _refreshStatus() async {
@@ -101,23 +85,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() {
       _isPro = isPro;
-      _freeRemaining = freeRemaining;
       _rewardedRemaining = rewardedRemaining;
       _proRemaining = proRemaining;
     });
-    debugPrint(
-      'REFRESH_STATUS: isPro=$isPro, freeRemaining=$freeRemaining, rewardedRemaining=$rewardedRemaining, proRemaining=$proRemaining',
-    );
   }
 
   String _generationHint() {
-    if (_isPro)
-      return 'Generates up to 16 test cases per batch ($_proRemaining/15 left)';
-    if (_freeRemaining > 0)
-      return '$_freeRemaining free generations left today';
-    if (_rewardedRemaining > 0)
-      return 'Watch ads for $_rewardedRemaining more generations today';
-    return 'Daily limit reached. Upgrade to PRO.';
+    if (_isPro) {
+      return 'Generates 16 test cases per batch ($_proRemaining/15 left)';
+    } else {
+      if (_rewardedRemaining > 0) {
+        return 'Watch ads for $_rewardedRemaining more generations today (8 cases each)';
+      }
+      return 'Daily limit reached. Upgrade to PRO or reset limits in Test Mode.';
+    }
   }
 
   @override
@@ -133,126 +114,126 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: AbsorbPointer(
-                  absorbing: loading,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Form(
-                      key: formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 8),
-                          const Text(
-                            'SPECIFICATION',
-                            style: TextStyle(
-                              color: Color(0xFF46DFFF),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 6,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Container(
-                            key: HomeScreen.moduleKey,
-                            decoration: const BoxDecoration(
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black38,
-                                  blurRadius: 24,
-                                  offset: Offset(0, 8),
+          child: ValueListenableBuilder<bool>(
+            valueListenable: AdService.isAdLoading,
+            builder: (context, isAdLoading, _) {
+              final fullLock = loading || isAdLoading;
+              return AbsorbPointer(
+                absorbing: fullLock,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        physics: fullLock ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(20),
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              const Text(
+                                'SPECIFICATION',
+                                style: TextStyle(
+                                  color: Color(0xFF46DFFF),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 6,
                                 ),
-                              ],
-                            ),
-                            child: _input(
-                              'Module Name *',
-                              'e.g. User Authentication',
-                              mCtrl,
-                              maxLength: 40,
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Required'
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            key: HomeScreen.featureKey,
-                            decoration: const BoxDecoration(
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black38,
-                                  blurRadius: 24,
-                                  offset: Offset(0, 8),
+                              ),
+                              const SizedBox(height: 20),
+                              Container(
+                                key: HomeScreen.moduleKey,
+                                child: _input(
+                                  'Module Name *',
+                                  'e.g. User Authentication',
+                                  mCtrl,
+                                  maxLength: 40,
+                                  enabled: !fullLock,
+                                  validator: (v) => (v == null || v.trim().isEmpty)
+                                      ? 'Required'
+                                      : null,
                                 ),
-                              ],
-                            ),
-                            child: _input(
-                              'Feature *',
-                              'e.g. Login with Google OAuth',
-                              fCtrl,
-                              maxLength: 70,
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Required'
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          const Padding(
-                            padding: EdgeInsets.only(left: 22),
-                            child: Text(
-                              'Platform *',
-                              style: TextStyle(
-                                color: Color(0xFFA7AFBF),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            key: HomeScreen.platformKey,
-                            child: _platformSelector(),
-                          ),
-                          const SizedBox(height: 20),
-                          const Padding(
-                            padding: EdgeInsets.only(left: 22),
-                            child: Text(
-                              'Constraints (optional)',
-                              style: TextStyle(
-                                color: Color(0xFFA7AFBF),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
+                              const SizedBox(height: 16),
+                              Container(
+                                key: HomeScreen.featureKey,
+                                child: _input(
+                                  'Feature *',
+                                  'e.g. Login with Google OAuth',
+                                  fCtrl,
+                                  maxLength: 70,
+                                  enabled: !fullLock,
+                                  validator: (v) => (v == null || v.trim().isEmpty)
+                                      ? 'Required'
+                                      : null,
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 20),
+                              const Padding(
+                                padding: EdgeInsets.only(left: 22),
+                                child: Text(
+                                  'Platform *',
+                                  style: TextStyle(
+                                    color: Color(0xFFA7AFBF),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                key: HomeScreen.platformKey,
+                                child: _platformSelector(fullLock),
+                              ),
+                              const SizedBox(height: 20),
+                              const Padding(
+                                padding: EdgeInsets.only(left: 22),
+                                child: Text(
+                                  'Constraints (optional)',
+                                  style: TextStyle(
+                                    color: Color(0xFFA7AFBF),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              _constraints(fullLock),
+                              const SizedBox(height: 12),
+                              Center(
+                                child: Text(
+                                  _generationHint(),
+                                  style: AppText.hint,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
                           ),
-                          const SizedBox(height: 14),
-                          _constraints(),
-                          const SizedBox(height: 12),
-                          Center(
-                            child: Text(
-                              _generationHint(),
-                              style: AppText.hint,
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                      child: Container(
+                        key: HomeScreen.generateKey,
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: AdService.isAdLoading,
+                          builder: (context, isAdLoading, _) {
+                            final lock = loading || isAdLoading;
+                            return Opacity(
+                              opacity: lock ? 0.5 : 1.0,
+                              child: _generateBtn(lock),
+                            );
+                          }
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-                child: Container(
-                  key: HomeScreen.generateKey,
-                  child: _generateBtn(),
-                ),
-              ),
-            ],
+              );
+            }
           ),
         ),
       ),
@@ -264,12 +245,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     String hint,
     TextEditingController ctrl, {
     int? maxLength,
+    bool enabled = true,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: ctrl,
       validator: validator,
       maxLength: maxLength,
+      enabled: enabled,
       maxLengthEnforcement: maxLength != null
           ? MaxLengthEnforcement.enforced
           : MaxLengthEnforcement.none,
@@ -295,15 +278,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         fillColor: const Color(0xFF0D0F14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: Color(0xFF46DFFF), width: 1.3),
+          borderSide: BorderSide.none,
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 22,
@@ -314,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _platformSelector() {
+  Widget _platformSelector(bool locked) {
     return Container(
       height: 68,
       padding: const EdgeInsets.all(4),
@@ -322,24 +297,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         color: const Color(0xFF0D0F14),
         borderRadius: BorderRadius.circular(26),
         border: Border.all(color: const Color(0x14FFFFFF), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.14),
-            blurRadius: 18,
-            spreadRadius: -6,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Row(
         children: ['Mobile', 'Web', 'API'].map((p) {
           final selected = platform == p;
           return Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => platform = p),
+              onTap: locked ? null : () => setState(() => platform = p),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
                   gradient: selected
                       ? const LinearGradient(
@@ -369,15 +335,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _constraints() {
+  Widget _constraints(bool locked) {
     return TextFormField(
       controller: cCtrl,
       maxLines: 3,
+      enabled: !locked,
       maxLength: EnvironmentAuthority.maxConstraintsLength,
       maxLengthEnforcement: MaxLengthEnforcement.enforced,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
-        hintText: 'e.g. Must support WCAG 2.1 AA, test on Chrome & Safari...',
+        hintText: 'e.g. Must support WCAG 2.1 AA...',
         hintStyle: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w400,
@@ -387,15 +354,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         fillColor: const Color(0xFF0D0F14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: Color(0x14FFFFFF), width: 1),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: Color(0xFF46DFFF), width: 1.3),
+          borderSide: BorderSide.none,
         ),
         contentPadding: const EdgeInsets.all(20),
         counterStyle: AppText.hint,
@@ -403,12 +362,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _generateBtn() {
+  Widget _generateBtn(bool isDisabled) {
     return SizedBox(
       width: double.infinity,
       height: 58,
       child: ElevatedButton(
-        onPressed: loading ? null : _generate,
+        onPressed: isDisabled ? null : _generate,
         style: ElevatedButton.styleFrom(
           elevation: 0,
           padding: EdgeInsets.zero,
@@ -422,30 +381,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         child: Container(
           decoration: BoxDecoration(
-            gradient: loading
-                ? null
+            gradient: isDisabled
+                ? LinearGradient(
+                    colors: [
+                      const Color(0xFF46DFFF).withOpacity(0.5),
+                      const Color(0xFF7CEBFF).withOpacity(0.5),
+                    ],
+                  )
                 : const LinearGradient(
                     colors: [Color(0xFF46DFFF), Color(0xFF7CEBFF)],
                   ),
             borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF46DFFF).withOpacity(0.16),
-                blurRadius: 22,
-                spreadRadius: -10,
-                offset: const Offset(0, 10),
-              ),
-            ],
           ),
           child: Center(
             child: loading
-                ? _smoothDots()
+                ? const AnimatedDots(
+                    label: '⚡ Generating',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
+                    ),
+                  )
                 : const Text(
                     'Generate Batch →',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
                       color: Colors.black,
                     ),
                   ),
@@ -455,45 +417,64 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _smoothDots() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text(
-          'Generating',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
-        for (int i = 0; i < 3; i++)
-          AnimatedBuilder(
-            animation: _dotAnims[i],
-            builder: (_, child) => Opacity(
-              opacity: _dotAnims[i].value,
-              child: Text(
-                '.',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textHint,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  // ------------------------------------------------------------------
-  // TEMPORARY BYPASS: Ignore all quota checks and ads
-  // ------------------------------------------------------------------
   Future<void> _generate() async {
-    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus(); // Kill keyboard instantly
     if (!formKey.currentState!.validate()) return;
-
-    // Bypass all quota and ad logic
-
-    debugPrint('GENERATE: BYPASS MODE ACTIVE – skipping quota checks');
-
+    
+    // Set loading true immediately to block UI leaks
     setState(() => loading = true);
+    GenerationState.isGenerating.value = true;
+
+    if (AppConfig.isProduction) {
+      final hasInternet = await NetworkGuard.hasInternet();
+      if (!hasInternet) {
+        if (mounted) setState(() => loading = false);
+        final shouldRetry = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => NoInternetScreen(onRetry: () => _generate()),
+          ),
+        );
+        if (shouldRetry != true) return;
+        return;
+      }
+    }
+
+    final shouldWatch = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const WatchAdDialog(featureName: 'Generate Test Cases'),
+    );
+    
+    if (shouldWatch != true) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          GenerationState.isGenerating.value = false;
+        });
+      }
+      return;
+    }
+
+    final stopwatch = Stopwatch()..start();
+    String? adToken;
+    final isPro = await UsageManager.isPro();
+    if (!isPro) {
+      adToken = await AdService.showRewardedAd(
+        adUnitId: AdUnits.rewardedTcGeneration,
+        context: context,
+      );
+      if (adToken == null) {
+        if (mounted) {
+          setState(() {
+            loading = false;
+            GenerationState.isGenerating.value = false;
+          });
+        }
+        return;
+      }
+    }
+    stopwatch.stop();
 
     try {
       final module = mCtrl.text.trim();
@@ -511,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           count: hardLimit,
           constraints: notes,
           traceId: TraceIdGenerator.generate(),
-          adToken: null, // no ad token needed
+          adToken: adToken,
         ),
       );
 
@@ -526,8 +507,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         cases: session.testCases,
       );
 
-      // Still increment generation for tracking (optional)
-      await UsageManager.incrementGeneration(rewarded: false);
+      // Capture Forensic Context
+      final forensicsContext = {
+        'app_tier': currentPro ? 'PRO' : 'CORE',
+        'quota_snapshot': currentPro ? _proRemaining : _rewardedRemaining,
+        'ad_load_latency_ms': stopwatch.elapsedMilliseconds,
+        'constraints_hash': notes.hashCode,
+        'app_version': '1.0.0', 
+      };
+      
+      // Update forensics
+      await ForensicsProvider.instance.saveSnapshot(
+        session: session,
+        auditReport: const PipelineAuditReport(traceId: ''),
+        rawAiResponse: '',
+        forensicsContext: forensicsContext,
+      );
+
+      await UsageManager.incrementGeneration(
+        count: hardLimit,
+        rewarded: !currentPro,
+      );
       await BetaManager.touch();
       await AdService.maybeShowInterstitial();
       await _refreshStatus();
@@ -553,14 +553,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppColors.surface,
-          title: const Text(
-            'Generation Failed',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: Text(
-            '$e',
-            style: const TextStyle(color: AppColors.textSecondary),
-          ),
+          title: const Text('Generation Failed', style: TextStyle(color: Colors.white)),
+          content: Text('$e', style: const TextStyle(color: AppColors.textSecondary)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -577,7 +571,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       );
     } finally {
-      if (mounted) setState(() => loading = false);
+      if (mounted) {
+        setState(() => loading = false);
+        GenerationState.isGenerating.value = false;
+      }
     }
   }
 }
