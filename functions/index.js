@@ -254,15 +254,37 @@ function transformTestCases(rawCases) {
   }
   return transformed;
 }
-exports.getGuestName = functions.https.onCall(async () => {
+exports.getGuestName = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  
+  const uid = context.auth.uid;
+  const { deviceId } = data;
+  if (!deviceId) return { name: "Guest" }; 
+
+  const deviceNameRef = db.collection("guestNames").doc(deviceId);
+  const userRef = db.collection("users").doc(uid);
+
+  const doc = await deviceNameRef.get();
+  
+  if (doc.exists) {
+    const name = doc.data().name;
+    await userRef.set({ displayName: name }, { merge: true });
+    return { name, isExisting: true };
+  }
+
   const globalRef = db.collection("analytics").doc("global");
   const result = await db.runTransaction(async (t) => {
-    const doc = await t.get(globalRef);
-    const count = (doc.data()?.guestCounter ?? 0) + 1;
+    const d = await t.get(globalRef);
+    const count = (d.data()?.guestCounter ?? 0) + 1;
     t.update(globalRef, { guestCounter: count });
     return count;
   });
-  return { name: `Guest${result}` };
+
+  const guestName = `Guest${result}`;
+  await deviceNameRef.set({ name: guestName, lastUid: uid });
+  await userRef.set({ displayName: guestName }, { merge: true });
+
+  return { name: guestName, isExisting: false };
 });
 
 // ------------------------------------------------------------------
@@ -277,127 +299,49 @@ exports.generate = functions
       const functionVersion = "v2.0";
       const startTime = Date.now();
 
-      let uid = context.auth ? context.auth.uid : "test_user_123";
-      const { module, feature, platform, notes, isPro, adToken, prompt } = data;
-      if (!module || !feature) {
+      if (!context.auth) {
         return {
           success: false,
-          error: {
-            code: "INVALID_ARGUMENT",
-            message: "Missing module or feature",
-          },
-          metadata: {
-            requestId,
-            functionVersion,
-            timestamp: new Date().toISOString(),
-            latencyMs: Date.now() - startTime,
-          },
+          error: { code: "UNAUTHENTICATED", message: "Authentication required" },
+          metadata: { requestId, functionVersion, timestamp: new Date().toISOString(), latencyMs: Date.now() - startTime },
         };
       }
 
-      // ----- QUOTA CHECK (simplified, but working) -----
-      let allowed = true;
-      let userIsPro = false;
-      if (!FORCE_BYPASS) {
-        const usage = await getUsage(uid);
-        const now = today();
-        const resetNeeded = usage.lastReset !== now;
-        const genCount = resetNeeded ? 0 : usage.genCount;
-        const rewardedGenCount = resetNeeded ? 0 : usage.rewardedGenCount;
-        userIsPro = usage.isPro || isPro;
-        if (userIsPro) {
-          if (genCount >= PRO_GEN_LIMIT) allowed = false;
-        } else {
-          if (genCount >= FREE_GEN_LIMIT) {
-            if (rewardedGenCount >= REWARDED_GEN_LIMIT || !adToken)
-              allowed = false;
+      const { module, feature, isPro, adToken, prompt, deviceId } = data;
+      const uid = context.auth.uid;
+      const now = today();
+
+      try {
+        return await db.runTransaction(async (t) => {
+          const uRef = db.collection("usage").doc(uid);
+          const dRef = deviceId ? db.collection("deviceUsage").doc(deviceId) : null;
+          
+          const [uDoc, dDoc] = await Promise.all([t.get(uRef), dRef ? t.get(dRef) : Promise.resolve(null)]);
+          let u = uDoc.exists ? uDoc.data() : { lastReset: now, proGenCount: 0, coreGenCount: 0 };
+          let d = (dDoc && dDoc.exists) ? dDoc.data() : { lastReset: now, coreGenCount: 0 };
+
+          if (u.lastReset !== now) { u.coreGenCount = 0; u.lastReset = now; }
+          if (d.lastReset !== now) { d.coreGenCount = 0; d.lastReset = now; }
+
+          if (isPro) {
+            u.proGenCount = (u.proGenCount || 0) + 1;
+          } else {
+            if (u.coreGenCount === 0 && d.coreGenCount > 0) u.coreGenCount = d.coreGenCount;
+            if (d.coreGenCount >= REWARDED_GEN_LIMIT) throw new Error("LIMIT_REACHED");
+            u.coreGenCount++;
+            d.coreGenCount++;
+            if (dRef) t.set(dRef, d, { merge: true });
           }
-        }
-        if (!allowed) {
-          return {
-            success: false,
-            error: { code: "LIMIT_REACHED", message: "Daily limit reached" },
-            metadata: {
-              requestId,
-              functionVersion,
-              timestamp: new Date().toISOString(),
-              latencyMs: Date.now() - startTime,
-            },
-          };
-        }
-      } else {
-        userIsPro = isPro || false;
+          t.set(uRef, u, { merge: true });
+          
+          const aiResult = await callDeepSeek(prompt, { requestId });
+          if (!aiResult.success) throw new Error(aiResult.error.code);
+          return { success: true, data: { testCases: transformTestCases(JSON.parse(aiResult.data.text)) } };
+        });
+      } catch (err) {
+        return { success: false, error: { code: err.message === "LIMIT_REACHED" ? "LIMIT_REACHED" : "INTERNAL_ERROR" } };
       }
-
-      if (!prompt || typeof prompt !== "string") {
-        throw new Error("Missing or invalid 'prompt' field");
-      }
-
-      const expectedCount = userIsPro ? 16 : 8;
-      let aiResult = await callDeepSeek(prompt, {
-        requestId,
-        functionVersion,
-        model: "deepseek-chat",
-        isPro: userIsPro,
-      });
-
-      if (!aiResult.success) {
-        return {
-          success: false,
-          error: aiResult.error,
-          metadata: aiResult.metadata,
-        };
-      }
-
-      let rawCases = JSON.parse(aiResult.data.text);
-      // If the response is an object with a testCases array, extract it
-      if (!Array.isArray(rawCases)) {
-        if (rawCases.testCases && Array.isArray(rawCases.testCases)) {
-          rawCases = rawCases.testCases;
-        } else if (rawCases.data && Array.isArray(rawCases.data)) {
-          rawCases = rawCases.data;
-        } else {
-          // Treat the whole object as a single test case
-          rawCases = [rawCases];
-        }
-      }
-
-      let testCases = transformTestCases(rawCases);
-      // Trim to expected count (if more) or accept fewer (client will fill with fallback)
-      if (testCases.length > expectedCount) {
-        testCases = testCases.slice(0, expectedCount);
-      }
-
-      // Add module, feature, platform and generate proper IDs
-      testCases = testCases.map((tc, i) => ({
-        ...tc,
-        id: `TC_${module.replace(/ /g, "").toUpperCase()}_${(i + 1).toString().padStart(3, "0")}`,
-        module,
-        feature,
-        platform,
-      }));
-
-      // If we have fewer than expected, we still return them; the client will fill missing with fallback
-      // But we set success to true so that the client receives these AI cases.
-
-      return {
-        success: true,
-        data: { testCases },
-        metadata: aiResult.metadata,
-      };
-    } catch (err) {
-      console.error("Unhandled error in generate:", err);
-      return {
-        success: false,
-        error: { code: "INTERNAL_ERROR", message: err.message },
-        metadata: {
-          requestId: generateRequestId(),
-          functionVersion: "v2.0",
-          timestamp: new Date().toISOString(),
-        },
-      };
-    }
-  });
+    });
 
 // ------------------------------------------------------------------
 // QUOTA CHECK ENDPOINTS
@@ -859,12 +803,18 @@ exports.getQuotaStatus = functions.https.onCall(async (data, context) => {
   const rewardedExportCount = resetNeeded ? 0 : usage.rewardedExportCount;
   const isPro = usage.isPro;
 
+  // Calculate reset time (Midnight UTC)
+  const resetDate = new Date();
+  resetDate.setUTCHours(24, 0, 0, 0);
+  const resetTimestamp = resetDate.toISOString();
+
   if (isPro) {
     return {
       freeGensRemaining: 0,
       rewardedGensRemaining: 0,
       proGensRemaining: Math.max(0, PRO_GEN_LIMIT - genCount),
       rewardedExportsRemaining: Math.max(0, PRO_EXPORT_LIMIT - exportCount),
+      resetTimestamp,
     };
   } else {
     return {
@@ -875,6 +825,7 @@ exports.getQuotaStatus = functions.https.onCall(async (data, context) => {
         0,
         REWARDED_EXPORT_LIMIT - rewardedExportCount,
       ),
+      resetTimestamp,
     };
   }
 });

@@ -42,7 +42,9 @@ class AiGenerationStage {
             : '',
         statusCode: structured['success'] == true
             ? 200
-            : (structured['error']?['code'] == 'RATE_LIMIT' ? 429 : 500),
+            : (structured['error']?['code'] == 'LIMIT_REACHED'
+                ? 403
+                : (structured['error']?['code'] == 'RATE_LIMIT' ? 429 : 500)),
         hasTransportError: structured['success'] != true,
         errorMessage: (structured['success'] != true && structured['error'] != null) ? structured['error']['message'] : null,
         latencyMs: latencyMs,
@@ -99,6 +101,7 @@ class AiGenerationStage {
         'notes': request.constraints,
         'isPro': request.generationMode.toLowerCase() == 'pro',
         'adToken': request.adToken,
+        'deviceId': request.deviceId,
       },
     );
     return jsonEncode(result);

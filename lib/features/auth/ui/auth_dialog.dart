@@ -17,6 +17,7 @@ class AuthDialog extends StatefulWidget {
 
 class _AuthDialogState extends State<AuthDialog> {
   bool _isLoading = false;
+  bool _isGuestLoading = false;
   String? _errorMessage;
 
   Future<void> _handleContinueWithGoogle() async {
@@ -36,9 +37,31 @@ class _AuthDialogState extends State<AuthDialog> {
     }
   }
 
+  Future<void> _handleContinueAsGuest() async {
+    setState(() {
+      _isGuestLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await AuthService.signInAnonymously();
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _isGuestLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isNewUser = AuthService.currentUser == null || AuthService.currentUser!.isAnonymous;
+    final user = AuthService.currentUser;
+    final isNewUser = user == null;
+    final displayName = user?.displayName ?? '';
+    final welcomeText = !isNewUser && displayName.isNotEmpty
+        ? 'Welcome back, ${displayName.split(' ').first}'
+        : (isNewUser ? 'Welcome to QAG' : 'Welcome back to QAG');
 
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
@@ -78,7 +101,8 @@ class _AuthDialogState extends State<AuthDialog> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  isNewUser ? 'Welcome to QAG' : 'Welcome back to QAG',
+                  welcomeText,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
@@ -108,7 +132,7 @@ class _AuthDialogState extends State<AuthDialog> {
                   width: double.infinity,
                   height: 54,
                   child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _handleContinueWithGoogle,
+                    onPressed: _isLoading || _isGuestLoading ? null : _handleContinueWithGoogle,
                     icon: _isLoading 
                       ? const SizedBox.shrink() 
                       : const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
@@ -140,11 +164,17 @@ class _AuthDialogState extends State<AuthDialog> {
                     width: double.infinity,
                     height: 50,
                     child: TextButton(
-                      onPressed: _isLoading ? null : () => Navigator.pop(context),
-                      child: const Text(
-                        'Continue as Guest',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
-                      ),
+                      onPressed: _isLoading || _isGuestLoading ? null : _handleContinueAsGuest,
+                      child: _isGuestLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                            )
+                          : const Text(
+                              'Continue as Guest',
+                              style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
+                            ),
                     ),
                   ),
                 ],

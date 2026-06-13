@@ -163,6 +163,14 @@ class WorkingCase {
   };
 }
 
+class QuotaExceededException implements Exception {
+  final String message;
+  final bool isRateLimit;
+  QuotaExceededException(this.message, {this.isRateLimit = false});
+  @override
+  String toString() => 'QuotaExceededException: $message';
+}
+
 class GenerationSession {
   final String traceId;
   List<FinalizedTestCase> testCases;
@@ -207,6 +215,7 @@ class GenerationRequest {
   final List<Map<String, dynamic>> plan;
   final String traceId;
   final String? adToken; // optional for rewarded generations
+  final String? deviceId;
 
   const GenerationRequest({
     required this.module,
@@ -219,6 +228,7 @@ class GenerationRequest {
     this.plan = const [],
     required this.traceId,
     this.adToken,
+    this.deviceId,
   });
 }
 

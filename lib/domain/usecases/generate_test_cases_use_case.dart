@@ -56,11 +56,22 @@ class GenerateTestCasesUseCase {
         plan: skeletons,
         traceId: dto.traceId,
         adToken: dto.adToken,
+        deviceId: dto.deviceId,
       );
       final result = await _orchestrator.execute(
         prompt: prompt,
         request: request,
       );
+
+      // Check for Quota/Rate Limit block before any fallback can happen
+      if (result.auditReport.aiHttpStatusCode == 403 || 
+          result.auditReport.aiHttpStatusCode == 429) {
+        throw QuotaExceededException(
+          result.auditReport.aiErrorMessage ?? 'Daily limit reached.',
+          isRateLimit: result.auditReport.aiHttpStatusCode == 429,
+        );
+      }
+
       final session = GenerationSession(
         traceId: result.traceId,
         testCases: result.cases,

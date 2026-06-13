@@ -28,6 +28,9 @@ import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
 import 'package:qa_genie/features/forensics/diagnostics_persistence_service.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/shared/widgets/animated_dots.dart';
+import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
+
+import 'package:qa_genie/core/utils/device_utils.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -58,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isPro = false;
   int _rewardedRemaining = 6;
   int _proRemaining = 15;
+  DateTime? _resetTime;
 
   @override
   void initState() {
@@ -79,14 +83,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _refreshStatus() async {
     final isPro = await UsageManager.isPro();
-    final freeRemaining = await UsageManager.freeGensRemaining();
     final rewardedRemaining = await UsageManager.rewardedGensRemaining();
     final proRemaining = await UsageManager.proGensRemaining();
+    final resetTime = await UsageManager.getResetTime();
+
     if (!mounted) return;
     setState(() {
       _isPro = isPro;
       _rewardedRemaining = rewardedRemaining;
       _proRemaining = proRemaining;
+      _resetTime = resetTime;
     });
   }
 
@@ -97,7 +103,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (_rewardedRemaining > 0) {
         return 'Watch ads for $_rewardedRemaining more generations today (8 cases each)';
       }
-      return 'Daily limit reached. Upgrade to PRO or reset limits in Test Mode.';
+
+      String resetText = '';
+      if (_resetTime != null) {
+        final now = DateTime.now();
+        final diff = _resetTime!.difference(now);
+        if (diff.isNegative) {
+          _refreshStatus();
+        } else {
+          final h = diff.inHours;
+          final m = diff.inMinutes % 60;
+          resetText = ' • Resets in ${h}h ${m}m';
+        }
+      }
+
+      final suffix = AppConfig.isProduction ? '' : ' or reset limits in Test mode.';
+      return 'Daily limit reached. Upgrade to PRO$resetText$suffix';
     }
   }
 
@@ -440,26 +461,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     }
 
-    final shouldWatch = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const WatchAdDialog(featureName: 'Generate Test Cases'),
-    );
-    
-    if (shouldWatch != true) {
-      if (mounted) {
-        setState(() {
-          loading = false;
-          GenerationState.isGenerating.value = false;
-        });
-      }
-      return;
-    }
-
-    final stopwatch = Stopwatch()..start();
-    String? adToken;
     final isPro = await UsageManager.isPro();
+    final deviceId = await DeviceUtils.getUniqueId();
+    String? adToken;
+    
     if (!isPro) {
+      final shouldWatch = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const WatchAdDialog(featureName: 'Generate Test Cases'),
+      );
+      
+      if (shouldWatch != true) {
+        if (mounted) {
+          setState(() {
+            loading = false;
+            GenerationState.isGenerating.value = false;
+          });
+        }
+        return;
+      }
+
       adToken = await AdService.showRewardedAd(
         adUnitId: AdUnits.rewardedTcGeneration,
         context: context,
@@ -493,6 +515,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           constraints: notes,
           traceId: TraceIdGenerator.generate(),
           adToken: adToken,
+          deviceId: deviceId,
         ),
       );
 
@@ -546,6 +569,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       );
+    } on QuotaExceededException catch (e) {
+      if (mounted) {
+        _showLimitReachedDialog(e.message);
+      }
     } catch (e, stackTrace) {
       UiErrorService.handle(e, stackTrace: stackTrace, category: 'generation');
       if (!mounted) return;
@@ -576,5 +603,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         GenerationState.isGenerating.value = false;
       }
     }
+  }
+
+  void _showLimitReachedDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_clock, color: AppColors.accent),
+            SizedBox(width: 12),
+            Text('Limit Reached', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(
+          '$message\n\nYou have used all your generations for today. Limits reset every 24 hours.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Maybe Later', style: TextStyle(color: AppColors.textHint)),
+          ),
+          ElevatedButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => UpgradeScreen()),
+            );
+          },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.black,
+            ),
+            child: const Text('Upgrade to PRO'),
+          ),
+        ],
+      ),
+    );
   }
 }

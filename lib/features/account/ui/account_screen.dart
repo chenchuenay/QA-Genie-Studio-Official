@@ -158,8 +158,13 @@ class _AccountScreenState extends State<AccountScreen> {
     await prefs.remove('stats_last_sync');
     await GoogleSignIn().signOut();
     await FirebaseAuth.instance.signOut();
+    
+    // 🔄 AUTO-SWITCH: Immediately pivot back to a guest identity
+    await AuthService.signInAnonymously();
+    
     if (mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
+      _loadData(); // Reload to show Guest name
     }
   }
 
@@ -209,6 +214,10 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Widget _buildInfoCard(bool isAnonymous, String email, String displayName) {
+    final name = isAnonymous 
+      ? (displayName.isNotEmpty ? displayName : 'Guest') 
+      : (displayName.isNotEmpty ? displayName : email.split('@').first);
+      
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -222,7 +231,7 @@ class _AccountScreenState extends State<AccountScreen> {
         children: [
           const SizedBox(height: 4),
           Text(
-            isAnonymous ? 'Guest' : (displayName.isNotEmpty ? displayName : email.split('@').first),
+            name,
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -111,9 +112,21 @@ class AuthService {
     if (user == null) {
       final cred = await _auth.signInAnonymously();
       user = cred.user;
+      // Fetch and persist guest name on first creation
+      try {
+        await FunctionsService.call(functionName: 'getGuestName');
+      } catch (_) {}
     } else if (!user.isAnonymous) {
       return user;
     }
     return user!;
+  }
+
+  static Future<UserCredential> signInAnonymously() async {
+    final cred = await _auth.signInAnonymously();
+    try {
+      await FunctionsService.call(functionName: 'getGuestName');
+    } catch (_) {}
+    return cred;
   }
 }

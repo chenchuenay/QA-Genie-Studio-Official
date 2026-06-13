@@ -3,20 +3,22 @@
 class AppConfig {
   static const bool isProduction = bool.fromEnvironment('dart.vm.product');
 
-  static bool testProMode = false;
-
-  static const int maxConstraintsLength = 100;
-
-  static const int freeDailyGenerationLimit = 0;
+  // Centralized Quotas
+  static const int coreDailyGenerationLimit = 8;
+  static const int proDailyGenerationLimit = 16;
   static const int rewardedDailyGenerationLimit = 6;
-  static const int proDailyGenerationLimit = 15;
 
   static const int rewardedDailyExportLimit = 50;
-  static const int freeLifetimeExports = 0;
-  static const int freeLifetimeSummaryExports = 0;
+  
+  static bool testProMode = false;
+  static const int maxConstraintsLength = 100;
 
-  // NEW: Feature flags based on build flavor
+  // Feature flags
   static bool get allowOfflineGeneration => !isProduction;
   static bool get allowDebugTools => !isProduction;
   static bool get allowMockAds => !isProduction;
+  
+  // Ad Units
+  static String get rewardedTcGenerationAdUnit => 
+      isProduction ? 'ca-app-pub-PRO_ID' : 'ca-app-pub-3940256099942544/5224354917';
 }

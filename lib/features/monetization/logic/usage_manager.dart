@@ -133,6 +133,19 @@ class UsageManager {
     }
   }
 
+  static Future<DateTime?> getResetTime() async {
+    try {
+      final result = await FunctionsService.call(
+        functionName: 'getQuotaStatus',
+      );
+      final timestamp = result['resetTimestamp'] as String?;
+      if (timestamp != null) return DateTime.parse(timestamp);
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<int> rewardedExportsRemaining() async {
     try {
       final result = await FunctionsService.call(

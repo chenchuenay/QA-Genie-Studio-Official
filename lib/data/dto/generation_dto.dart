@@ -43,6 +43,7 @@ class GenerationDto {
 
   final bool enableUsabilityCases;
   final String? adToken;
+  final String? deviceId;
 
   const GenerationDto({
     required this.module,
@@ -51,17 +52,12 @@ class GenerationDto {
     required this.mode,
     required this.count,
     required this.traceId,
-
     this.adToken,
-
+    this.deviceId,
     this.constraints = '',
-
     this.domain = 'general',
-
     this.enableSecurityCases = true,
-
     this.enableBoundaryCases = true,
-
     this.enableUsabilityCases = true,
   });
 

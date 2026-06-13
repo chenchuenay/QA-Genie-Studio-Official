@@ -59,19 +59,18 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
     if (_isProcessing) return;
     FocusScope.of(context).unfocus();
 
-    final shouldWatch = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) =>
-          const WatchAdDialog(featureName: 'Export Summary Report'),
-    );
-    if (shouldWatch != true) return;
-
-    setState(() => _isProcessing = true);
-
     final isPro = await UsageManager.isPro();
     String? adToken;
+    
     if (!isPro) {
+      final shouldWatch = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) =>
+            const WatchAdDialog(featureName: 'Export Summary Report'),
+      );
+      if (shouldWatch != true) return;
+
       adToken = await AdService.showRewardedAd(
         adUnitId: AdUnits.rewardedSummaryExport,
         context: context,
@@ -81,6 +80,9 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
         return;
       }
     }
+
+    setState(() => _isProcessing = true);
+    
     try {
       setState(() => _isSharing = true);
       
