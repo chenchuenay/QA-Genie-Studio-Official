@@ -4,9 +4,11 @@ class AppConfig {
   static const bool isProduction = bool.fromEnvironment('dart.vm.product');
 
   // Centralized Quotas
-  static const int coreDailyGenerationLimit = 8;
-  static const int proDailyGenerationLimit = 16;
-  static const int rewardedDailyGenerationLimit = 6;
+  static const int coreCasesPerBatch = 10;
+  static const int proCasesPerBatch = 20;
+
+  static const int coreDailyBatchesLimit = 6;
+  static const int proDailyBatchesLimit = 15;
 
   static const int rewardedDailyExportLimit = 50;
   

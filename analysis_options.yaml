@@ -13,6 +13,7 @@ analyzer:
   exclude:
     - _trash/**
     - build/**
+    - backup/**
     - project_context_snapshot.dart
     - project_snapshot_part_*.dart
     - legacy_disabled/**

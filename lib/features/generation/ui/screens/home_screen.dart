@@ -25,7 +25,6 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
 import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
-import 'package:qa_genie/features/forensics/diagnostics_persistence_service.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/shared/widgets/animated_dots.dart';
 import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
@@ -98,10 +97,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   String _generationHint() {
     if (_isPro) {
-      return 'Generates 16 test cases per batch ($_proRemaining/15 left)';
+      return 'Generates ${AppConfig.proCasesPerBatch} test cases per batch ($_proRemaining/15 left)';
     } else {
       if (_rewardedRemaining > 0) {
-        return 'Watch ads for $_rewardedRemaining more generations today (8 cases each)';
+        return 'Watch ads for $_rewardedRemaining more generations today (${AppConfig.coreCasesPerBatch} cases each)';
       }
 
       String resetText = '';

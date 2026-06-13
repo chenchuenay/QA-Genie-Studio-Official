@@ -165,3 +165,12 @@ class ForensicRunner {
     return '$withoutMillis+04:00';
   }
 }
+
+
+mkdir -p FORENSIC_BAK/lib/features/forensics
+
+git show ai-reintegration:lib/features/forensics/diagnostics_persistence_service.dart \
+> FORENSIC_BAK/lib/features/forensics/diagnostics_persistence_service.dart
+
+git show ai-reintegration:lib/features/forensics/production_diagnostics_screen.dart \
+> FORENSIC_BAK/lib/features/forensics/production_diagnostics_screen.dart

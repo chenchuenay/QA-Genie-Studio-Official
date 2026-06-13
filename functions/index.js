@@ -10,8 +10,11 @@ const db = admin.firestore();
 // CONFIGURATION
 // ------------------------------------------------------------------
 const FORCE_BYPASS = false;
-const REWARDED_GEN_LIMIT = 6;
-const PRO_GEN_LIMIT = 15;
+const CORE_DAILY_BATCHES_LIMIT = 6;
+const PRO_DAILY_BATCHES_LIMIT = 15;
+const CORE_CASES_PER_BATCH = 10;
+const PRO_CASES_PER_BATCH = 20;
+
 const FREE_GEN_LIMIT = 0; 
 const PRO_EXPORT_LIMIT = 100;
 const REWARDED_EXPORT_LIMIT = 50;
@@ -120,7 +123,7 @@ exports.generate = functions
 
         if (!isPro) {
           if (u.coreGenCount === 0 && d.coreGenCount > 0) u.coreGenCount = d.coreGenCount;
-          if (d.coreGenCount >= REWARDED_GEN_LIMIT) throw new Error("LIMIT_REACHED");
+          if (d.coreGenCount >= CORE_DAILY_BATCHES_LIMIT) throw new Error("LIMIT_REACHED");
         }
       });
 
@@ -129,7 +132,8 @@ exports.generate = functions
       if (!aiResult.success) throw new Error(aiResult.error.code);
 
       const rawCases = JSON.parse(aiResult.data.text);
-      const transformedCases = transformTestCases(Array.isArray(rawCases) ? rawCases : (rawCases.testCases || [rawCases]), module, feature, platform);
+      const limitPerBatch = isPro ? PRO_CASES_PER_BATCH : CORE_CASES_PER_BATCH;
+      const transformedCases = transformTestCases(Array.isArray(rawCases) ? rawCases : (rawCases.testCases || [rawCases]), module, feature, 'Web', limitPerBatch);
 
       // 3. Post-Generation Update (Atomic)
       await db.runTransaction(async (t) => {
@@ -178,8 +182,16 @@ async function callDeepSeek(prompt, metadata) {
 }
 
 // Helper: Transform cases
-function transformTestCases(rawCases, module, feature, platform) {
-  return rawCases.map((tc, i) => ({
+function transformTestCases(rawCases, module, feature, platform, limit) {
+  if (!Array.isArray(rawCases)) {
+    console.error("transformTestCases: input is not an array", typeof rawCases);
+    return [];
+  }
+  
+  // Trim to limit
+  const cases = rawCases.slice(0, limit);
+  
+  return cases.map((tc, i) => ({
     id: `TC_${module.replace(/ /g, "").toUpperCase()}_${(i + 1).toString().padStart(3, "0")}`,
     title: tc.title || "Test Case",
     preconditions: Array.isArray(tc.preconditions) ? tc.preconditions : [],
@@ -319,4 +331,24 @@ exports.migrateDataToPods = functions.https.onCall(async (data, context) => {
     migrated++;
   }
   return { status: "Strict Pod Migration Complete", processed: migrated };
+});
+
+exports.checkGenerationQuota = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  
+  const uid = context.auth.uid;
+  const { afterRewardedAd } = data;
+  const uDoc = await db.collection("usage").doc(uid).get();
+  const usage = uDoc.exists ? uDoc.data().metrics : { genCount: 0, rewardedGenCount: 0 };
+  const isPro = await db.collection("users").doc(uid).get().then(d => d.exists && d.data().subscription?.isPro);
+
+  if (isPro) {
+    const remaining = PRO_DAILY_BATCHES_LIMIT - (usage.proGenCount || 0);
+    return { allowed: remaining > 0, reason: remaining > 0 ? null : "LIMIT_REACHED", remaining };
+  } else {
+    const remaining = CORE_DAILY_BATCHES_LIMIT - (usage.coreGenCount || 0);
+    if (remaining > 0) return { allowed: true, reason: null, remaining };
+    if (!afterRewardedAd) return { allowed: false, reason: "AD_REQUIRED", remaining: 0 };
+    return { allowed: false, reason: "LIMIT_REACHED", remaining: 0 };
+  }
 });

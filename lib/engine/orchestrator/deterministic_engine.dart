@@ -1,18 +1,15 @@
 import '../ontology/entities.dart';
+import '../ontology/actions.dart'; // Import to use ActionTypeExtension
 import '../planners/domain_detector.dart';
 import '../planners/coverage_planner.dart';
 import '../planners/scenario_planner.dart';
-import '../generators/step_generator.dart';
-import '../generators/data_generator.dart';
 import '../planners/constraint_parser.dart';
 import '../generators/title_generator.dart';
 import '../../domain/enums/case_source.dart';
-import '../validators/realism_validator.dart';
 import '../../domain/entities/test_step.dart';
 import '../../domain/enums/generation_mode.dart';
-import '../generators/precondition_generator.dart';
-import '../generators/expected_result_generator.dart';
 import '../../domain/entities/finalized_test_case.dart';
+import '../generators/flow_graph_generator.dart';
 
 class DeterministicEngine {
   final String module;
@@ -55,15 +52,17 @@ class DeterministicEngine {
     final scenarios = scenarioPlanner.plan();
 
     final testCases = <FinalizedTestCase>[];
-    for (int i = 0; i < scenarios.length; i++) {
+    for (int i = 0; i < scenarios.length && testCases.length < targetCount; i++) {
       final scenario = scenarios[i];
       final title = TitleGenerator.generate(scenario, feature);
-      final preconditions = PreconditionGenerator.generate(scenario);
-      final testDataMap = DataGenerator.generate(scenario, constraints ?? '');
-      final testData = testDataMap.entries
-          .map((e) => '${e.key}=${e.value}')
-          .join('&');
-      final steps = StepGenerator.generate(scenario, platform, testDataMap)
+
+      // Use the new FlowGraphGenerator
+      final steps = FlowGraphGenerator.generate(
+        DomainDetector.detect(module, feature).displayName, // Use displayName
+        scenario.action.displayName,                        // Action
+        platform,
+        constraints ?? '',                                  // Pass constraints here
+      )
           .map(
             (s) => TestStep(
               action: s['action']!,
@@ -72,30 +71,30 @@ class DeterministicEngine {
             ),
           )
           .toList();
-      final expectedResult = ExpectedResultGenerator.generate(scenario);
+
       final priority = _priorityFromCategory(scenario.category);
       final type = scenario.category.toUpperCase();
 
       testCases.add(
         FinalizedTestCase(
-          id: 'TC_${module.replaceAll(' ', '')}_${(i + 1).toString().padLeft(3, '0')}',
+          id: 'TC_${module.replaceAll(' ', '')}_${(testCases.length + 1).toString().padLeft(3, '0')}',
           title: title,
           module: module,
           feature: feature,
           platform: platform,
           priority: priority,
           type: type,
-          preconditions: preconditions,
-          testData: testData,
+          preconditions: [], // Dynamic preconditions based on ontology to be added next
+          testData: '',      // Dynamic data to be added next
           steps: steps,
-          expectedResult: expectedResult,
+          expectedResult: 'Success',
           actualResult: '',
           status: 'Not Executed',
           source: CaseSource.fallback,
         ),
       );
     }
-    return testCases.where((tc) => RealismValidator.isValid(tc)).toList();
+    return testCases;
   }
 
   String _priorityFromCategory(String category) {

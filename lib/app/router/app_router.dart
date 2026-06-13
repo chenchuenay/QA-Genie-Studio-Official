@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/features/auth/ui/auth_dialog.dart';

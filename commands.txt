@@ -2,9 +2,7 @@
 
 flutter run --flavor dev
 flutter run --release --flavor prod
-flutter clean
-flutter pub get
-flutter run --release --flavor prod --dart-define=MODE=prod 
+
   
 
 Testing
@@ -34,7 +32,7 @@ adb pull /storage/emulated/0/Download/QA_Genie_Forensics/ ~/Desktop/QA_Genie/QAG
 done
 
 
-flutter run --release --flavor prod --dart-define=MODE=prod
+
 
 #delete
 adb shell "rm /storage/emulated/0/Download/QA_Genie_Forensics/full_dump_*.json"

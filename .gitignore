@@ -111,3 +111,6 @@ test_stdout.txt
 engine.zip
 gradle-*.zipandroid/key.properties
 android/app/upload-keystore.jks
+/FORENSIC_BAK/*
+/backup/*
+/backups/*

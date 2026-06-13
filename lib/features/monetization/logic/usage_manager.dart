@@ -117,21 +117,21 @@ class UsageManager {
   static Future<int> freeGensRemaining() async {
     final dashboard = await _getDashboard();
     final metrics = dashboard['metrics'] ?? {};
-    return (AppConfig.coreDailyGenerationLimit - (metrics['coreGenCount'] ?? 0)).toInt();
+    return (AppConfig.coreDailyBatchesLimit - (metrics['coreGenCount'] ?? 0)).toInt();
   }
 
   static Future<int> rewardedGensRemaining() async {
     final dashboard = await _getDashboard();
     final metrics = dashboard['metrics'] ?? {};
     final used = metrics['rewardedGenCount'] ?? 0;
-    return (AppConfig.rewardedDailyGenerationLimit - used).toInt();
+    return (AppConfig.coreDailyBatchesLimit - used).toInt();
   }
 
   static Future<int> proGensRemaining() async {
     final dashboard = await _getDashboard();
     final metrics = dashboard['metrics'] ?? {};
     final used = metrics['proGenCount'] ?? 0;
-    return (AppConfig.proDailyGenerationLimit - used).toInt();
+    return (AppConfig.proDailyBatchesLimit - used).toInt();
   }
 
   static Future<DateTime?> getResetTime() async {

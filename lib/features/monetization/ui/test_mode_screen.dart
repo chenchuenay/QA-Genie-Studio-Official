@@ -101,7 +101,7 @@ class _TestModeScreenState extends State<TestModeScreen> {
                   const SizedBox(height: 30),
                   _row(
                     "Test cases per request",
-                    _isPro ? "up to 16" : "up to 8",
+                    _isPro ? "up to ${AppConfig.proCasesPerBatch}" : "up to ${AppConfig.coreCasesPerBatch}",
                   ),
                   _row(
                     "Generation requests per day",

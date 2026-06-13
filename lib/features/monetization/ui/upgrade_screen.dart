@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/app/theme/app_spacing.dart';
@@ -143,7 +144,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       _BenefitItem(
         icon: Icons.flash_on,
         title: "Larger Suites",
-        description: isPro ? "Up to 16 cases per run" : "Generate bigger suites",
+        description: isPro ? "Up to ${AppConfig.proCasesPerBatch} cases per run" : "Generate bigger suites",
       ),
       _BenefitItem(
         icon: Icons.description,
@@ -190,8 +191,8 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
         children: [
           _CompareRow(
             feature: "Cases / Run",
-            core: "8",
-            pro: "16",
+            core: "${AppConfig.coreCasesPerBatch}",
+            pro: "${AppConfig.proCasesPerBatch}",
             isHeader: true,
           ),
           _CompareRow(
@@ -220,7 +221,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       children: [
         const Center(
           child: Text(
-            "\$7.99 / month",
+            "\$6.99 / month",
             style: TextStyle(
               color: Colors.white,
               fontSize: 28,

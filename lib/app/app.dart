@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/app/router/app_router.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
-import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
 
 class QaGenieApp extends StatefulWidget {
   const QaGenieApp({super.key});

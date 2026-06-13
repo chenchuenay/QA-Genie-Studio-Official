@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/forensics/forensics_service.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
@@ -161,7 +162,7 @@ class ForensicsServiceDev implements ForensicsService {
         'feature': session.testCases.isNotEmpty ? session.testCases.first.feature : '',
         'platform': session.testCases.isNotEmpty ? session.testCases.first.platform : '',
         'requested_count': auditReport.totalInputCases,
-        'mode': session.testCases.isNotEmpty ? (session.testCases.length > 8 ? 'PRO' : 'CORE') : 'UNKNOWN',
+        'mode': session.testCases.isNotEmpty ? (session.testCases.length > AppConfig.coreCasesPerBatch ? 'PRO' : 'CORE') : 'UNKNOWN',
         'constraints': constraints,
       },
       'pipeline_decisions': {
