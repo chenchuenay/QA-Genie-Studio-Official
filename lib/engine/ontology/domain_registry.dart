@@ -16,65 +16,83 @@ class ActionPattern {
 
 class DomainRegistry {
   static final Map<String, Map<String, ActionPattern>> ontology = {
-    'Robotics': {
-      'Move': ActionPattern(
+    'Identity': {
+      'login': ActionPattern(
         requiredPreconditions: [EntityState.idle],
-        postCondition: EntityState.inMotion,
+        postCondition: EntityState.authenticated,
         stepsByPlatform: {
-          'Mobile': ['TapVelocityInput', 'EnterVector', 'VerifyMotionSensor'],
-          'API': ['CommandMoveVector', 'VerifyResponse']
-        }
+          'Mobile': ['TapLoginField', 'EnterCredentials', 'TapSubmit', 'VerifyDashboard'],
+          'Web': ['ClickLoginButton', 'EnterEmailAndPassword', 'ClickSubmit', 'VerifyLandingPage'],
+          'API': ['PostAuthPayload', 'ReceiveToken', 'VerifyStatusCode200']
+        },
       ),
-      'EmergencyStop': ActionPattern(
-        requiredPreconditions: [EntityState.inMotion],
-        postCondition: EntityState.error,
+      'reset': ActionPattern(
+        requiredPreconditions: [EntityState.idle],
+        postCondition: EntityState.initialized,
         stepsByPlatform: {
-          'Mobile': ['TapEmergencyStop', 'VerifySafeMode'],
-          'API': ['PostEmergencyCommand', 'VerifySafeState']
-        }
+          'Mobile': ['TapForgotPassword', 'EnterEmail', 'VerifyEmailSent'],
+          'Web': ['ClickResetLink', 'EnterNewPassword', 'ClickConfirm', 'VerifySuccessToast'],
+        },
       ),
     },
-    'AI': {
-      'Generate': ActionPattern(
+    'Commerce': {
+      'add': ActionPattern(
         requiredPreconditions: [EntityState.initialized],
         postCondition: EntityState.processed,
         stepsByPlatform: {
-          'Web': ['ClickPromptInput', 'EnterPromptText', 'ClickGenerate', 'VerifyOutput'],
-          'API': ['PostPromptPayload', 'VerifyTokenResponse']
+          'Mobile': ['BrowseCatalog', 'TapAddToCart', 'VerifyCartBadge'],
+          'Web': ['SelectProduct', 'ClickAddToBag', 'VerifyCartSidebar'],
+          'API': ['PostAddToCartPayload', 'VerifyCartCount']
         },
-        requiredConstraints: ['tokenLimit', 'guardrail']
       ),
-    },
-    'Sales': {
-      'Checkout': ActionPattern(
+      'checkout': ActionPattern(
         requiredPreconditions: [EntityState.authenticated],
         postCondition: EntityState.processed,
         stepsByPlatform: {
           'Web': ['SelectCartItems', 'ProceedToCheckout', 'EnterPaymentDetails', 'SubmitOrder'],
+          'Mobile': ['TapCartIcon', 'TapCheckout', 'EnterShippingInfo', 'PlaceOrder'],
           'API': ['PostCheckoutPayload', 'VerifyPaymentResponse']
         },
-        requiredConstraints: ['budgetCheck', 'duplicateDetection']
       ),
     },
-    'HR': {
-      'TimeOff': ActionPattern(
+    'Transaction': {
+      'transfer': ActionPattern(
+        requiredPreconditions: [EntityState.authenticated],
+        postCondition: EntityState.processed,
+        stepsByPlatform: {
+          'Mobile': ['TapTransferMenu', 'SelectRecipient', 'EnterAmount', 'VerifyOTP'],
+          'Web': ['ClickMoveMoney', 'ChooseAccount', 'InputAmount', 'ClickConfirm'],
+          'API': ['PostTransferPayload', 'VerifyTransactionID']
+        },
+      ),
+    },
+    'Scheduling': {
+      'create': ActionPattern(
         requiredPreconditions: [EntityState.initialized],
         postCondition: EntityState.approved,
         stepsByPlatform: {
           'Web': ['SelectDates', 'SubmitRequest', 'VerifyStatus'],
           'Mobile': ['TapLeaveMenu', 'EnterDates', 'TapSubmit']
         },
-        requiredConstraints: ['balanceCheck', 'blackoutDateCheck']
       ),
     },
-    'DevOps': {
-      'Deploy': ActionPattern(
+    'Records': {
+      'view': ActionPattern(
+        requiredPreconditions: [EntityState.authenticated],
+        postCondition: EntityState.processed,
+        stepsByPlatform: {
+          'Web': ['NavigateToRecords', 'ClickViewDetail', 'VerifyDataLoad'],
+          'Mobile': ['TapDocuments', 'OpenPDF', 'VerifyContentVisibility']
+        },
+      ),
+    },
+    'Integration': {
+      'send': ActionPattern(
         requiredPreconditions: [EntityState.initialized],
         postCondition: EntityState.processed,
         stepsByPlatform: {
           'API': ['TriggerPipeline', 'MonitorBuild', 'VerifyDeployment']
         },
-        requiredConstraints: ['coverageThreshold', 'approvalGate']
       ),
     }
   };

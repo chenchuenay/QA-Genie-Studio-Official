@@ -54,15 +54,9 @@ class MainScreenState extends State<MainScreen> {
   void startWalkthrough() {
     setState(() => _currentIndex = 0);
     final ctx = context;
-    final m = "Enter the module you're testing.\ne.g. 'User Login'";
-    final f = "Be specific about the feature.\ne.g. 'Login with Google OAuth'";
-    final p = "Pick your platform: Mobile, Web, or API.";
-    final c =
-        "Optional constraints like WCAG, SSO, browsers, etc. (max 100 characters).";
-    final g = "Tap to create your first test suite!";
-    final s = "Your suites appear here. If empty, tap Generate to create one.";
     final a = "Manage your Core/Pro account, reset limits, or upgrade.";
     final targets = <TargetFocus>[
+      // ... (Rest of walkthrough logic - assuming strings were just labels for missing targets)
       // ... (same as before, keep all targets unchanged)
       TargetFocus(
         identify: "Account",

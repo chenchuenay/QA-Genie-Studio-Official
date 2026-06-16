@@ -11,7 +11,7 @@ import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/adapters/csv_adapter.dart';
 import 'package:qa_genie/features/export/adapters/pdf_adapter.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
-import 'package:qa_genie/features/monetization/ads/ad_service.dart';
+import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/export/adapters/json_adapter.dart';
 import 'package:qa_genie/features/export/adapters/excel_adapter.dart';
 import 'package:qa_genie/domain/usecases/export_validation_service.dart';
@@ -53,11 +53,12 @@ class ExportTestCasesUseCase {
 
       // Call cloud function to track export (with token)
       await FunctionsService.call(
-        functionName: 'exportTrack',
+        functionName: 'trackExport',
         payload: {
           'isPro': await UsageManager.isPro(),
           'adToken': adToken,
           'exportType': normalizedType,
+          'target': normalizedType,
         },
       );
 
@@ -99,7 +100,7 @@ class ExportTestCasesUseCase {
       }
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       debugPrint('✅ EXPORT_SUCCESS: id=$exportId, duration=${duration}ms');
-      await AdService.maybeShowInterstitial();
+      await AdManager().maybeShowInterstitial();
     } catch (e, stack) {
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       debugPrint(
@@ -137,11 +138,12 @@ class ExportTestCasesUseCase {
 
       // Call cloud function to track export (with token)
       await FunctionsService.call(
-        functionName: 'exportTrack',
+        functionName: 'trackExport',
         payload: {
           'isPro': await UsageManager.isPro(),
           'adToken': adToken,
           'exportType': 'summary',
+          'summary': true,
         },
       );
 
@@ -191,7 +193,7 @@ class ExportTestCasesUseCase {
       debugPrint(
         '✅ SUMMARY_EXPORT_SUCCESS: id=$exportId, duration=${duration}ms',
       );
-      await AdService.maybeShowInterstitial();
+      await AdManager().maybeShowInterstitial();
     } catch (e, stack) {
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       debugPrint(

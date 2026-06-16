@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
@@ -59,9 +60,18 @@ class _StartupGateState extends State<_StartupGate> {
       return;
     }
 
-    // 2. Ensure User Identity for Database
-    final user = AuthService.currentUser;
+    // 2. Ensure User Identity for Database (Wait for Auth if needed)
+    User? user = AuthService.currentUser;
+    int authWaitCount = 0;
+    while (user == null && authWaitCount < 10) {
+      debugPrint('⌛ AppRouter: Waiting for Auth identity... ($authWaitCount)');
+      await Future.delayed(const Duration(milliseconds: 500));
+      user = AuthService.currentUser;
+      authWaitCount++;
+    }
+
     final identity = user?.uid ?? 'guest_default';
+    debugPrint('🗄️ AppRouter: Initializing database for identity: $identity');
     await DatabaseService.initDatabase(identity);
 
     // 3. Check First Launch

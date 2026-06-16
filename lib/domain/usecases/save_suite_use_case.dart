@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/data/repositories/suite_repository.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
@@ -13,11 +14,14 @@ class SaveSuiteUseCase {
     required String feature,
     required String platform,
   }) async {
-    return _repository.createSuite(
+    debugPrint('💾 SaveSuiteUseCase: createSuite $module $feature');
+    final id = await _repository.createSuite(
       moduleName: module,
       feature: feature,
       platform: platform,
     );
+    debugPrint('💾 SaveSuiteUseCase: created suite ID $id');
+    return id;
   }
 
   Future<void> syncSession({
@@ -32,7 +36,9 @@ class SaveSuiteUseCase {
     required int suiteId,
     required List<FinalizedTestCase> cases,
   }) async {
+    debugPrint('💾 SaveSuiteUseCase: saveSuite $suiteId with ${cases.length} cases');
     await _repository.saveCases(suiteId: suiteId, cases: cases);
+    debugPrint('💾 SaveSuiteUseCase: saveSuite complete');
   }
 
   Future<void> update({

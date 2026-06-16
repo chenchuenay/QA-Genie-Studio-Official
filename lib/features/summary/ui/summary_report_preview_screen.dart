@@ -1,19 +1,18 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
+import 'package:qa_genie/shared/widgets/animated_dots.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
 import 'package:qa_genie/features/monetization/ads/ad_units.dart';
-import 'package:qa_genie/features/monetization/ads/ad_service.dart';
+import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
+import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
-import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
-import 'package:qa_genie/core/utils/dialog_utils.dart';
-import 'package:qa_genie/shared/widgets/animated_dots.dart';
-import 'dart:ui';
 
 class SummaryReportPreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -38,13 +37,16 @@ class SummaryReportPreviewScreen extends StatefulWidget {
       _SummaryReportPreviewScreenState();
 }
 
-class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen> {
+class _SummaryReportPreviewScreenState
+    extends State<SummaryReportPreviewScreen> {
   bool _isProcessing = false;
   bool _isSharing = false;
 
   int get _total => widget.session.testCases.length;
-  int get _passed => widget.session.testCases.where((c) => c.status == 'Pass').length;
-  int get _failed => widget.session.testCases.where((c) => c.status == 'Fail').length;
+  int get _passed =>
+      widget.session.testCases.where((c) => c.status == 'Pass').length;
+  int get _failed =>
+      widget.session.testCases.where((c) => c.status == 'Fail').length;
   int get _blocked =>
       widget.session.testCases.where((c) => c.status == 'Blocked').length;
 
@@ -61,7 +63,7 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
 
     final isPro = await UsageManager.isPro();
     String? adToken;
-    
+
     if (!isPro) {
       final shouldWatch = await showDialog<bool>(
         context: context,
@@ -71,21 +73,25 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
       );
       if (shouldWatch != true) return;
 
-      adToken = await AdService.showRewardedAd(
+      // Use AdManager to show the rewarded ad
+      adToken = await AdManager().showRewardedAd(
         adUnitId: AdUnits.rewardedSummaryExport,
-        context: context,
       );
       if (adToken == null) {
-        if (mounted) setState(() => _isProcessing = false);
+        // Show recovery dialog
+        AdManager().showStatusDialog(
+          context,
+          onRetry: () => _exportPDF(context),
+        );
         return;
       }
     }
 
     setState(() => _isProcessing = true);
-    
+
     try {
       setState(() => _isSharing = true);
-      
+
       final exportUseCase = ExportTestCasesUseCase();
       await exportUseCase.exportSummaryReport(
         cases: widget.session.testCases,
@@ -103,18 +109,16 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
         extension: 'pdf',
       );
       if (!mounted) return;
-      
+
       setState(() {
         _isProcessing = false;
         _isSharing = false;
       });
-      
+
       showBlurredDialog(
         context,
-        builder: (ctx) => ExportSuccessDialog(
-          type: 'pdf',
-          moduleName: widget.moduleName,
-        ),
+        builder: (ctx) =>
+            ExportSuccessDialog(type: 'pdf', moduleName: widget.moduleName),
       );
     } catch (e, stack) {
       if (mounted) {
@@ -139,10 +143,10 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
-      valueListenable: AdService.isAdLoading,
+      valueListenable: AdManager().isAdLoading,
       builder: (context, isAdLoading, _) {
         final fullLock = _isProcessing || isAdLoading || _isSharing;
-        
+
         Widget content = AbsorbPointer(
           absorbing: fullLock,
           child: Scaffold(
@@ -162,7 +166,9 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
               children: [
                 Expanded(
                   child: SingleChildScrollView(
-                    physics: fullLock ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+                    physics: fullLock
+                        ? const NeverScrollableScrollPhysics()
+                        : const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,10 +182,14 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
                           ),
                         ),
                         const SizedBox(height: 16),
-                        _infoRow('Suite', '${widget.moduleName} · ${widget.feature}'),
+                        _infoRow(
+                          'Suite',
+                          '${widget.moduleName} · ${widget.feature}',
+                        ),
                         _infoRow('Platform', widget.platform),
                         _infoRow('Date', _currentDate()),
-                        if (widget.testerName.isNotEmpty) _infoRow('Tester', widget.testerName),
+                        if (widget.testerName.isNotEmpty)
+                          _infoRow('Tester', widget.testerName),
                         if (widget.environment.isNotEmpty)
                           _infoRow('Environment', widget.environment),
                         const SizedBox(height: 24),
@@ -201,22 +211,30 @@ class _SummaryReportPreviewScreenState extends State<SummaryReportPreviewScreen>
                       height: 52,
                       child: ElevatedButton.icon(
                         onPressed: fullLock ? null : () => _exportPDF(context),
-                        icon: fullLock ? const SizedBox.shrink() : const Icon(Icons.picture_as_pdf, color: Colors.black),
-                        label: fullLock 
-                          ? const AnimatedDots(
-                              label: '⚡ Processing',
-                              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                            )
-                          : const Text(
-                              'Export PDF',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
+                        icon: fullLock
+                            ? const SizedBox.shrink()
+                            : const Icon(
+                                Icons.picture_as_pdf,
                                 color: Colors.black,
                               ),
-                            ),
+                        label: fullLock
+                            ? const AnimatedDots(
+                                label: '⚡ Processing',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : const Text(
+                                'Export PDF',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: fullLock 
-                              ? AppColors.accent.withOpacity(0.5) 
+                          backgroundColor: fullLock
+                              ? AppColors.accent.withOpacity(0.5)
                               : AppColors.accent,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),

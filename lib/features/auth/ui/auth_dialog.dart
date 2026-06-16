@@ -1,8 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
-import 'package:qa_genie/app/theme/app_spacing.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/features/legal/ui/terms_privacy_policy.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';

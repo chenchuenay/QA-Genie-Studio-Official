@@ -7,12 +7,10 @@ import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 class UsageManager {
   static const _proKey = 'is_pro';
 
-  static Future<SharedPreferences> _prefs() async =>
-      SharedPreferences.getInstance();
+  static Future<SharedPreferences> _prefs() async => SharedPreferences.getInstance();
 
   static Future<bool> isPro() async {
-    if (!EnvironmentAuthority.isProduction && AppConfig.testProMode)
-      return true;
+    if (!EnvironmentAuthority.isProduction && AppConfig.testProMode) return true;
     final prefs = await _prefs();
     return prefs.getBool(_proKey) ?? false;
   }
@@ -22,10 +20,7 @@ class UsageManager {
     final prefs = await _prefs();
     await prefs.setBool(_proKey, value);
     try {
-      await FunctionsService.call(
-        functionName: 'setUserPro',
-        payload: {'isPro': value},
-      );
+      await FunctionsService.call(functionName: 'setUserPro', payload: {'isPro': value});
     } catch (_) {}
   }
 
@@ -43,55 +38,34 @@ class UsageManager {
 
   static Future<bool> canExport({bool rewarded = false}) async {
     try {
-      final result = await FunctionsService.call(
-        functionName: 'checkExportQuota',
-        payload: {'rewarded': rewarded},
-      );
+      final result = await FunctionsService.call(functionName: 'checkExportQuota', payload: {'rewarded': rewarded});
       return result['allowed'] == true;
     } catch (_) {
       return false;
     }
   }
 
-  static Future<bool> canExportSummary({bool rewarded = false}) async {
-    return canExport(rewarded: rewarded);
-  }
+  static Future<bool> canExportSummary({bool rewarded = false}) async => canExport(rewarded: rewarded);
 
   static Future<void> incrementGeneration({int count = 8, bool rewarded = false}) async {
     try {
-      await FunctionsService.call(
-        functionName: 'trackGeneration',
-        payload: {'generatedCount': count},
-      );
+      await FunctionsService.call(functionName: 'trackGeneration', payload: {'generatedCount': count});
     } catch (_) {}
   }
 
-  static Future<void> incrementExport({
-    bool summary = false,
-    String target = 'unknown',
-    String extension = '',
-  }) async {
+  static Future<void> incrementExport({bool summary = false, String target = 'unknown', String extension = ''}) async {
     try {
-      await FunctionsService.call(
-        functionName: 'trackExport',
-        payload: {
-          'summary': summary,
-          'target': target,
-          'extension': extension,
-        },
-      );
+      await FunctionsService.call(functionName: 'trackExport', payload: {'summary': summary, 'target': target, 'extension': extension});
     } catch (_) {}
   }
 
-  static Future<void> incrementSummaryExport({
-    String target = 'pdf',
-    String extension = 'pdf',
-  }) async {
-    return incrementExport(
-      summary: true,
-      target: target,
-      extension: extension,
-    );
+  static Future<void> incrementSummaryExport({String target = 'pdf', String extension = 'pdf'}) async =>
+      incrementExport(summary: true, target: target, extension: extension);
+
+  static Future<void> trackProInterest(String source) async {
+    try {
+      await FunctionsService.trackProInterest(source);
+    } catch (_) {}
   }
 
   static Future<void> resetLimits() async {
@@ -103,11 +77,7 @@ class UsageManager {
 
   static Future<Map<String, dynamic>> _getDashboard() async {
     try {
-      final result = await FunctionsService.call(
-        functionName: 'getUserDashboard',
-        payload: {'type': 'user'},
-      );
-      return result;
+      return await FunctionsService.call(functionName: 'getUserDashboard', payload: {'type': 'user'});
     } catch (e) {
       debugPrint('Error fetching dashboard: $e');
       return {};
@@ -115,23 +85,40 @@ class UsageManager {
   }
 
   static Future<int> freeGensRemaining() async {
-    final dashboard = await _getDashboard();
-    final metrics = dashboard['metrics'] ?? {};
-    return (AppConfig.coreDailyBatchesLimit - (metrics['coreGenCount'] ?? 0)).toInt();
+    final isProFlag = await isPro();
+    if (isProFlag) {
+      final dashboard = await _getDashboard();
+      final metrics = dashboard['metrics'] ?? {};
+      final used = metrics['proFreeGenCount'] ?? 0;
+      return (AppConfig.proFreeBatchesPerDay - used).toInt();
+    } else {
+      // Core has zero free generations
+      return 0;
+    }
   }
 
   static Future<int> rewardedGensRemaining() async {
     final dashboard = await _getDashboard();
     final metrics = dashboard['metrics'] ?? {};
     final used = metrics['rewardedGenCount'] ?? 0;
-    return (AppConfig.coreDailyBatchesLimit - used).toInt();
+    return (AppConfig.coreRewardedBatchesPerDay - used).toInt();
   }
 
   static Future<int> proGensRemaining() async {
     final dashboard = await _getDashboard();
     final metrics = dashboard['metrics'] ?? {};
-    final used = metrics['proGenCount'] ?? 0;
-    return (AppConfig.proDailyBatchesLimit - used).toInt();
+    final used = metrics['proFreeGenCount'] ?? 0;
+    return (AppConfig.proFreeBatchesPerDay - used).toInt();
+  }
+
+  static Future<Map<String, int>> getLifetimeStats() async {
+    final dashboard = await _getDashboard();
+    final metrics = dashboard['metrics'] ?? {};
+    final exports = dashboard['exports'] ?? {};
+    return {
+      'generations': (metrics['lifetimeGeneratedCases'] ?? 0) as int,
+      'exports': (exports['lifetimeExports'] ?? 0) as int,
+    };
   }
 
   static Future<DateTime?> getResetTime() async {
@@ -143,10 +130,7 @@ class UsageManager {
 
   static Future<int> rewardedExportsRemaining() async {
     try {
-      final result = await FunctionsService.call(
-        functionName: 'checkExportQuota',
-        payload: {'rewarded': true},
-      );
+      final result = await FunctionsService.call(functionName: 'checkExportQuota', payload: {'rewarded': true});
       return result['remaining'] ?? 0;
     } catch (_) {
       return 0;

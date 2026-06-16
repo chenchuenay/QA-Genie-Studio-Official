@@ -4,7 +4,6 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/app/theme/app_spacing.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/features/monetization/ui/upgrade_coming_soon_screen.dart';
 
 class UpgradeScreen extends StatefulWidget {
@@ -73,22 +72,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
         const SizedBox(height: AppSpacing.lg),
         _compactCompareCard(),
         const SizedBox(height: AppSpacing.xl),
-        Center(
-          child: TextButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Restore purchase (mock)"),
-                  backgroundColor: AppColors.textHint,
-                ),
-              );
-            },
-            child: const Text(
-              "Restore Purchase",
-              style: TextStyle(color: AppColors.textHint, fontSize: 14),
-            ),
-          ),
-        ),
+        // Restore Purchase hidden for initial launch (Investor request)
       ],
     );
   }
@@ -242,7 +226,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           height: 52,
           child: ElevatedButton(
             onPressed: () async {
-              await FunctionsService.trackProInterest('proTab');
+              // Master Alignment: Map 'Unlock Pro' to Firestore interests
+              await UsageManager.trackProInterest('upgrade_screen_cta');
+              
               if (!context.mounted) return;
               Navigator.push(
                 context,
@@ -267,22 +253,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Center(
-          child: TextButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Restore purchase (mock)"),
-                  backgroundColor: AppColors.textHint,
-                ),
-              );
-            },
-            child: const Text(
-              "Restore Purchase",
-              style: TextStyle(color: AppColors.textHint, fontSize: 14),
-            ),
-          ),
-        ),
+        // Restore Purchase hidden for initial launch (Investor request)
       ],
     );
   }

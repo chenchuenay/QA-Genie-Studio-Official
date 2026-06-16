@@ -14,14 +14,14 @@ import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
 
-class PreviewScreen extends StatefulWidget {
+class SuitePreviewScreen extends StatefulWidget {
   final GenerationSession session;
   final String moduleName;
   final String feature;
   final String platform;
   final int suiteId;
 
-  const PreviewScreen({
+  const SuitePreviewScreen({
     super.key,
     required this.session,
     required this.moduleName,
@@ -31,10 +31,10 @@ class PreviewScreen extends StatefulWidget {
   });
 
   @override
-  State<PreviewScreen> createState() => _PreviewScreenState();
+  State<SuitePreviewScreen> createState() => _SuitePreviewScreenState();
 }
 
-class _PreviewScreenState extends State<PreviewScreen>
+class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     with WidgetsBindingObserver {
   final ExportTestCasesUseCase _exportUseCase = ExportTestCasesUseCase();
   final SaveSuiteUseCase _saveUseCase = AppDependencies.saveSuiteUseCase;
@@ -119,7 +119,7 @@ class _PreviewScreenState extends State<PreviewScreen>
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
-        screen: 'PreviewScreen',
+        screen: 'SuitePreviewScreen',
         stage: ErrorStage.unknown,
         severity: ErrorSeverity.error,
         userMessage: 'Save failed: $e',
@@ -142,16 +142,14 @@ class _PreviewScreenState extends State<PreviewScreen>
       if (!mounted) return;
       showDialog(
         context: context,
-        builder: (_) => ExportSuccessDialog(
-          type: type,
-          moduleName: widget.moduleName,
-        ),
+        builder: (_) =>
+            ExportSuccessDialog(type: type, moduleName: widget.moduleName),
       );
     } catch (e, stackTrace) {
       UiErrorService.logAndShow(
         context: context,
         source: ErrorSource.exportEngine,
-        screen: 'PreviewScreen',
+        screen: 'SuitePreviewScreen',
         stage: ErrorStage.export,
         severity: ErrorSeverity.error,
         userMessage: 'Export failed: $e',
@@ -420,14 +418,16 @@ class _PreviewScreenState extends State<PreviewScreen>
             const Padding(
               padding: EdgeInsets.only(bottom: 4),
               child: Text(
-                'AI-generated content – please review and adjust before export.',
+                'Hybrid-logic generation orchestrated. Please review/adjust before export.',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: AppColors.textHint,
-                  fontSize: 10,
+                  fontSize: 11,
+                  color: Color(0xFF9E9E9E), // Colors.grey[500] hex
                   fontStyle: FontStyle.italic,
                 ),
               ),
             ),
+
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),

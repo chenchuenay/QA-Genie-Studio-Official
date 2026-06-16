@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 
 class AuthService {
@@ -9,18 +12,31 @@ class AuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   static Stream<User?> get authStateChanges => _auth.authStateChanges();
-
   static User? get currentUser => _auth.currentUser;
-
   static bool get isAnonymous => currentUser?.isAnonymous ?? false;
 
-  /// Link Google account to existing anonymous user.
-  /// If no anonymous user exists, it will create one.
+  // "Continue as guest" – uses custom token (persistent per device)
+  static Future<UserCredential> signInAsGuest() async {
+    debugPrint('🔐 AuthService: signInAsGuest start');
+    final deviceId = await DeviceUtils.getUniqueId();
+    final token = await FunctionsService.getGuestToken(deviceId: deviceId);
+    final credential = await _auth.signInWithCustomToken(token);
+    debugPrint('✅ Signed in as guest: ${credential.user?.uid}');
+    return credential;
+  }
+
+  // Link existing guest to Google account (upgrade)
   static Future<UserCredential> linkWithGoogle() async {
+    debugPrint('🔐 AuthService: linkWithGoogle start');
     try {
-      // Ensure an anonymous user exists
+      // Attempt to ensure a guest user exists first, but don't fail if guest creation fails
       if (_auth.currentUser == null) {
-        await _auth.signInAnonymously();
+        try {
+          await signInAsGuest();
+        } catch (e) {
+          debugPrint('⚠️ AuthService: Guest sign-in failed during link preparation: $e');
+          // We will proceed with a direct sign-in instead of a link if no user is present
+        }
       }
 
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
@@ -28,101 +44,60 @@ class AuthService {
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
       final User? current = _auth.currentUser;
-      if (current == null) throw Exception('No authenticated user');
+      UserCredential result;
 
-      try {
-        final UserCredential result = await current.linkWithCredential(
-          credential,
-        );
-        await _updateUserDocumentWithRetry(result.user!);
-        return result;
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'credential-already-in-use') {
-          // If already linked to another account, sign in with that one instead
-          debugPrint('AuthService: Credential in use, switching accounts');
-          final result = await _auth.signInWithCredential(credential);
-          await _updateUserDocumentWithRetry(result.user!);
-          return result;
+      if (current != null) {
+        try {
+          result = await current.linkWithCredential(credential);
+          debugPrint('✅ Linked guest to Google, UID remains: ${result.user?.uid}');
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'credential-already-in-use' || e.code == 'provider-already-linked') {
+            debugPrint('🔄 Credential in use or already linked, switching accounts');
+            result = await _auth.signInWithCredential(credential);
+          } else {
+            rethrow;
+          }
         }
-        rethrow;
+      } else {
+        debugPrint('🔄 No current user, performing direct Google sign-in');
+        result = await _auth.signInWithCredential(credential);
       }
+
+      final user = result.user!;
+      final deviceId = await DeviceUtils.getUniqueId();
+      
+      // Attempt to sync with backend, but don't block the UI on it
+      unawaited(FunctionsService.linkGoogleAccount(
+        email: user.email ?? googleUser.email,
+        displayName: user.displayName ?? googleUser.displayName ?? '',
+        deviceId: deviceId,
+      ).catchError((e) => debugPrint('⚠️ linkGoogleAccount backend sync failed: $e')));
+
+      debugPrint('✅ Google account process completed');
+      return result;
     } catch (e) {
+      debugPrint('❌ linkWithGoogle failed: $e');
       throw Exception('Authentication failed: $e');
     }
   }
 
-  static Future<void> _updateUserDocumentWithRetry(
-    User user, {
-    int maxRetries = 3,
-  }) async {
-    for (int i = 0; i < maxRetries; i++) {
-      try {
-        await _updateUserDocument(user);
-        return;
-      } catch (e) {
-        if (i == maxRetries - 1) rethrow;
-        await Future.delayed(Duration(milliseconds: 500 * (i + 1)));
-      }
-    }
+  // Sign out and return to guest state
+  static Future<void> signOut() async {
+    debugPrint('🔐 AuthService: signOut');
+    await _googleSignIn.signOut();
+    await _auth.signOut();
+    await signInAsGuest();
   }
 
-  static Future<void> _updateUserDocument(User user) async {
-    final userRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid);
-    final doc = await userRef.get();
-    final now = FieldValue.serverTimestamp();
-
-    if (!doc.exists) {
-      await userRef.set({
-        'uid': user.uid,
-        'provider': 'google',
-        'isGuest': false,
-        'createdAt': now,
-        'lastLoginAt': now,
-        'email': user.email,
-        'displayName': user.displayName,
-        'photoUrl': user.photoURL,
-        'accountType': 'google',
-        'linkedAt': now,
-      });
-    } else {
-      await userRef.update({
-        'provider': 'google',
-        'isGuest': false,
-        'lastLoginAt': now,
-        'email': user.email,
-        'displayName': user.displayName,
-        'photoUrl': user.photoURL,
-        'accountType': 'google',
-        'linkedAt': now,
-      });
-    }
-  }
-
-  static Future<User> ensureAnonymous() async {
-    User? user = _auth.currentUser;
-    if (user == null) {
-      final cred = await _auth.signInAnonymously();
-      user = cred.user;
-      // Fetch and persist guest name on first creation
-      try {
-        await FunctionsService.call(functionName: 'getGuestName');
-      } catch (_) {}
-    } else if (!user.isAnonymous) {
-      return user;
-    }
-    return user!;
-  }
-
+  // Legacy anonymous sign‑in (kept for compatibility)
   static Future<UserCredential> signInAnonymously() async {
+    debugPrint('🔐 AuthService: signInAnonymously (legacy)');
     final cred = await _auth.signInAnonymously();
     try {
       await FunctionsService.call(functionName: 'getGuestName');

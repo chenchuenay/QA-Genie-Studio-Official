@@ -7,6 +7,7 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/data/dto/generation_dto.dart';
+import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
@@ -14,22 +15,19 @@ import 'package:qa_genie/core/state/generation_state.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/shared/ui/no_internet_screen.dart';
+import 'package:qa_genie/shared/widgets/animated_dots.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
-import 'package:qa_genie/features/beta/logic/beta_manager.dart';
-import 'package:qa_genie/features/monetization/ads/ad_units.dart';
+import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
-import 'package:qa_genie/features/monetization/ads/ad_service.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
-import 'package:qa_genie/core/forensics/forensics_provider.dart';
-import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
-import 'package:qa_genie/engine/models/pipeline_models.dart';
-import 'package:qa_genie/shared/widgets/animated_dots.dart';
+import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
-
-import 'package:qa_genie/core/utils/device_utils.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
+import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
+import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -58,13 +56,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String platform = 'Web';
   bool loading = false;
   bool _isPro = false;
-  int _rewardedRemaining = 6;
-  int _proRemaining = 15;
+  int _rewardedRemaining = AppConfig.coreRewardedBatchesPerDay;
+  int _proRemaining = AppConfig.proFreeBatchesPerDay;
   DateTime? _resetTime;
 
   @override
   void initState() {
     super.initState();
+    AdManager().loadRewardedAd();
     _authSubscription = AuthService.authStateChanges.listen((user) {
       if (user != null) _refreshStatus();
     });
@@ -97,12 +96,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   String _generationHint() {
     if (_isPro) {
-      return 'Generates ${AppConfig.proCasesPerBatch} test cases per batch ($_proRemaining/15 left)';
+      return 'Generates ${AppConfig.proCasesPerBatch} test cases per batch ($_proRemaining/${AppConfig.proFreeBatchesPerDay} left)';
     } else {
       if (_rewardedRemaining > 0) {
         return 'Watch ads for $_rewardedRemaining more generations today (${AppConfig.coreCasesPerBatch} cases each)';
       }
-
       String resetText = '';
       if (_resetTime != null) {
         final now = DateTime.now();
@@ -115,9 +113,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           resetText = ' • Resets in ${h}h ${m}m';
         }
       }
-
-      final suffix = AppConfig.isProduction ? '' : ' or reset limits in Test mode.';
-      return 'Daily limit reached. Upgrade to PRO$resetText$suffix';
+      final suffix = AppConfig.isProduction
+          ? ''
+          : ' or reset limits in Test mode.';
+      return 'Daily limit reached. quota resests in $resetText$suffix';
     }
   }
 
@@ -135,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         child: SafeArea(
           child: ValueListenableBuilder<bool>(
-            valueListenable: AdService.isAdLoading,
+            valueListenable: AdManager().isAdLoading,
             builder: (context, isAdLoading, _) {
               final fullLock = loading || isAdLoading;
               return AbsorbPointer(
@@ -144,7 +143,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   children: [
                     Expanded(
                       child: SingleChildScrollView(
-                        physics: fullLock ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+                        physics: fullLock
+                            ? const NeverScrollableScrollPhysics()
+                            : const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.all(20),
                         child: Form(
                           key: formKey,
@@ -170,7 +171,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   mCtrl,
                                   maxLength: 40,
                                   enabled: !fullLock,
-                                  validator: (v) => (v == null || v.trim().isEmpty)
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
                                       ? 'Required'
                                       : null,
                                 ),
@@ -184,7 +186,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   fCtrl,
                                   maxLength: 70,
                                   enabled: !fullLock,
-                                  validator: (v) => (v == null || v.trim().isEmpty)
+                                  validator: (v) =>
+                                      (v == null || v.trim().isEmpty)
                                       ? 'Required'
                                       : null,
                                 ),
@@ -239,21 +242,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: Container(
                         key: HomeScreen.generateKey,
                         child: ValueListenableBuilder<bool>(
-                          valueListenable: AdService.isAdLoading,
+                          valueListenable: AdManager().isAdLoading,
                           builder: (context, isAdLoading, _) {
                             final lock = loading || isAdLoading;
                             return Opacity(
                               opacity: lock ? 0.5 : 1.0,
                               child: _generateBtn(lock),
                             );
-                          }
+                          },
                         ),
                       ),
                     ),
                   ],
                 ),
               );
-            }
+            },
           ),
         ),
       ),
@@ -438,24 +441,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _generate() async {
-    FocusManager.instance.primaryFocus?.unfocus(); // Kill keyboard instantly
-    if (!formKey.currentState!.validate()) return;
-    
-    // Set loading true immediately to block UI leaks
+    debugPrint('🚀 _generate: Initializing');
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!formKey.currentState!.validate()) {
+      debugPrint('❌ _generate: Validation failed');
+      return;
+    }
+
     setState(() => loading = true);
     GenerationState.isGenerating.value = true;
 
     if (AppConfig.isProduction) {
+      debugPrint('🚀 _generate: Checking internet');
       final hasInternet = await NetworkGuard.hasInternet();
       if (!hasInternet) {
+        debugPrint('❌ _generate: No internet');
         if (mounted) setState(() => loading = false);
-        final shouldRetry = await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => NoInternetScreen(onRetry: () => _generate()),
-          ),
-        );
-        if (shouldRetry != true) return;
+        // Note: No SnackBar here
+        if (mounted)
+          setState(() {
+            loading = false;
+            GenerationState.isGenerating.value = false;
+          });
         return;
       }
     }
@@ -463,48 +470,66 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final isPro = await UsageManager.isPro();
     final deviceId = await DeviceUtils.getUniqueId();
     String? adToken;
-    
+
     if (!isPro) {
+      debugPrint('🚀 _generate: Showing ad dialog');
       final shouldWatch = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => const WatchAdDialog(featureName: 'Generate Test Cases'),
+        builder: (ctx) =>
+            const WatchAdDialog(featureName: 'Generate Test Cases'),
       );
-      
       if (shouldWatch != true) {
-        if (mounted) {
+        debugPrint('⚠️ _generate: Ad dialog cancelled');
+        if (mounted)
           setState(() {
             loading = false;
             GenerationState.isGenerating.value = false;
           });
-        }
         return;
       }
 
-      adToken = await AdService.showRewardedAd(
-        adUnitId: AdUnits.rewardedTcGeneration,
-        context: context,
-      );
-      if (adToken == null) {
-        if (mounted) {
+      debugPrint('🚀 _generate: Showing rewarded ad');
+      adToken = await AdManager().showRewardedAd();
+      if (adToken != null) {
+        debugPrint('🚀 _generate: Verifying ad token: $adToken');
+        // Removed SnackBar
+        final verified = await FunctionsService.verifyRewardAd(
+          adTransactionId: adToken,
+        );
+        if (!verified) {
+          debugPrint('❌ _generate: Ad verification failed');
+          if (mounted) {
+            setState(() {
+              loading = false;
+              GenerationState.isGenerating.value = false;
+            });
+            // Removed SnackBar
+          }
+          return;
+        }
+      } else {
+        debugPrint('❌ _generate: Ad token null (show ad failed)');
+        if (mounted)
           setState(() {
             loading = false;
             GenerationState.isGenerating.value = false;
           });
-        }
+        AdManager().showStatusDialog(context, onRetry: () => _generate());
         return;
       }
     }
-    final stopwatch = Stopwatch()..start();
-    stopwatch.stop();
 
     try {
       final module = mCtrl.text.trim();
       final feature = fCtrl.text.trim();
       final notes = cCtrl.text.trim();
       final currentPro = await UsageManager.isPro();
-      final hardLimit = currentPro ? 16 : 8;
+      final hardLimit = currentPro
+          ? AppConfig.proCasesPerBatch
+          : AppConfig.coreCasesPerBatch;
 
+      debugPrint('🚀 _generate: Calling generateUseCase (AI)');
       final session = await _generateUseCase.execute(
         dto: GenerationDto(
           module: module,
@@ -519,69 +544,70 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       );
 
+      debugPrint(
+        '🚀 _generate: AI Succeeded, Saving suite. Cases: ${session.testCases.length}',
+      );
+      // Removed SnackBar
+
+      debugPrint('🚀 _generate: Calling createSuite');
       final suiteId = await _saveSuiteUseCase.createSuite(
         module: module,
         feature: feature,
         platform: platform,
       );
-
+      debugPrint('🚀 _generate: Suite created: $suiteId, calling saveSuite');
       await _saveSuiteUseCase.saveSuite(
         suiteId: suiteId,
         cases: session.testCases,
       );
+      debugPrint('🚀 _generate: Suite saved');
 
-      // Capture Forensic Context
-      final forensicsContext = {
-        'app_tier': currentPro ? 'PRO' : 'CORE',
-        'quota_snapshot': currentPro ? _proRemaining : _rewardedRemaining,
-        'ad_load_latency_ms': stopwatch.elapsedMilliseconds,
-        'constraints_hash': notes.hashCode,
-        'app_version': '1.0.0', 
-      };
-      
-      // Update forensics
-      await ForensicsProvider.instance.saveSnapshot(
-        session: session,
-        auditReport: const PipelineAuditReport(traceId: ''),
-        rawAiResponse: '',
-        forensicsContext: forensicsContext,
-      );
-
+      debugPrint('🚀 _generate: Incrementing usage');
       await UsageManager.incrementGeneration(
         count: hardLimit,
         rewarded: !currentPro,
       );
-      await BetaManager.touch();
-      await AdService.maybeShowInterstitial();
-      await _refreshStatus();
 
-      if (!mounted) return;
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PreviewScreen(
-            session: session,
-            moduleName: module,
-            feature: feature,
-            platform: platform,
-            suiteId: suiteId,
-          ),
-        ),
-      );
-    } on QuotaExceededException catch (e) {
       if (mounted) {
-        _showLimitReachedDialog(e.message);
+        if (session.testCases.isNotEmpty) {
+          debugPrint('🚀 _generate: Navigating to SuitePreviewScreen');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SuitePreviewScreen(
+                session: session,
+                moduleName: module,
+                feature: feature,
+                platform: platform,
+                suiteId: suiteId,
+              ),
+            ),
+          );
+        } else {
+          debugPrint('⚠️ _generate: No test cases returned');
+          // Removed SnackBar
+        }
       }
+    } on QuotaExceededException catch (e) {
+      debugPrint('❌ _generate: Quota exceeded: $e');
+      if (mounted) _showLimitReachedDialog(e);
     } catch (e, stackTrace) {
+      debugPrint('❌ _generate: Unexpected error: $e');
+      debugPrint(stackTrace.toString());
       UiErrorService.handle(e, stackTrace: stackTrace, category: 'generation');
       if (!mounted) return;
       showBlurredDialog(
         context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppColors.surface,
-          title: const Text('Generation Failed', style: TextStyle(color: Colors.white)),
-          content: Text('$e', style: const TextStyle(color: AppColors.textSecondary)),
+          title: const Text(
+            'Generation Failed',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            '$e',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -598,14 +624,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() => loading = false);
-        GenerationState.isGenerating.value = false;
-      }
+      debugPrint('🚀 _generate: Flow completed (finally)');
+      if (mounted)
+        setState(() {
+          loading = false;
+          GenerationState.isGenerating.value = false;
+        });
     }
   }
 
-  void _showLimitReachedDialog(String message) {
+  void _showLimitReachedDialog(QuotaExceededException e) {
+    String message = e.message;
+    if (e.resetTimeMillis != null) {
+      final hours = (e.resetTimeMillis! / (1000 * 60 * 60)).floor();
+      final minutes = ((e.resetTimeMillis! / (1000 * 60)) % 60).floor();
+      message += '\n\nResets in ${hours}h ${minutes}m.';
+    } else {
+      message +=
+          '\n\nYou have used all your generations for today. Limits reset every 24 hours.';
+    }
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -619,27 +656,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ],
         ),
         content: Text(
-          '$message\n\nYou have used all your generations for today. Limits reset every 24 hours.',
+          message,
           style: const TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Maybe Later', style: TextStyle(color: AppColors.textHint)),
-          ),
-          ElevatedButton(
-          onPressed: () {
-            Navigator.pop(ctx);
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => UpgradeScreen()),
-            );
-          },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: Colors.black,
+            child: const Text(
+              'Got it',
+              style: TextStyle(color: AppColors.accent),
             ),
-            child: const Text('Upgrade to PRO'),
           ),
         ],
       ),

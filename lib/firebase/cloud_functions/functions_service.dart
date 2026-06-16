@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
+import 'package:qa_genie/firebase/app_check/app_check_service.dart';
 
 class FunctionsService {
   const FunctionsService();
@@ -36,7 +37,27 @@ class FunctionsService {
     Map<String, dynamic>? payload,
     Duration timeout = const Duration(seconds: 120),
   }) async {
-    debugPrint('📡 FUNCTIONS_SERVICE: Calling $functionName');
+    debugPrint('📡 FUNCTIONS_SERVICE [DIAGNOSTIC_V3]: Calling $functionName');
+    
+    // 🛡️ DIAGNOSTIC: Check App Check state (with timeout to prevent hanging)
+    try {
+      debugPrint('🛡️ FUNCTIONS_SERVICE [DIAGNOSTIC_V3]: Requesting AppCheck Token...');
+      final appCheckToken = await AppCheckService.getToken().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          debugPrint('🛡️ FUNCTIONS_SERVICE: AppCheck Token request TIMEOUT');
+          return null;
+        },
+      );
+      debugPrint('🛡️ FUNCTIONS_SERVICE: AppCheck Token present: ${appCheckToken != null && appCheckToken.isNotEmpty}');
+    } catch (e) {
+      debugPrint('🛡️ FUNCTIONS_SERVICE: AppCheck diagnostic error: $e');
+    }
+
+    if (payload != null) {
+      debugPrint('📦 FUNCTIONS_SERVICE: Payload keys: ${payload.keys.toList()}');
+    }
+
     final startTime = DateTime.now();
 
     try {
@@ -106,21 +127,21 @@ class FunctionsService {
   }
 
   static Future<Map<String, dynamic>> getUserStats() async {
-    final result = await call(functionName: 'getUserStats', payload: {});
-    // Force cast to Map<String, dynamic>
-    return Map<String, dynamic>.from(result as Map);
+    return call(functionName: 'getUserDashboard', payload: {'type': 'user'});
   }
 
   static Future<void> trackGenerationUsage() async {
-    await call(functionName: 'trackGenerationUsage');
+    // Redundant as 'generate' now tracks usage server-side, but keep for manual fallbacks
+    await call(functionName: 'trackGeneration');
   }
 
   static Future<bool> verifyReward({required String rewardToken}) async {
+    // Note: Reusing trackExport with token for now or we can add a specific verifier
     final result = await call(
-      functionName: 'verifyRewardedAd',
-      payload: {'rewardToken': rewardToken},
+      functionName: 'trackExport',
+      payload: {'adToken': rewardToken, 'exportType': 'reward_verification'},
     );
-    return result['verified'] == true;
+    return result['success'] == true;
   }
 
   static Future<bool> healthCheck() async {
@@ -166,6 +187,46 @@ class FunctionsService {
     await call(
       functionName: 'trackValidatorRejected',
       payload: {'rejectedCount': rejectedCount},
+    );
+  }
+
+  static Future<String> getGuestToken({required String deviceId}) async {
+    final result = await call(
+      functionName: 'getOrCreateGuestToken',
+      payload: {'deviceId': deviceId},
+    );
+    // Check for success flag or presence of token
+    if (result.containsKey('token') && result['token'] is String) {
+      return result['token'] as String;
+    }
+    // Log the full error and throw
+    final error =
+        result['error'] ?? {'code': 'UNKNOWN', 'message': 'No token returned'};
+    throw Exception(
+      'Failed to get guest token: ${error['code']} - ${error['message']}',
+    );
+  }
+
+  static Future<bool> verifyRewardAd({required String adTransactionId}) async {
+    final result = await call(
+      functionName: 'verifyRewardAd',
+      payload: {'adTransactionId': adTransactionId},
+    );
+    return result['verified'] == true;
+  }
+
+  static Future<void> linkGoogleAccount({
+    required String email,
+    required String displayName,
+    required String deviceId,
+  }) async {
+    await call(
+      functionName: 'linkGoogleAccount',
+      payload: {
+        'email': email,
+        'displayName': displayName,
+        'deviceId': deviceId,
+      },
     );
   }
 }

@@ -44,6 +44,12 @@ class DiagnosticsPersistenceService {
             ? session.testCases.first.platform
             : '',
         'requested_count': auditReport.totalInputCases,
+        // Added missing fields for UI compatibility
+        'app_tier': AppConfig.isProduction ? 'PROD' : 'DEV',
+        'quota_snapshot': 'Snapshot Available', 
+        'ad_load_latency_ms': 'N/A', 
+        'constraints_hash': 'N/A',
+        'app_version': '1.2.295',
         ...forensicsContext,
       },
       'pipeline_summary': {

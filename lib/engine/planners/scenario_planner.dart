@@ -72,17 +72,31 @@ class ScenarioPlanner {
     }
 
     final totalNeeded = categoryCounts.values.fold(0, (a, b) => a + b);
-    if (scenarios.length < totalNeeded && reachable.isNotEmpty) {
-      final defaultRel = reachable.first;
-      while (scenarios.length < totalNeeded) {
-        scenarios.add(
-          Scenario(
-            entity: defaultRel.source,
-            action: defaultRel.action!,
-            targetState: defaultRel.toState ?? StateType.active,
-            category: 'positive',
-          ),
-        );
+    if (scenarios.length < totalNeeded) {
+      if (reachable.isNotEmpty) {
+        final defaultRel = reachable.first;
+        while (scenarios.length < totalNeeded) {
+          scenarios.add(
+            Scenario(
+              entity: defaultRel.source,
+              action: defaultRel.action!,
+              targetState: defaultRel.toState ?? StateType.active,
+              category: 'positive',
+            ),
+          );
+        }
+      } else {
+        // ULTIMATE FALLBACK: This should not happen with hardened seed entities
+        while (scenarios.length < totalNeeded) {
+          scenarios.add(
+            Scenario(
+              entity: EntityType.account,
+              action: ActionType.view,
+              targetState: StateType.active,
+              category: 'positive',
+            ),
+          );
+        }
       }
     }
     return scenarios.take(totalNeeded).toList();

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_spacing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
-import 'package:qa_genie/app/theme/app_colors.dart';
 
 class ReportIssueScreen extends StatefulWidget {
   final String? screen;
@@ -16,7 +17,8 @@ class ReportIssueScreen extends StatefulWidget {
   State<ReportIssueScreen> createState() => _ReportIssueScreenState();
 }
 
-class _ReportIssueScreenState extends State<ReportIssueScreen> with SingleTickerProviderStateMixin {
+class _ReportIssueScreenState extends State<ReportIssueScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -40,7 +42,10 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> with SingleTicker
         title: const Text('Support'),
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [Tab(text: 'Report Issue'), Tab(text: 'My Feedbacks')],
+          tabs: const [
+            Tab(text: 'Report Issue'),
+            Tab(text: 'My Feedbacks'),
+          ],
         ),
       ),
       body: TabBarView(
@@ -73,17 +78,24 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
   Future<void> _loadFeedbacks() async {
     final db = await DatabaseService.db;
     final data = await db.query('reported_issues', orderBy: 'createdAt DESC');
-    
+
     // Refresh status from Firestore if > 14 days
     List<Map<String, dynamic>> updatedData = List.from(data);
     for (int i = 0; i < updatedData.length; i++) {
       final item = Map<String, dynamic>.from(updatedData[i]);
       final firestoreId = item['firestoreId'];
-      final lastSync = item['lastSyncAttempt'] != null ? DateTime.parse(item['lastSyncAttempt']) : null;
+      final lastSync = item['lastSyncAttempt'] != null
+          ? DateTime.parse(item['lastSyncAttempt'])
+          : null;
 
-      if (firestoreId != null && (lastSync == null || DateTime.now().difference(lastSync).inDays >= 14)) {
+      if (firestoreId != null &&
+          (lastSync == null ||
+              DateTime.now().difference(lastSync).inDays >= 14)) {
         try {
-          final doc = await FirebaseFirestore.instance.collection('issue_reports').doc(firestoreId).get();
+          final doc = await FirebaseFirestore.instance
+              .collection('issue_reports')
+              .doc(firestoreId)
+              .get();
           if (doc.exists) {
             final newStatus = doc.data()?['status'] ?? 'open';
             await DatabaseService.updateIssueStatus(item['id'], newStatus);
@@ -95,7 +107,7 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
         }
       }
     }
-    
+
     if (mounted) setState(() => _feedbacks = updatedData);
   }
 
@@ -115,8 +127,13 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
               const SizedBox(height: AppSpacing.md),
               ElevatedButton(
                 onPressed: () => DefaultTabController.of(context).animateTo(0),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-                child: const Text('Share Feedback', style: TextStyle(color: Colors.black)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                ),
+                child: const Text(
+                  'Share Feedback',
+                  style: TextStyle(color: Colors.black),
+                ),
               ),
             ],
           ),
@@ -132,7 +149,10 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
         return Card(
           color: AppColors.surface,
           child: ListTile(
-            title: Text(item['title'], style: const TextStyle(color: Colors.white)),
+            title: Text(
+              item['title'],
+              style: const TextStyle(color: Colors.white),
+            ),
             subtitle: Text(
               '${item['issueType']} • Status: ${item['status']}',
               style: const TextStyle(color: AppColors.textHint),
@@ -244,7 +264,10 @@ class _ReportFormViewState extends State<_ReportFormView> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppColors.surface,
-          title: const Text('Thank you!', style: TextStyle(color: Colors.white)),
+          title: const Text(
+            'Thank you!',
+            style: TextStyle(color: Colors.white),
+          ),
           content: const Text(
             'Your feedback has been submitted successfully.',
             style: TextStyle(color: AppColors.textSecondary),
@@ -255,7 +278,10 @@ class _ReportFormViewState extends State<_ReportFormView> {
                 Navigator.pop(ctx);
                 Navigator.pop(context);
               },
-              child: const Text('Close', style: TextStyle(color: AppColors.accent)),
+              child: const Text(
+                'Close',
+                style: TextStyle(color: AppColors.accent),
+              ),
             ),
           ],
         ),
@@ -275,6 +301,33 @@ class _ReportFormViewState extends State<_ReportFormView> {
 
   @override
   Widget build(BuildContext context) {
+    if (AuthService.isAnonymous) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Sign in to share feedback',
+                  style: TextStyle(color: Colors.white, fontSize: 18)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  showDialog(
+                      context: context,
+                      builder: (ctx) =>
+                          const AuthDialog(showGuestButton: false));
+                },
+                style:
+                    ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+                child:
+                    const Text('Sign In', style: TextStyle(color: Colors.black)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Form(
       key: _formKey,
       child: SingleChildScrollView(
@@ -289,7 +342,9 @@ class _ReportFormViewState extends State<_ReportFormView> {
             DropdownButtonFormField<String>(
               value: _issueType,
               items: _issueTypes
-                  .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                  .map(
+                    (type) => DropdownMenuItem(value: type, child: Text(type)),
+                  )
                   .toList(),
               onChanged: (val) => setState(() => _issueType = val!),
               decoration: InputDecoration(
@@ -315,7 +370,8 @@ class _ReportFormViewState extends State<_ReportFormView> {
                   borderRadius: BorderRadius.circular(AppRadius.input),
                 ),
               ),
-              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: AppSpacing.md),
             const Text('Description', style: AppText.label),
@@ -325,7 +381,8 @@ class _ReportFormViewState extends State<_ReportFormView> {
               maxLines: 5,
               maxLength: 200,
               decoration: InputDecoration(
-                hintText: 'Describe what happened, steps to reproduce, etc. (optional)',
+                hintText:
+                    'Describe what happened, steps to reproduce, etc. (optional)',
                 filled: true,
                 fillColor: AppColors.surface,
                 border: OutlineInputBorder(
@@ -338,7 +395,8 @@ class _ReportFormViewState extends State<_ReportFormView> {
               children: [
                 Checkbox(
                   value: _includeDeviceInfo,
-                  onChanged: (val) => setState(() => _includeDeviceInfo = val ?? true),
+                  onChanged: (val) =>
+                      setState(() => _includeDeviceInfo = val ?? true),
                   activeColor: AppColors.accent,
                 ),
                 const Text('Include device information', style: AppText.body),

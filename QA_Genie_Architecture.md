@@ -140,12 +140,9 @@ free tier
 
 Limits:
 
-- 8 testcases per generation
-- 1 free generation initially
-- +5 rewarded generations/day
-- 1 free testcase export lifetime
+- 10 testcases per generation
+- 6 rewarded generations/day
 - +50 rewarded exports/day
-- 1 free summary export lifetime
 - +50 rewarded summary exports/day
 
 Pipeline:
@@ -167,7 +164,7 @@ Differences vs PRO:
 
 Limits:
 
-- 16 testcases per generation
+- 20 testcases per generation
 - 15 generations/day
 - unlimited testcase exports
 - unlimited summary exports

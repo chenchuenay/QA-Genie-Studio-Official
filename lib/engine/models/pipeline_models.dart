@@ -166,7 +166,8 @@ class WorkingCase {
 class QuotaExceededException implements Exception {
   final String message;
   final bool isRateLimit;
-  QuotaExceededException(this.message, {this.isRateLimit = false});
+  final int? resetTimeMillis;
+  QuotaExceededException(this.message, {this.isRateLimit = false, this.resetTimeMillis});
   @override
   String toString() => 'QuotaExceededException: $message';
 }

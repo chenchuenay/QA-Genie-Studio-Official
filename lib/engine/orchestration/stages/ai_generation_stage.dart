@@ -94,6 +94,7 @@ class AiGenerationStage {
     final result = await FunctionsService.call(
       functionName: 'generate',
       payload: {
+        'requestId': request.traceId,
         'prompt': prompt,
         'module': request.module,
         'feature': request.feature,

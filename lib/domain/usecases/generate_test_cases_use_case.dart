@@ -66,9 +66,17 @@ class GenerateTestCasesUseCase {
       // Check for Quota/Rate Limit block before any fallback can happen
       if (result.auditReport.aiHttpStatusCode == 403 || 
           result.auditReport.aiHttpStatusCode == 429) {
+        final errorMessage = result.auditReport.aiErrorMessage ?? 'Daily limit reached.';
+        int? resetTime;
+        if (errorMessage.contains('|')) {
+          final parts = errorMessage.split('|');
+          resetTime = int.tryParse(parts[1]);
+        }
+        
         throw QuotaExceededException(
-          result.auditReport.aiErrorMessage ?? 'Daily limit reached.',
+          errorMessage.split('|')[0],
           isRateLimit: result.auditReport.aiHttpStatusCode == 429,
+          resetTimeMillis: resetTime,
         );
       }
 
@@ -89,7 +97,10 @@ class GenerateTestCasesUseCase {
       }
 
       return session;
-    } catch (e, st) {
+    } catch (e) {
+      if (e is QuotaExceededException) {
+        rethrow;
+      }
       // ----- AI failed – fall back to deterministic engine -----
       debugPrint('AI generation failed, using deterministic engine: $e');
       

@@ -11,7 +11,7 @@ import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
 import 'package:qa_genie/features/monetization/ads/ad_units.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/export/common/export_mapper.dart';
-import 'package:qa_genie/features/monetization/ads/ad_service.dart';
+import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
@@ -370,12 +370,17 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     final isPro = await UsageManager.isPro();
     String? adToken;
     if (!isPro) {
-      adToken = await AdService.showRewardedAd(
+      adToken = await AdManager().showRewardedAd(
         adUnitId: AdUnits.rewardedTcExport,
-        context: context,
       );
       if (adToken == null) {
-        if (mounted) setState(() => _isProcessing = false);
+        if (mounted) {
+          setState(() => _isProcessing = false);
+          AdManager().showStatusDialog(
+            context,
+            onRetry: () => _performExport(),
+          );
+        }
         return;
       }
     }
@@ -739,7 +744,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     );
 
     return ValueListenableBuilder<bool>(
-      valueListenable: AdService.isAdLoading,
+      valueListenable: AdManager().isAdLoading,
       builder: (context, isAdLoading, _) {
         final fullLock = _isProcessing || isAdLoading || _isSharing;
         

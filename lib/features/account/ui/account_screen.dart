@@ -3,20 +3,19 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:qa_genie/app/theme/app_spacing.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:qa_genie/app/theme/app_colors.dart';
-import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
-import 'package:qa_genie/features/auth/services/auth_service.dart';
-import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
-import 'package:qa_genie/features/support/ui/report_issue_screen.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
-import 'package:qa_genie/features/legal/ui/terms_privacy_policy.dart';
 import 'package:qa_genie/features/legal/ui/about_screen.dart';
+import 'package:qa_genie/features/auth/services/auth_service.dart';
+import 'package:qa_genie/features/legal/ui/terms_privacy_policy.dart';
+import 'package:qa_genie/features/support/ui/report_issue_screen.dart';
+import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -65,16 +64,30 @@ class _AccountScreenState extends State<AccountScreen> {
     final generations = prefs.getInt('stats_generations') ?? 0;
     final exports = prefs.getInt('stats_exports') ?? 0;
     final lastSync = prefs.getInt('stats_last_sync') ?? 0;
-    
+
     if (mounted) {
       setState(() {
         _totalGenerations = generations;
         _totalExports = exports;
         if (lastSync > 0) {
-          final diff = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(lastSync));
-          _lastSyncedText = diff.inHours < 24 ? 'Sync just now' : 'Synced ${diff.inDays}d ago';
+          final diff = DateTime.now().difference(
+            DateTime.fromMillisecondsSinceEpoch(lastSync),
+          );
+          
+          if (diff.inMinutes < 30) {
+            _lastSyncedText = 'Sync just now';
+          } else if (diff.inHours < 24) {
+            _lastSyncedText = '${diff.inHours} ${diff.inHours == 1 ? 'hour' : 'hours'} ago';
+          } else if (diff.inDays < 7) {
+            _lastSyncedText = '${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'} ago';
+          } else if (diff.inDays < 30) {
+            final weeks = (diff.inDays / 7).floor();
+            _lastSyncedText = '$weeks ${weeks == 1 ? 'week' : 'weeks'} ago';
+          } else {
+            _lastSyncedText = '1 month ago';
+          }
         } else {
-          _lastSyncedText = 'Sync just now';
+          _lastSyncedText = 'Syncing...';
         }
       });
     }
@@ -92,26 +105,28 @@ class _AccountScreenState extends State<AccountScreen> {
     DateTime? memberSince;
 
     try {
+      final stats = await UsageManager.getLifetimeStats();
+      generations = stats['generations'] ?? 0;
+      exports = stats['exports'] ?? 0;
+
       if (user != null && !user.isAnonymous) {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
         if (userDoc.exists) {
           final createdAt = userDoc.data()?['createdAt'] as Timestamp?;
           if (createdAt != null) memberSince = createdAt.toDate();
         }
       }
 
-      if (user != null) {
-        final usageDoc = await FirebaseFirestore.instance.collection('usage').doc(user.uid).get();
-        if (usageDoc.exists) {
-          generations = (usageDoc.data()?['lifetimeGeneratedCases'] ?? 0) as int;
-          exports = (usageDoc.data()?['lifetimeExports'] ?? 0) as int;
-          
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setInt('stats_generations', generations);
-          await prefs.setInt('stats_exports', exports);
-          await prefs.setInt('stats_last_sync', DateTime.now().millisecondsSinceEpoch);
-        }
-      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('stats_generations', generations);
+      await prefs.setInt('stats_exports', exports);
+      await prefs.setInt(
+        'stats_last_sync',
+        DateTime.now().millisecondsSinceEpoch,
+      );
     } catch (e) {
       debugPrint('AccountScreen: Error loading data: $e');
     }
@@ -136,15 +151,21 @@ class _AccountScreenState extends State<AccountScreen> {
         backgroundColor: AppColors.surface,
         title: const Text('Sign Out?', style: TextStyle(color: Colors.white)),
         content: const Text(
-          'Your generated suites and exports remain on this device. Cloud sync is coming soon.',
+          'You will be signed out of your Google account and switched to a guest session. Your data will remain saved if you sign back in.',
           style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Sign Out', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'Sign Out',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -159,13 +180,14 @@ class _AccountScreenState extends State<AccountScreen> {
     await prefs.remove('stats_last_sync');
     await GoogleSignIn().signOut();
     await FirebaseAuth.instance.signOut();
-    
-    // 🔄 AUTO-SWITCH: Immediately pivot back to a guest identity
+
+    // After signing out, we need to sign in with the persistent guest account (per device)
+    // This is currently creating a new guest each time – we will fix it in the next step.
     await AuthService.signInAnonymously();
-    
+
     if (mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
-      _loadData(); // Reload to show Guest name
+      _loadData();
     }
   }
 
@@ -185,14 +207,7 @@ class _AccountScreenState extends State<AccountScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          if (_user != null && !_user!.isAnonymous)
-            IconButton(
-              icon: const Icon(Icons.logout, color: AppColors.accent),
-              tooltip: 'Sign Out',
-              onPressed: _confirmLogout,
-            ),
-        ],
+        // Removed logout icon from app bar
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -216,7 +231,10 @@ class _AccountScreenState extends State<AccountScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Delete Account?', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Delete Account?',
+          style: TextStyle(color: Colors.white),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -225,7 +243,10 @@ class _AccountScreenState extends State<AccountScreen> {
               style: TextStyle(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 16),
-            const Text('Type "DELETE" to confirm', style: TextStyle(color: AppColors.textHint, fontSize: 12)),
+            const Text(
+              'Type "DELETE" to confirm',
+              style: TextStyle(color: AppColors.textHint, fontSize: 12),
+            ),
             TextField(
               controller: textController,
               decoration: const InputDecoration(hintText: 'DELETE'),
@@ -234,7 +255,10 @@ class _AccountScreenState extends State<AccountScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               if (textController.text == 'DELETE') {
@@ -252,25 +276,26 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _deleteAccount() async {
-    // 1. Call Backend
     try {
       await FunctionsService.call(functionName: 'deleteAccount', payload: {});
-      // 2. Perform local cleanup
       await _logout();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete account: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Failed to delete account: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
   }
 
   Widget _buildInfoCard(bool isAnonymous, String email, String displayName) {
-    final name = isAnonymous 
-      ? (displayName.isNotEmpty ? displayName : 'Guest') 
-      : (displayName.isNotEmpty ? displayName : email.split('@').first);
-      
+    final name = isAnonymous
+        ? (displayName.isNotEmpty ? displayName : 'Guest')
+        : (displayName.isNotEmpty ? displayName : email.split('@').first);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -292,7 +317,13 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
           if (!isAnonymous)
-            Text(email, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+            Text(
+              email,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+            ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -340,7 +371,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 child: const Text('Continue with Google'),
               ),
             ),
-          ]
+          ],
         ],
       ),
     );
@@ -370,7 +401,10 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   String _monthAbbr(int month) {
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
     return months[month - 1];
   }
 
@@ -410,7 +444,9 @@ class _AccountScreenState extends State<AccountScreen> {
             subtitle: 'Terms & Privacy Policy',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const TermsPrivacyPolicyScreen()),
+              MaterialPageRoute(
+                builder: (_) => const TermsPrivacyPolicyScreen(),
+              ),
             ),
           ),
           _divider(),
@@ -423,6 +459,7 @@ class _AccountScreenState extends State<AccountScreen> {
               MaterialPageRoute(builder: (_) => const AboutScreen()),
             ),
           ),
+          // Only show Sign Out for signed-in (non‑anonymous) users
           if (!isAnonymous) ...[
             _divider(),
             _menuItem(
@@ -467,10 +504,24 @@ class _AccountScreenState extends State<AccountScreen> {
     bool isDestructive = false,
   }) {
     return ListTile(
-      leading: Icon(icon, color: isDestructive ? AppColors.error : AppColors.accent, size: 24),
-      title: Text(title, style: TextStyle(color: isDestructive ? AppColors.error : Colors.white, fontWeight: FontWeight.w600)),
+      leading: Icon(
+        icon,
+        color: isDestructive ? AppColors.error : AppColors.accent,
+        size: 24,
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: isDestructive ? AppColors.error : Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       subtitle: Text(subtitle, style: AppText.hint),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textHint, size: 20),
+      trailing: const Icon(
+        Icons.chevron_right,
+        color: AppColors.textHint,
+        size: 20,
+      ),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
     );
@@ -489,11 +540,5 @@ class _AccountScreenState extends State<AccountScreen> {
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (ctx) => const AuthDialog(showGuestButton: false),
     );
-  }
-
-  void _launchUrl(String url) async {
-    if (await canLaunch(url)) {
-      await launch(url);
-    }
   }
 }

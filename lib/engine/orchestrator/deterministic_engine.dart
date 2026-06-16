@@ -97,6 +97,25 @@ class DeterministicEngine {
     return testCases;
   }
 
+  EntityType _fallbackEntityForDomain(String domainId) {
+    switch (domainId) {
+      case 'identity':
+        return EntityType.account;
+      case 'commerce':
+        return EntityType.item;
+      case 'transaction':
+        return EntityType.transaction;
+      case 'scheduling':
+        return EntityType.appointment;
+      case 'records':
+        return EntityType.record;
+      case 'integration':
+        return EntityType.request;
+      default:
+        return EntityType.item;
+    }
+  }
+
   String _priorityFromCategory(String category) {
     switch (category) {
       case 'security':
@@ -134,6 +153,9 @@ class DeterministicEngine {
       return {EntityType.labResult};
     if (f.contains('telehealth') || f.contains('consultation'))
       return {EntityType.consultation, EntityType.webhook};
-    return {};
+    
+    // Final fallback based on domain
+    final domain = DomainDetector.detect(module, feature);
+    return {_fallbackEntityForDomain(domain.id)};
   }
 }

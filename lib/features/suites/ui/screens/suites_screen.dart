@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
 import '../../../monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/shared/widgets/native_ad_widget.dart';
+import 'package:qa_genie/features/monetization/ads/ad_units.dart';
+import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
-import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart'; // ✅ correct import
 
 class SuitesScreen extends StatefulWidget {
   final VoidCallback? onGenerate;
@@ -26,6 +28,7 @@ class SuitesScreenState extends State<SuitesScreen> {
   @override
   void initState() {
     super.initState();
+    AdManager().loadRewardedAd(adUnitId: AdUnits.rewardedTcExport);
     _refreshSuites();
     _checkPro();
   }
@@ -220,9 +223,7 @@ class SuitesScreenState extends State<SuitesScreen> {
                 _renameSuite(id, s['moduleName'] ?? '');
               } else if (action == 'delete') {
                 final confirmed = await _confirmDelete(id);
-                if (confirmed == true) {
-                  _deleteSuite(id);
-                }
+                if (confirmed == true) _deleteSuite(id);
               }
             },
           ),
@@ -239,19 +240,18 @@ class SuitesScreenState extends State<SuitesScreen> {
               ),
             );
             if (!mounted) return;
-            await Navigator.push(
+            Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => PreviewScreen(
+                builder: (_) => SuitePreviewScreen(
                   session: session,
-                  moduleName: s['moduleName'] ?? '',
-                  feature: s['feature'] ?? '',
-                  platform: s['platform'] ?? '',
+                  moduleName: s['moduleName'] ?? 'Unknown',
+                  feature: s['feature'] ?? 'Unknown',
+                  platform: s['platform'] ?? 'Web',
                   suiteId: id,
                 ),
               ),
             );
-            refresh();
           },
         ),
       ),
@@ -326,21 +326,13 @@ class SuitesScreenState extends State<SuitesScreen> {
                     ],
                   );
                 }
-                
+
                 final children = <Widget>[];
-                // First suite card
                 children.add(_suiteCard(suites.first));
-                
-                // Native ad strictly at 2nd position (after the 1st suite)
-                if (!_isPro) {
-                  children.add(_adPlaceholder());
-                }
-                
-                // Rest of the suites
-                for (int i = 1; i < suites.length; i++) {
+                if (!_isPro) children.add(_adPlaceholder());
+                for (int i = 1; i < suites.length; i++)
                   children.add(_suiteCard(suites[i]));
-                }
-                
+
                 return RefreshIndicator(
                   onRefresh: () async {
                     refresh();

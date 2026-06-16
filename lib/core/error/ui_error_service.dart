@@ -106,13 +106,7 @@ timestamp=${event.timestamp.toIso8601String()}
       isFatal: severity == ErrorSeverity.fatal,
     );
 
-    if (!context.mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(userMessage)));
+    // No longer showing SnackBar to user
   }
 
   static String userFriendlyMessage(Object error) {
