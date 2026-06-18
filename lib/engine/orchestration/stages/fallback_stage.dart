@@ -1,3 +1,4 @@
+import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/adapters/working_case_adapter.dart';
 import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
@@ -19,6 +20,7 @@ class FallbackStage {
       platform: request.platform,
       constraints: request.constraints,
       targetCount: coverage.missingCount,
+      mode: GenerationMode.values.byName(request.generationMode),
     );
     final missingFinalized = await engine.generate();
     final missingWorking = missingFinalized

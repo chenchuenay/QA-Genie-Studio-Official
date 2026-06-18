@@ -1,3 +1,17 @@
 #!/bin/bash
-# QA Genie default dev runner
-flutter run --flavor dev "$@"
+# QA Genie runner
+# Usage: ./run              → dev debug (default)
+#        ./run prod         → prod debug
+#        ./run prod-release → prod release
+
+set -e
+
+MODE="${1:-dev}"
+
+if [ "$MODE" = "prod" ]; then
+  flutter run --flavor prod --dart-define=MODE=prod "${@:2}"
+elif [ "$MODE" = "prod-release" ]; then
+  flutter run --release --flavor prod --dart-define=MODE=prod "${@:2}"
+else
+  flutter run --flavor dev --dart-define=MODE=dev "$@"
+fi

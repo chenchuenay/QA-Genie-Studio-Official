@@ -1,28 +1,52 @@
 import 'package:flutter/foundation.dart';
 import 'package:qa_genie/app/config/app_config.dart';
-import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
+import 'package:qa_genie/features/auth/services/auth_service.dart';
 
 class UsageManager {
   static const _proKey = 'is_pro';
+  static Map<String, dynamic>? _dashboardCache;
+  static DateTime? _dashboardCacheTime;
+  static String? _dashboardCacheUid;
+  static const Duration _cacheDuration = Duration(seconds: 60);
 
   static Future<SharedPreferences> _prefs() async => SharedPreferences.getInstance();
 
   static Future<bool> isPro() async {
-    if (!EnvironmentAuthority.isProduction && AppConfig.testProMode) return true;
-    final prefs = await _prefs();
-    return prefs.getBool(_proKey) ?? false;
+    // Dev override via test mode screen
+    if (AppConfig.testProMode) return true;
+
+    // Read from Firestore (server-authoritative) via dashboard
+    final dashboard = await _getDashboard();
+    if (dashboard['isPro'] == true) return true;
+
+    // Fallback: SharedPreferences (dev mode only; production is server-authoritative)
+    if (!AppConfig.isProduction) {
+      final prefs = await _prefs();
+      return prefs.getBool(_proKey) ?? false;
+    }
+    return false;
   }
 
   static Future<void> setPro(bool value) async {
-    if (!AppConfig.allowDebugTools) return;
+    if (!AppConfig.allowDebugTools) {
+      if (value) {
+        debugPrint('⚠️ UsageManager.setPro: blocked in production; grant via Firestore console');
+      }
+      return;
+    }
     final prefs = await _prefs();
     await prefs.setBool(_proKey, value);
     try {
       await FunctionsService.call(functionName: 'setUserPro', payload: {'isPro': value});
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('UsageManager.setPro error: $e');
+    }
   }
+
+  static int _clampRemaining(num limit, num used) =>
+      (limit - used).toInt().clamp(0, limit.toInt());
 
   static Future<bool> canGenerate({bool afterRewardedAd = false}) async {
     try {
@@ -40,7 +64,8 @@ class UsageManager {
     try {
       final result = await FunctionsService.call(functionName: 'checkExportQuota', payload: {'rewarded': rewarded});
       return result['allowed'] == true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('UsageManager.canGenerate error: $e');
       return false;
     }
   }
@@ -48,15 +73,31 @@ class UsageManager {
   static Future<bool> canExportSummary({bool rewarded = false}) async => canExport(rewarded: rewarded);
 
   static Future<void> incrementGeneration({int count = 8, bool rewarded = false}) async {
-    try {
-      await FunctionsService.call(functionName: 'trackGeneration', payload: {'generatedCount': count});
-    } catch (_) {}
+    _invalidateCache();
+  }
+
+  static void updateCacheFromUsage(Map<String, dynamic> usage) {
+    final uid = _currentUid();
+    _dashboardCache = {
+      'metrics': {
+        'rewardedGenCount': usage['rewardedGenCount'] ?? 0,
+        'proFreeGenCount': usage['proFreeGenCount'] ?? 0,
+        'lifetimeGeneratedCases': usage['lifetimeGeneratedCases'] ?? 0,
+      },
+      'resetTimestamp': usage['resetTimestamp'],
+      'isPro': usage['isPro'] ?? false,
+    };
+    _dashboardCacheTime = DateTime.now();
+    _dashboardCacheUid = uid;
   }
 
   static Future<void> incrementExport({bool summary = false, String target = 'unknown', String extension = ''}) async {
     try {
       await FunctionsService.call(functionName: 'trackExport', payload: {'summary': summary, 'target': target, 'extension': extension});
-    } catch (_) {}
+      _invalidateCache();
+    } catch (e) {
+      debugPrint('UsageManager.incrementExport error: $e');
+    }
   }
 
   static Future<void> incrementSummaryExport({String target = 'pdf', String extension = 'pdf'}) async =>
@@ -65,22 +106,61 @@ class UsageManager {
   static Future<void> trackProInterest(String source) async {
     try {
       await FunctionsService.trackProInterest(source);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('UsageManager.trackProInterest error: $e');
+    }
   }
 
   static Future<void> resetLimits() async {
     if (!AppConfig.allowDebugTools) return;
     try {
       await FunctionsService.call(functionName: 'resetDailyLimits');
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('UsageManager.resetLimits error: $e');
+    }
   }
 
+  static Future<Map<String, dynamic>>? _dashboardFetch;
+
+  static void invalidateCache() {
+    _dashboardCache = null;
+    _dashboardCacheTime = null;
+    _dashboardCacheUid = null;
+  }
+
+  static void _invalidateCache() => invalidateCache();
+
+  static String _currentUid() => AuthService.currentUser?.uid ?? 'guest';
+
   static Future<Map<String, dynamic>> _getDashboard() async {
+    final now = DateTime.now();
+    final uid = _currentUid();
+    if (_dashboardCache != null && _dashboardCacheUid == uid && _dashboardCacheTime != null && now.difference(_dashboardCacheTime!) < _cacheDuration) {
+      return _dashboardCache!;
+    }
+    // Deduplicate concurrent fetches
+    if (_dashboardFetch != null) {
+      await _dashboardFetch;
+      if (_dashboardCacheUid == uid) return _dashboardCache ?? {};
+    }
+    _dashboardFetch = _fetchDashboard(now, uid);
     try {
-      return await FunctionsService.call(functionName: 'getUserDashboard', payload: {'type': 'user'});
+      return await _dashboardFetch!;
+    } finally {
+      _dashboardFetch = null;
+    }
+  }
+
+  static Future<Map<String, dynamic>> _fetchDashboard(DateTime now, String uid) async {
+    try {
+      final result = await FunctionsService.call(functionName: 'getUserDashboard', payload: {'type': 'user'});
+      _dashboardCache = result;
+      _dashboardCacheTime = now;
+      _dashboardCacheUid = uid;
+      return result;
     } catch (e) {
       debugPrint('Error fetching dashboard: $e');
-      return {};
+      return _dashboardCache ?? {};
     }
   }
 
@@ -90,7 +170,7 @@ class UsageManager {
       final dashboard = await _getDashboard();
       final metrics = dashboard['metrics'] ?? {};
       final used = metrics['proFreeGenCount'] ?? 0;
-      return (AppConfig.proFreeBatchesPerDay - used).toInt();
+      return _clampRemaining(AppConfig.proFreeBatchesPerDay, used);
     } else {
       // Core has zero free generations
       return 0;
@@ -99,16 +179,33 @@ class UsageManager {
 
   static Future<int> rewardedGensRemaining() async {
     final dashboard = await _getDashboard();
+    final remaining = dashboard['rewardedGensRemaining'];
+    if (remaining is int) return remaining;
     final metrics = dashboard['metrics'] ?? {};
     final used = metrics['rewardedGenCount'] ?? 0;
-    return (AppConfig.coreRewardedBatchesPerDay - used).toInt();
+    return _clampRemaining(AppConfig.coreRewardedBatchesPerDay, used);
   }
 
   static Future<int> proGensRemaining() async {
     final dashboard = await _getDashboard();
+    final remaining = dashboard['proGensRemaining'];
+    if (remaining is int) return remaining;
     final metrics = dashboard['metrics'] ?? {};
     final used = metrics['proFreeGenCount'] ?? 0;
-    return (AppConfig.proFreeBatchesPerDay - used).toInt();
+    return _clampRemaining(AppConfig.proFreeBatchesPerDay, used);
+  }
+
+  static Future<Map<String, dynamic>> getDashboardData() => _getDashboard();
+
+  /// Returns true if the current user can give feedback.
+  /// Users (authenticated) can always give feedback.
+  /// First-time guests (6-quota) can give feedback.
+  /// Returning guests (1-quota, "gets") cannot.
+  static bool get canGiveFeedback {
+    if (AuthService.isGuest && _dashboardCache != null) {
+      return _dashboardCache!['guestTier'] != 'returning';
+    }
+    return true;
   }
 
   static Future<Map<String, int>> getLifetimeStats() async {
@@ -116,15 +213,21 @@ class UsageManager {
     final metrics = dashboard['metrics'] ?? {};
     final exports = dashboard['exports'] ?? {};
     return {
-      'generations': (metrics['lifetimeGeneratedCases'] ?? 0) as int,
-      'exports': (exports['lifetimeExports'] ?? 0) as int,
+      'generations': ((metrics['lifetimeGeneratedCases'] ?? 0) as num).toInt(),
+      'exports': ((exports['lifetimeExports'] ?? 0) as num).toInt(),
     };
   }
 
   static Future<DateTime?> getResetTime() async {
     final dashboard = await _getDashboard();
     final timestamp = dashboard['resetTimestamp'] as String?;
-    if (timestamp != null) return DateTime.parse(timestamp);
+    if (timestamp != null) {
+      try {
+        return DateTime.parse(timestamp);
+      } catch (_) {
+        return null;
+      }
+    }
     return null;
   }
 
@@ -132,7 +235,8 @@ class UsageManager {
     try {
       final result = await FunctionsService.call(functionName: 'checkExportQuota', payload: {'rewarded': true});
       return result['remaining'] ?? 0;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('UsageManager.rewardedExportsRemaining error: $e');
       return 0;
     }
   }

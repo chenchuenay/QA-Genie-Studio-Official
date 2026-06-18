@@ -3,10 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
-import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
-import 'package:qa_genie/shared/ui/no_internet_screen.dart';
 import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
 import 'package:qa_genie/features/monetization/ads/ad_units.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
@@ -16,6 +14,7 @@ import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/shared/widgets/animated_dots.dart';
 
 class ExportPreviewDialog extends StatefulWidget {
@@ -50,19 +49,19 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   bool _isProcessing = false;
   bool _isSharing = false;
 
-  static const List<double> _colWidths = [
-    100,
-    90,
-    90,
-    180,
-    140,
-    120,
-    320,
-    140,
-    100,
-    90,
-    90,
-  ];
+  List<double> get _colWidths {
+    switch (widget.type) {
+      case 'jira':
+        return [120, 90, 140, 140, 200, 140, 80, 90];
+      case 'xray':
+        return [100, 120, 90, 140, 120, 80, 90, 250];
+      case 'pdf':
+        return [100, 120, 140, 200, 120, 140, 200, 90, 80];
+      case 'excel':
+      default:
+        return [100, 90, 90, 180, 140, 120, 320, 140, 100, 90, 90];
+    }
+  }
   static const List<String> _statusOptions = [
     'Pass',
     'Fail',
@@ -341,35 +340,33 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   }
 
   Future<void> _performExport() async {
-    if (_isProcessing) return; 
-    FocusManager.instance.primaryFocus?.unfocus(); // Force close keyboard instantly
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+    FocusManager.instance.primaryFocus
+        ?.unfocus(); // Force close keyboard instantly
 
-    if (AppConfig.isProduction) {
-      final hasInternet = await NetworkGuard.hasInternet();
-      if (!hasInternet) {
-        final shouldRetry = await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => NoInternetScreen(onRetry: () => _performExport()),
-          ),
-        );
-        if (shouldRetry != true) return;
+    if (!await NetworkGuard.ensureProductionOnline(context)) {
+      if (mounted) setState(() => _isProcessing = false);
+      return;
+    }
+
+    final isPro = await UsageManager.isPro();
+    final skipAds = isPro || AppConfig.allowOfflineGeneration;
+
+    if (!skipAds) {
+      final shouldWatch = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => WatchAdDialog(featureName: 'Export Test Cases'),
+      );
+      if (shouldWatch != true) {
+        if (mounted) setState(() => _isProcessing = false);
         return;
       }
     }
 
-    final shouldWatch = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => WatchAdDialog(featureName: 'Export Test Cases'),
-    );
-    if (shouldWatch != true) return;
-
-    setState(() => _isProcessing = true);
-
-    final isPro = await UsageManager.isPro();
     String? adToken;
-    if (!isPro) {
+    if (!skipAds) {
       adToken = await AdManager().showRewardedAd(
         adUnitId: AdUnits.rewardedTcExport,
       );
@@ -394,29 +391,57 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
 
     try {
       await widget.onShare(updatedCases, adToken);
-      
+
       await FunctionsService.trackExport(
         summary: false,
         target: widget.type,
         extension: _extensionForType(widget.type),
       );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _isSharing = false;
+        });
+        showBlurredDialog(
+          context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text('Export Failed', style: TextStyle(color: Colors.white)),
+            content: Text(
+              'Export failed: $e',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
     } finally {
       if (mounted) {
         setState(() {
           _isProcessing = false;
           _isSharing = false;
         });
+        // Brief delay so share sheet appears before we show success
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+
         // Now pop the preview dialog
-        Navigator.of(context, rootNavigator: true).pop();
-        
-        // Show success dialog
-        showBlurredDialog(
-          context,
-          builder: (ctx) => ExportSuccessDialog(
-            type: widget.type,
-            moduleName: widget.moduleName,
-          ),
-        );
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        if (mounted) {
+          showBlurredDialog(
+            context,
+            builder: (ctx) => ExportSuccessDialog(
+              type: widget.type,
+              moduleName: widget.moduleName,
+            ),
+          );
+        }
       }
     }
   }
@@ -592,6 +617,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                   style: const TextStyle(color: Colors.white70, fontSize: 10),
                   textAlign: TextAlign.center,
                   softWrap: true,
+                  overflow: TextOverflow.ellipsis,
                 ),
               );
         rowChildren.add(cell);
@@ -652,10 +678,14 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
             const SizedBox(height: 8),
             Expanded(
               child: SingleChildScrollView(
-                physics: (_isProcessing || _isSharing) ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+                physics: (_isProcessing || _isSharing)
+                    ? const NeverScrollableScrollPhysics()
+                    : const AlwaysScrollableScrollPhysics(),
                 scrollDirection: Axis.vertical,
                 child: SingleChildScrollView(
-                  physics: (_isProcessing || _isSharing) ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+                  physics: (_isProcessing || _isSharing)
+                      ? const NeverScrollableScrollPhysics()
+                      : const AlwaysScrollableScrollPhysics(),
                   scrollDirection: Axis.horizontal,
                   child: tableContent,
                 ),
@@ -693,24 +723,32 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: (_isProcessing || _isSharing) ? null : _performExport,
+                    onPressed: (_isProcessing || _isSharing)
+                        ? null
+                        : _performExport,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: (_isProcessing || _isSharing) 
-                          ? AppColors.accent.withOpacity(0.5) 
+                      backgroundColor: (_isProcessing || _isSharing)
+                          ? AppColors.accent.withOpacity(0.5)
                           : AppColors.accent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: (_isProcessing || _isSharing) 
-                      ? const AnimatedDots(
-                          label: '⚡ Processing',
-                          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                        )
-                      : Text(
-                          _getButtonText(),
-                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                        ),
+                    child: (_isProcessing || _isSharing)
+                        ? const AnimatedDots(
+                            label: '⚡ Processing',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : Text(
+                            _getButtonText(),
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -745,14 +783,9 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
 
     return ValueListenableBuilder<bool>(
       valueListenable: AdManager().isAdLoading,
-      builder: (context, isAdLoading, _) {
+      builder: (context, isAdLoading, child) {
         final fullLock = _isProcessing || isAdLoading || _isSharing;
-        
-        Widget content = AbsorbPointer(
-          absorbing: fullLock,
-          child: dialogBody,
-        );
-
+        Widget content = AbsorbPointer(absorbing: fullLock, child: child!);
         if (_isSharing) {
           return BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
@@ -761,6 +794,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
         }
         return content;
       },
+      child: dialogBody,
     );
   }
 }

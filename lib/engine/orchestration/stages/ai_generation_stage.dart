@@ -36,16 +36,18 @@ class AiGenerationStage {
         debugPrint('✅ AI_STAGE_SUCCESS: Cloud function returned data');
       }
 
+      final errorCode = structured['error']?['code'] as String?;
       return AiStageResult(
         rawResponse: structured['success'] == true
             ? jsonEncode(structured['data'])
             : '',
         statusCode: structured['success'] == true
             ? 200
-            : (structured['error']?['code'] == 'LIMIT_REACHED'
+            : (errorCode == 'LIMIT_REACHED'
                 ? 403
-                : (structured['error']?['code'] == 'RATE_LIMIT' ? 429 : 500)),
+                : (errorCode == 'RATE_LIMIT' ? 429 : 500)),
         hasTransportError: structured['success'] != true,
+        hardErrorCode: errorCode == 'LIMIT_REACHED' ? errorCode : null,
         errorMessage: (structured['success'] != true && structured['error'] != null) ? structured['error']['message'] : null,
         latencyMs: latencyMs,
         structuredResponse: structured,
@@ -91,19 +93,24 @@ class AiGenerationStage {
     String prompt,
     GenerationRequest request,
   ) async {
+    final payload = <String, dynamic>{
+      'requestId': request.traceId,
+      'prompt': prompt,
+      'module': request.module,
+      'feature': request.feature,
+      'platform': request.platform,
+      'notes': request.constraints,
+      'isPro': request.generationMode.toLowerCase() == 'pro',
+      'deviceId': request.deviceId,
+    };
+    if (request.adToken != null && request.adToken!.isNotEmpty) {
+      payload['rewardToken'] = request.adToken;
+    } else if (request.adToken != null) {
+      payload['adToken'] = request.adToken;
+    }
     final result = await FunctionsService.call(
       functionName: 'generate',
-      payload: {
-        'requestId': request.traceId,
-        'prompt': prompt,
-        'module': request.module,
-        'feature': request.feature,
-        'platform': request.platform,
-        'notes': request.constraints,
-        'isPro': request.generationMode.toLowerCase() == 'pro',
-        'adToken': request.adToken,
-        'deviceId': request.deviceId,
-      },
+      payload: payload,
     );
     return jsonEncode(result);
   }
@@ -127,6 +134,7 @@ class AiStageResult {
   final String? modelName;
   final String? apiUrl;
   final int? totalRetries;
+  final String? hardErrorCode;
 
   const AiStageResult({
     required this.rawResponse,
@@ -139,5 +147,6 @@ class AiStageResult {
     this.modelName,
     this.apiUrl,
     this.totalRetries,
+    this.hardErrorCode,
   });
 }

@@ -1,3 +1,4 @@
+import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
@@ -19,6 +20,7 @@ class FallbackWrapper {
       platform: request.platform,
       constraints: request.constraints,
       targetCount: missingCount,
+      mode: GenerationMode.values.byName(request.generationMode),
     );
     final finalizedCases = await engine.generate();
 

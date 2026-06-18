@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:qa_genie/core/error/exceptions.dart';
-import 'package:qa_genie/core/network/connectivity_service.dart';
+import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 // ============================================================
 // FILE: lib/core/network/api_client.dart
@@ -45,7 +46,7 @@ class ApiClient {
 
   static String get _apiKey {
     final value = dotenv.env['GEMINI_API_KEY'];
-    print('API_CLIENT_DEBUG: Loaded API Key (length: ${value?.length})');
+    debugPrint('API_CLIENT_DEBUG: Loaded API Key (length: ${value?.length})');
 
     if (value == null || value.trim().isEmpty) {
       PipelineForensics.instance.onTraceEvent('\n[AI ERROR]\nerror=Missing GEMINI_API_KEY in .env');
@@ -57,7 +58,7 @@ class ApiClient {
 
   static String get _baseUrl {
     final value = dotenv.env['GEMINI_BASE_URL'];
-    print('API_CLIENT_DEBUG: Loaded Base URL: $value');
+    debugPrint('API_CLIENT_DEBUG: Loaded Base URL: $value');
 
     if (value == null || value.trim().isEmpty) {
       throw const ConfigurationException('Missing GEMINI_BASE_URL in .env');
@@ -78,14 +79,14 @@ class ApiClient {
     required String prompt,
     String? traceId,
   }) async {
-    final online = await ConnectivityService.checkNow();
+    final online = await NetworkGuard.hasInternet();
 
     if (!online) {
       throw const NetworkException('No internet connection.');
     }
 
     final url = '$_baseUrl/v1beta/models/$_model:generateContent?key=$_apiKey';
-    print('API_CLIENT_DEBUG: Sending request to $url');
+    debugPrint('API_CLIENT_DEBUG: Sending request to $url');
 
     final uri = Uri.parse(url);
 
@@ -146,14 +147,14 @@ class ApiClient {
       PipelineForensics.instance.onTraceEvent('first1000=${response.body.length > 1000 ? response.body.substring(0, 1000) : response.body}');
       PipelineForensics.instance.onTraceEvent('last1000=${response.body.length > 1000 ? response.body.substring(response.body.length - 1000) : response.body}');
 
-      print('API_CLIENT_DEBUG: Response status: ${response.statusCode}');
-      print('API_CLIENT_DEBUG: Response body: ${response.body}');
+      debugPrint('API_CLIENT_DEBUG: Response status: ${response.statusCode}');
+      debugPrint('API_CLIENT_DEBUG: Response body: ${response.body}');
 
       return _handleResponse(response);
     } on TimeoutException {
       throw const NetworkException('AI request timeout.');
     } catch (e) {
-      print('API_CLIENT_DEBUG: Exception: $e');
+      debugPrint('API_CLIENT_DEBUG: Exception: $e');
       rethrow;
     }
   }
@@ -163,40 +164,40 @@ class ApiClient {
   // ============================================================
 
   static String _handleResponse(http.Response response) {
-    print('FORENSIC: HTTP_STATUS: ${response.statusCode}');
-    print('FORENSIC: RAW_RESPONSE_LENGTH: ${response.body.length}');
-    print(
+    debugPrint('FORENSIC: HTTP_STATUS: ${response.statusCode}');
+    debugPrint('FORENSIC: RAW_RESPONSE_LENGTH: ${response.body.length}');
+    debugPrint(
         'FORENSIC: FIRST_500_CHARS_OF_RESPONSE: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
 
     if (response.statusCode >= 500) {
-      print('API_CLIENT_DEBUG: Server Error: ${response.statusCode}, Body: ${response.body}');
+      debugPrint('API_CLIENT_DEBUG: Server Error: ${response.statusCode}, Body: ${response.body}');
       throw const ServerException('AI provider unavailable.');
     }
 
     if (response.statusCode == 429) {
-      print('API_CLIENT_DEBUG: Rate Limit: ${response.statusCode}');
+      debugPrint('API_CLIENT_DEBUG: Rate Limit: ${response.statusCode}');
       throw const RateLimitException('Rate limit exceeded.');
     }
 
     if (response.statusCode >= 400) {
-      print('API_CLIENT_DEBUG: Client Error: ${response.statusCode}, Body: ${response.body}');
+      debugPrint('API_CLIENT_DEBUG: Client Error: ${response.statusCode}, Body: ${response.body}');
       throw ApiException('AI request failed (${response.statusCode})');
     }
 
     try {
       final decoded = jsonDecode(response.body);
       final candidates = decoded['candidates'] as List?;
-      print('FORENSIC: CANDIDATE_COUNT: ${candidates?.length ?? 0}');
+      debugPrint('FORENSIC: CANDIDATE_COUNT: ${candidates?.length ?? 0}');
 
       if (candidates != null && candidates.isNotEmpty) {
         final parts = candidates[0]['content']['parts'] as List?;
-        print('FORENSIC: TEXT_PART_COUNT: ${parts?.length ?? 0}');
+        debugPrint('FORENSIC: TEXT_PART_COUNT: ${parts?.length ?? 0}');
       }
 
       final text =
           decoded['candidates'][0]['content']['parts'][0]['text'] as String;
 
-      print('FORENSIC: FINAL_EXTRACTED_TEXT_LENGTH: ${text.length}');
+      debugPrint('FORENSIC: FINAL_EXTRACTED_TEXT_LENGTH: ${text.length}');
 
       if (text.trim().isEmpty) {
         throw const ApiException('Empty AI response.');
@@ -204,7 +205,7 @@ class ApiClient {
 
       return text;
     } catch (e) {
-      print('API_CLIENT_DEBUG: JSON Decoding Error: $e, Body: ${response.body}');
+      debugPrint('API_CLIENT_DEBUG: JSON Decoding Error: $e, Body: ${response.body}');
       throw const ParsingException('Malformed AI response.');
     }
   }

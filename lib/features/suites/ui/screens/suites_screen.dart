@@ -10,6 +10,7 @@ import 'package:qa_genie/features/monetization/ads/ad_units.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart'; // ✅ correct import
+import 'package:qa_genie/core/utils/dialog_utils.dart';
 
 class SuitesScreen extends StatefulWidget {
   final VoidCallback? onGenerate;
@@ -24,6 +25,8 @@ class SuitesScreenState extends State<SuitesScreen> {
   final _historyUseCase = AppDependencies.getHistoryUseCase;
   late Future<List<Map<String, dynamic>>> _suitesFuture;
   bool _isPro = false;
+  bool _isDeleting = false;
+  bool _isRenaming = false;
 
   @override
   void initState() {
@@ -50,8 +53,7 @@ class SuitesScreenState extends State<SuitesScreen> {
   }
 
   Future<bool?> _confirmDelete(int id) async {
-    return showDialog<bool>(
-      context: context,
+    return showBlurredDialog<bool>(context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text(
@@ -80,14 +82,18 @@ class SuitesScreenState extends State<SuitesScreen> {
   }
 
   Future<void> _deleteSuite(int id) async {
+    if (_isDeleting) return;
+    _isDeleting = true;
     await DatabaseService.deleteSuite(id);
+    _isDeleting = false;
     refresh();
   }
 
   Future<void> _renameSuite(int id, String current) async {
+    if (_isRenaming) return;
+    _isRenaming = true;
     final ctrl = TextEditingController(text: current);
-    final newName = await showDialog<String>(
-      context: context,
+    final newName = await showBlurredDialog<String>(context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text(
@@ -110,14 +116,9 @@ class SuitesScreenState extends State<SuitesScreen> {
         ],
       ),
     );
-    if (newName == null || newName.isEmpty) return;
-    final db = await DatabaseService.db;
-    await db.update(
-      'suites',
-      {'moduleName': newName},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    if (newName == null || newName.isEmpty) { _isRenaming = false; return; }
+    await DatabaseService.renameSuite(id, newName);
+    _isRenaming = false;
     refresh();
   }
 
@@ -163,7 +164,7 @@ class SuitesScreenState extends State<SuitesScreen> {
   }
 
   Widget _suiteCard(Map<String, dynamic> s) {
-    final id = s['id'] as int;
+    final id = (s['id'] as num?)?.toInt() ?? 0;
     return Dismissible(
       key: Key(id.toString()),
       direction: DismissDirection.endToStart,
@@ -347,12 +348,12 @@ class SuitesScreenState extends State<SuitesScreen> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-            child: Text(
-              'Your data stays local.',
+            child: const Text(
+              'Data stays local on this device and is not synced to the cloud.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey.shade500,
+                color: AppColors.textHint,
                 fontStyle: FontStyle.italic,
               ),
             ),
@@ -391,7 +392,7 @@ class _ProBanner extends StatelessWidget {
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
-                  'Unlock Pro · 15 requests/day',
+                  'Pro Coming Soon · Bigger batches & more',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,

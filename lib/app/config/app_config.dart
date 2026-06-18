@@ -1,7 +1,27 @@
 // lib/app/config/app_config.dart
+//
+// ==================================================================
+// ☝️ SINGLE SOURCE OF TRUTH for all tunable app values
+// ==================================================================
+//
+// Environment detection (dev vs prod) lives in EnvironmentAuthority
+// (lib/core/config/app_environment.dart).  This file holds ONLY the
+// numeric/string constants you may want to tweak day-to-day.
+//
+// HOW TO RUN:
+//   flutter run  --dart-define=MODE=dev   (default)
+//   flutter run  --dart-define=MODE=prod  (production-like behaviour
+//                                          even in debug builds)
+//   flutter build appbundle --dart-define=MODE=prod
+// ==================================================================
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
 
 class AppConfig {
-  static const bool isProduction = bool.fromEnvironment('dart.vm.product');
+  /// 🏭 Whether this is a production build.
+  /// Controlled by `--dart-define=MODE=prod`.
+  static bool get isProduction => EnvironmentAuthority.isProd;
 
   // ============================================================
   // QUOTA & LIMITS – CHANGE THESE VALUES ONLY HERE
@@ -21,15 +41,32 @@ class AppConfig {
   // Pro has unlimited exports (no limit)
 
   // ============================================================
+  // PRICING
+  // ============================================================
+  static const String proMonthlyPrice = '\$6.99';
+
+  // ============================================================
   // FEATURE FLAGS & MISC
   // ============================================================
-  static bool testProMode = false;
+  static bool _testProMode = false;
+  static bool get testProMode => !isProduction && _testProMode;
+  static void initTestProMode(bool value) => _testProMode = value;
   static const int maxConstraintsLength = 100;
 
-  static bool get allowOfflineGeneration => !isProduction;
+  // Dev-mode toggles (all read-only, determined by compile-time env)
+  static bool get allowOfflineGeneration => EnvironmentAuthority.allowOfflineGeneration;
   static bool get allowDebugTools => !isProduction;
-  static bool get allowMockAds => !isProduction;
+  static bool get allowMockAds => EnvironmentAuthority.allowMockAds;
 
-  // Ad unit IDs (test IDs for pre‑launch)
+  // ============================================================
+  // AD UNIT IDS (test IDs for pre‑launch)
+  // ============================================================
   static String get rewardedTcGenerationAdUnit => 'ca-app-pub-3940256099942544/5224354917';
+
+  // Cached SharedPreferences singleton — avoids redundant platform channel calls
+  static SharedPreferences? _cachedPrefs;
+  static Future<SharedPreferences> get sharedPrefs async {
+    _cachedPrefs ??= await SharedPreferences.getInstance();
+    return _cachedPrefs!;
+  }
 }

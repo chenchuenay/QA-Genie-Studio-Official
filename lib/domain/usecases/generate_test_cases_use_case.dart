@@ -7,7 +7,9 @@ import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 import 'package:qa_genie/engine/orchestration/pipeline_orchestrator.dart';
 import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
-import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart'; // new engine
+import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
+import 'package:qa_genie/core/security/security_filter.dart';
 
 class GenerateTestCasesUseCase {
   final PipelineOrchestrator _orchestrator;
@@ -15,6 +17,38 @@ class GenerateTestCasesUseCase {
     : _orchestrator = orchestrator;
 
   Future<GenerationSession> execute({required GenerationDto dto}) async {
+    // ----- Offline dev mode: bypass AI pipeline entirely -----
+    if (EnvironmentAuthority.allowOfflineGeneration) {
+      debugPrint('🏭 OFFLINE DEV MODE: deterministic engine only');
+      final engine = DeterministicEngine(
+        module: dto.module,
+        feature: dto.feature,
+        platform: dto.platform,
+        constraints: dto.constraints,
+        targetCount: dto.count,
+        mode: dto.mode,
+      );
+      final testCases = await engine.generate();
+      final auditReport = PipelineAuditReport(
+        traceId: dto.traceId,
+        totalInputCases: 0,
+        finalizedCases: testCases.length,
+        fallbackCount: testCases.length,
+        aiErrorCode: 'OFFLINE_DEV_MODE',
+        prompt: 'N/A (Offline Dev)',
+        rawAiResponse: '',
+        aiModelName: 'Deterministic',
+        aiApiUrl: 'N/A',
+        cloudFunctionName: 'N/A',
+        cloudFunctionRegion: 'N/A',
+      );
+      return GenerationSession(
+        traceId: dto.traceId,
+        testCases: testCases,
+        auditReport: auditReport,
+      );
+    }
+
     // ----- Try AI generation first -----
     try {
       final planner = PromptPlanner(
@@ -36,13 +70,22 @@ class GenerateTestCasesUseCase {
         domain: dto.domain,
       );
 
+      final sanitized = SecurityFilter.sanitize(prompt);
+      if (sanitized.blocked) {
+        throw Exception('Prompt blocked by security filter: ${sanitized.findings.join(", ")}');
+      }
+      if (sanitized.hasFindings) {
+        debugPrint('🔒 PII scrubbed: ${sanitized.findings.join(", ")}');
+      }
+      final safePrompt = sanitized.sanitized;
+
       PipelineForensics.instance.onTraceEvent(
         '[AI REQUEST]\ntraceId=${dto.traceId}',
       );
       PipelineForensics.instance.onTraceEvent('model=gemini-2.5-flash-lite');
-      PipelineForensics.instance.onTraceEvent('promptLength=${prompt.length}');
+      PipelineForensics.instance.onTraceEvent('promptLength=${safePrompt.length}');
       PipelineForensics.instance.onTraceEvent(
-        'promptPreview=${prompt.length > 500 ? prompt.substring(0, 500) : prompt}',
+        'promptPreview=${safePrompt.length > 500 ? safePrompt.substring(0, 500) : safePrompt}',
       );
 
       final request = GenerationRequest(
@@ -59,12 +102,13 @@ class GenerateTestCasesUseCase {
         deviceId: dto.deviceId,
       );
       final result = await _orchestrator.execute(
-        prompt: prompt,
+        prompt: safePrompt,
         request: request,
       );
 
       // Check for Quota/Rate Limit block before any fallback can happen
-      if (result.auditReport.aiHttpStatusCode == 403 || 
+      if (result.hardErrorCode == 'LIMIT_REACHED' ||
+          result.auditReport.aiHttpStatusCode == 403 || 
           result.auditReport.aiHttpStatusCode == 429) {
         final errorMessage = result.auditReport.aiErrorMessage ?? 'Daily limit reached.';
         int? resetTime;
@@ -101,7 +145,16 @@ class GenerateTestCasesUseCase {
       if (e is QuotaExceededException) {
         rethrow;
       }
-      // ----- AI failed – fall back to deterministic engine -----
+      final errMsg = e.toString();
+      if (errMsg.contains('AD_TOKEN_EXPIRED')) {
+        throw Exception('Ad token expired. Please watch another ad.');
+      }
+      // In prod, AI failures are never silently replaced with fallback.
+      // The UI shows the error to the user.
+      if (EnvironmentAuthority.isProd) {
+        rethrow;
+      }
+      // ----- Dev-only: AI failed – fall back to deterministic engine -----
       debugPrint('AI generation failed, using deterministic engine: $e');
       
       final engine = DeterministicEngine(
@@ -110,6 +163,7 @@ class GenerateTestCasesUseCase {
         platform: dto.platform,
         constraints: dto.constraints,
         targetCount: dto.count,
+        mode: dto.mode,
       );
       final testCases = await engine.generate();
 

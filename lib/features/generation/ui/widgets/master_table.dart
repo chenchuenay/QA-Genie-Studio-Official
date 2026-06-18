@@ -3,7 +3,6 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/core/utils/priority_utils.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
-import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 
 class MasterTable extends StatefulWidget {
@@ -12,6 +11,9 @@ class MasterTable extends StatefulWidget {
   final VoidCallback? onCellEdit;
   final int? suiteId;
   final Future<List<Map<String, dynamic>>> Function()? getOtherSuites;
+  final bool selectionMode;
+  final Set<int> selectedIndices;
+  final ValueChanged<Set<int>>? onSelectionChanged;
 
   const MasterTable({
     super.key,
@@ -20,6 +22,9 @@ class MasterTable extends StatefulWidget {
     this.onCellEdit,
     this.suiteId,
     this.getOtherSuites,
+    this.selectionMode = false,
+    this.selectedIndices = const {},
+    this.onSelectionChanged,
   });
 
   @override
@@ -27,12 +32,13 @@ class MasterTable extends StatefulWidget {
 }
 
 class _MasterTableState extends State<MasterTable> {
-  late List<TextEditingController> idCtrls, titleCtrls, preCtrls, stepsCtrls,
+  late _LazyCtrlList idCtrls, titleCtrls, preCtrls, stepsCtrls,
       dataCtrls, expectedCtrls, actualCtrls, statusCtrls;
 
   final List<double> colWidths = [85, 150, 170, 180, 140, 180, 140, 110, 90];
+  static const double _checkboxWidth = 44;
 
-  static const _cyanColor = Color(0xFF00D4FF);
+  static const _cyanColor = AppColors.accent;
   static const _dividerColor = Color(0xFF2A2A3A);
   static const _textPrimary = Colors.white;
   static const _textSecondary = Color(0xFFCCCCCC);
@@ -66,26 +72,31 @@ class _MasterTableState extends State<MasterTable> {
       if (tc.status.trim().isEmpty) tc.status = 'Not Executed';
     }
 
-    idCtrls = widget.testCases.map((e) => TextEditingController(text: e.id)).toList();
-    titleCtrls = widget.testCases.map((e) => TextEditingController(text: e.title)).toList();
-    preCtrls = widget.testCases.map((e) => TextEditingController(text: e.preconditions.join('\n'))).toList();
-    stepsCtrls = widget.testCases.map((e) => TextEditingController(
-          text: e.steps.asMap().entries.map((entry) => '${entry.key + 1}. ${entry.value.action}').join('\n'),
-        )).toList();
-    dataCtrls = widget.testCases.map((e) => TextEditingController(
-          text: e.steps.map((s) => s.data).where((d) => d.isNotEmpty).join('\n'),
-        )).toList();
-    expectedCtrls = widget.testCases.map((e) => TextEditingController(text: e.expectedResult)).toList();
-    actualCtrls = widget.testCases.map((e) => TextEditingController(text: e.actualResult)).toList();
-    statusCtrls = widget.testCases.map((e) => TextEditingController(text: e.status)).toList();
+    idCtrls = _LazyCtrlList(widget.testCases, (tc) => tc.id);
+    titleCtrls = _LazyCtrlList(widget.testCases, (tc) => tc.title);
+    preCtrls = _LazyCtrlList(widget.testCases, (tc) => tc.preconditions.join('\n'));
+    stepsCtrls = _LazyCtrlList(widget.testCases, (tc) =>
+      tc.steps.asMap().entries.map((entry) => '${entry.key + 1}. ${entry.value.action}').join('\n'));
+    dataCtrls = _LazyCtrlList(widget.testCases, (tc) =>
+      tc.steps.map((s) => s.data).where((d) => d.isNotEmpty).join('\n'));
+    expectedCtrls = _LazyCtrlList(widget.testCases, (tc) => tc.expectedResult);
+    actualCtrls = _LazyCtrlList(widget.testCases, (tc) => tc.actualResult);
+    statusCtrls = _LazyCtrlList(widget.testCases, (tc) => tc.status);
   }
 
   void _disposeControllers() {
-    final all = [...idCtrls, ...titleCtrls, ...preCtrls, ...stepsCtrls, ...dataCtrls, ...expectedCtrls, ...actualCtrls, ...statusCtrls];
-    for (final c in all) c.dispose();
+    idCtrls.dispose();
+    titleCtrls.dispose();
+    preCtrls.dispose();
+    stepsCtrls.dispose();
+    dataCtrls.dispose();
+    expectedCtrls.dispose();
+    actualCtrls.dispose();
+    statusCtrls.dispose();
   }
 
-  double get _totalWidth => colWidths.reduce((a, b) => a + b);
+  double get _totalWidth =>
+      (widget.selectionMode ? _checkboxWidth : 0) + colWidths.reduce((a, b) => a + b);
 
   void _edited(int index) {
     widget.onCellEdit?.call();
@@ -125,27 +136,82 @@ class _MasterTableState extends State<MasterTable> {
     return Container(
       color: Colors.transparent,
       child: Row(
-        children: List.generate(headers.length, (i) => SizedBox(
-          width: colWidths[i],
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: Text(headers[i], style: const TextStyle(color: _cyanColor, fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-        )),
+        children: [
+          if (widget.selectionMode)
+            SizedBox(
+              width: _checkboxWidth,
+              child: Center(
+                child: Checkbox(
+                  value: widget.selectedIndices.length == widget.testCases.length,
+                  tristate: widget.selectedIndices.isNotEmpty && widget.selectedIndices.length < widget.testCases.length,
+                  onChanged: (v) {
+                    final updated = <int>{};
+                    if (v == true) {
+                      updated.addAll(List.generate(widget.testCases.length, (i) => i));
+                    }
+                    widget.onSelectionChanged?.call(updated);
+                  },
+                  fillColor: WidgetStateProperty.resolveWith((_) => AppColors.accent),
+                  checkColor: Colors.black,
+                  side: const BorderSide(color: AppColors.textHint),
+                ),
+              ),
+            ),
+          ...List.generate(headers.length, (i) => SizedBox(
+            width: colWidths[i],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Text(headers[i], style: const TextStyle(color: _cyanColor, fontWeight: FontWeight.bold, fontSize: 13)),
+            ),
+          )),
+        ],
       ),
     );
   }
 
+  void _toggleSelection(int i) {
+    final updated = Set<int>.from(widget.selectedIndices);
+    if (updated.contains(i)) {
+      updated.remove(i);
+    } else {
+      updated.add(i);
+    }
+    widget.onSelectionChanged?.call(updated);
+  }
+
   Widget _buildRow(int i) {
     final tc = widget.testCases[i];
+    final isSelected = widget.selectedIndices.contains(i);
     return GestureDetector(
-      onLongPress: () => _showContextMenu(i),
+      onLongPress: () {
+        if (widget.selectionMode) {
+          _toggleSelection(i);
+        } else {
+          widget.onSelectionChanged?.call({i});
+        }
+      },
+      onTap: () {
+        if (widget.selectionMode) _toggleSelection(i);
+      },
       child: Container(
-        color: Colors.transparent,
+        color: isSelected ? AppColors.accent.withOpacity(0.1) : Colors.transparent,
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.selectionMode)
+              SizedBox(
+                width: _checkboxWidth,
+                child: Center(
+                  child: Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleSelection(i),
+                    fillColor: WidgetStateProperty.resolveWith((_) => AppColors.accent),
+                    checkColor: Colors.black,
+                    side: const BorderSide(color: AppColors.textHint),
+                  ),
+                ),
+              ),
             _idCell(i, tc),
             _plainTextCell(titleCtrls[i], colWidths[1], (v) { tc.title = v; _edited(i); }),
             _plainTextCell(preCtrls[i], colWidths[2], (v) {
@@ -196,7 +262,7 @@ class _MasterTableState extends State<MasterTable> {
                   )
                 : Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(idCtrls[i].text, style: const TextStyle(color: _cyanColor, fontSize: 13, fontWeight: FontWeight.w600)),
+                    child: Text(idCtrls[i].text, overflow: TextOverflow.ellipsis, maxLines: 2, style: const TextStyle(color: _cyanColor, fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
             const SizedBox(height: 4),
             _sourceBadge(tc.source),
@@ -260,7 +326,7 @@ class _MasterTableState extends State<MasterTable> {
                   },
                 ),
               )
-            : Text(stepsCtrls[i].text, style: const TextStyle(color: _textSecondary, fontSize: 12)),
+            : Text(stepsCtrls[i].text, overflow: TextOverflow.ellipsis, maxLines: 5, style: const TextStyle(color: _textSecondary, fontSize: 12)),
       ),
     );
   }
@@ -283,12 +349,12 @@ class _MasterTableState extends State<MasterTable> {
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   ),
-                  onChanged: (v) { onChanged(v); _edited(0); },
+                  onChanged: (v) { onChanged(v); },
                 ),
               )
             : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(ctrl.text, style: const TextStyle(color: _textSecondary, fontSize: 12)),
+                child: Text(ctrl.text, overflow: TextOverflow.ellipsis, maxLines: 5, style: const TextStyle(color: _textSecondary, fontSize: 12)),
               ),
       ),
     );
@@ -376,127 +442,25 @@ class _MasterTableState extends State<MasterTable> {
       child: Text(priority, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
     );
   }
+}
 
-  // Context menu unchanged
-  Future<void> _showContextMenu(int index) async {
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final Offset offset = box.localToGlobal(Offset.zero);
-    final result = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(offset.dx + 20, offset.dy + 40, offset.dx + 200, offset.dy + 200),
-      color: const Color(0xFF2C2C3E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      items: const [
-        PopupMenuItem(value: 'copy', child: Center(child: Text('Copy', style: TextStyle(color: Colors.white)))),
-        PopupMenuItem(value: 'move', child: Center(child: Text('Move', style: TextStyle(color: Colors.white)))),
-        PopupMenuItem(value: 'delete', child: Center(child: Text('Delete', style: TextStyle(color: Colors.red)))),
-      ],
-    );
-    if (result == null) return;
+class _LazyCtrlList {
+  final List<FinalizedTestCase> _testCases;
+  final String Function(FinalizedTestCase) _textGetter;
+  final Map<int, TextEditingController> _cache = {};
 
-    final tc = widget.testCases[index];
-    if (result == 'copy') {
-      final newTc = tc.copyWith(id: '${tc.id}_copy', dbId: null);
-      if (widget.getOtherSuites != null) {
-        final suites = await widget.getOtherSuites!();
-        if (!mounted) return;
-        final targetSuiteId = await showDialog<int>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: AppColors.surface,
-            title: const Text('Copy to Suite', style: TextStyle(color: Colors.white)),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: suites.length,
-                itemBuilder: (_, i) {
-                  final s = suites[i];
-                  final sid = s['id'] as int;
-                  return ListTile(
-                    title: Text('${s['moduleName']} · ${s['feature']}', style: const TextStyle(color: Colors.white)),
-                    onTap: () => Navigator.pop(ctx, sid),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-        if (targetSuiteId != null) {
-          await DatabaseService.insertTestCases(suiteId: targetSuiteId, cases: [newTc]);
-        }
-      } else if (widget.suiteId != null) {
-        await DatabaseService.insertTestCases(suiteId: widget.suiteId!, cases: [newTc]);
-        if (!mounted) return;
-        setState(() {
-          widget.testCases.insert(index + 1, newTc);
-          _disposeControllers();
-          _initControllers();
-        });
-        widget.onCellEdit?.call();
-      }
-    } else if (result == 'move') {
-      if (widget.getOtherSuites != null) {
-        final suites = await widget.getOtherSuites!();
-        if (!mounted) return;
-        final targetSuiteId = await showDialog<int>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: AppColors.surface,
-            title: const Text('Move to Suite', style: TextStyle(color: Colors.white)),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: suites.length,
-                itemBuilder: (_, i) {
-                  final s = suites[i];
-                  final sid = s['id'] as int;
-                  if (sid == widget.suiteId) return const SizedBox.shrink();
-                  return ListTile(
-                    title: Text('${s['moduleName']} · ${s['feature']}', style: const TextStyle(color: Colors.white)),
-                    onTap: () => Navigator.pop(ctx, sid),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-        if (targetSuiteId != null) {
-          await DatabaseService.insertTestCases(suiteId: targetSuiteId, cases: [tc]);
-          if (tc.dbId != null) await DatabaseService.deleteTestCase(tc.dbId!);
-          if (!mounted) return;
-          setState(() {
-            widget.testCases.removeAt(index);
-            _disposeControllers();
-            _initControllers();
-          });
-          widget.onCellEdit?.call();
-        }
-      }
-    } else if (result == 'delete') {
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: const Text('Delete Test Case?', style: TextStyle(color: Colors.white)),
-          content: Text("Delete '${tc.title}'?", style: const TextStyle(color: AppColors.textSecondary)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
-          ],
-        ),
-      );
-      if (confirm == true) {
-        if (tc.dbId != null) await DatabaseService.deleteTestCase(tc.dbId!);
-        if (!mounted) return;
-        setState(() {
-          widget.testCases.removeAt(index);
-          _disposeControllers();
-          _initControllers();
-        });
-        widget.onCellEdit?.call();
-      }
-    }
+  _LazyCtrlList(this._testCases, this._textGetter);
+
+  TextEditingController operator [](int index) {
+    return _cache.putIfAbsent(index, () {
+      return TextEditingController(text: _textGetter(_testCases[index]));
+    });
+  }
+
+  int get length => _testCases.length;
+
+  void dispose() {
+    for (final c in _cache.values) c.dispose();
+    _cache.clear();
   }
 }

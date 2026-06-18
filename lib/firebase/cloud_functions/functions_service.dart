@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -32,32 +33,38 @@ class FunctionsService {
     return value;
   }
 
-  static Future<Map<String, dynamic>> call({
+  static const int _maxRetries = 3;
+  static const List<Duration> _retryDelays = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 4),
+  ];
+
+  static bool _isRetriable(Object error) {
+    if (error is FirebaseFunctionsException) {
+      switch (error.code) {
+        case 'unavailable':
+        case 'deadline-exceeded':
+        case 'internal':
+        case 'resource-exhausted':
+        case 'unauthenticated':
+          return true;
+        default:
+          return false;
+      }
+    }
+    if (error is SocketException) return true;
+    if (error is TimeoutException) return true;
+    if (error is HttpException) return true;
+    return false;
+  }
+
+  static Future<Map<String, dynamic>> _callOnce({
     required String functionName,
     Map<String, dynamic>? payload,
-    Duration timeout = const Duration(seconds: 120),
+    Duration timeout = const Duration(seconds: 30),
+    int attempt = 1,
   }) async {
-    debugPrint('📡 FUNCTIONS_SERVICE [DIAGNOSTIC_V3]: Calling $functionName');
-    
-    // 🛡️ DIAGNOSTIC: Check App Check state (with timeout to prevent hanging)
-    try {
-      debugPrint('🛡️ FUNCTIONS_SERVICE [DIAGNOSTIC_V3]: Requesting AppCheck Token...');
-      final appCheckToken = await AppCheckService.getToken().timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          debugPrint('🛡️ FUNCTIONS_SERVICE: AppCheck Token request TIMEOUT');
-          return null;
-        },
-      );
-      debugPrint('🛡️ FUNCTIONS_SERVICE: AppCheck Token present: ${appCheckToken != null && appCheckToken.isNotEmpty}');
-    } catch (e) {
-      debugPrint('🛡️ FUNCTIONS_SERVICE: AppCheck diagnostic error: $e');
-    }
-
-    if (payload != null) {
-      debugPrint('📦 FUNCTIONS_SERVICE: Payload keys: ${payload.keys.toList()}');
-    }
-
     final startTime = DateTime.now();
 
     try {
@@ -69,7 +76,7 @@ class FunctionsService {
       final result = await callable.call(payload ?? {});
       final latencyMs = DateTime.now().difference(startTime).inMilliseconds;
       debugPrint(
-        '✅ FUNCTIONS_SERVICE: $functionName succeeded (${latencyMs}ms)',
+        '✅ FUNCTIONS_SERVICE: $functionName succeeded (${latencyMs}ms) attempt #$attempt',
       );
 
       if (result.data == null) {
@@ -89,8 +96,21 @@ class FunctionsService {
         source: 'FunctionsService.$functionName',
         error: e,
         additionalInfo:
-            'Code: ${e.code}, Message: ${e.message}, Details: ${e.details}',
+            'Attempt: $attempt, Code: ${e.code}, Message: ${e.message}, Details: ${e.details}',
       );
+
+      if (attempt < _maxRetries && _isRetriable(e)) {
+        final delay = _retryDelays[attempt - 1];
+        debugPrint('🔄 FUNCTIONS_SERVICE: Retrying $functionName in ${delay.inSeconds}s (attempt #${attempt + 1})');
+        await Future.delayed(delay);
+        return _callOnce(
+          functionName: functionName,
+          payload: payload,
+          timeout: timeout,
+          attempt: attempt + 1,
+        );
+      }
+
       return {
         'success': false,
         'error': {
@@ -110,6 +130,19 @@ class FunctionsService {
         source: 'FunctionsService.$functionName',
         error: e,
       );
+
+      if (attempt < _maxRetries && _isRetriable(e)) {
+        final delay = _retryDelays[attempt - 1];
+        debugPrint('🔄 FUNCTIONS_SERVICE: Retrying $functionName in ${delay.inSeconds}s (attempt #${attempt + 1})');
+        await Future.delayed(delay);
+        return _callOnce(
+          functionName: functionName,
+          payload: payload,
+          timeout: timeout,
+          attempt: attempt + 1,
+        );
+      }
+
       return {
         'success': false,
         'error': {'code': 'CLIENT_ERROR', 'message': e.toString()},
@@ -122,8 +155,32 @@ class FunctionsService {
     }
   }
 
-  static Future<Map<String, dynamic>> getQuotaStatus() async {
-    return call(functionName: 'getQuotaStatus');
+  static Future<Map<String, dynamic>> call({
+    required String functionName,
+    Map<String, dynamic>? payload,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    debugPrint('📡 FUNCTIONS_SERVICE: Calling $functionName');
+
+    // Non-blocking AppCheck diagnostic — does not delay the actual call
+    unawaited(AppCheckService.getToken().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => null,
+    ).then((token) {
+      debugPrint('🛡️ AppCheck token present: ${token != null && token.isNotEmpty}');
+    }).catchError((e) {
+      debugPrint('🛡️ AppCheck diagnostic error: $e');
+    }));
+
+    if (payload != null) {
+      debugPrint('📦 FUNCTIONS_SERVICE: Payload keys: ${payload.keys.toList()}');
+    }
+
+    return _callOnce(
+      functionName: functionName,
+      payload: payload,
+      timeout: timeout,
+    );
   }
 
   static Future<Map<String, dynamic>> getUserStats() async {
@@ -136,12 +193,8 @@ class FunctionsService {
   }
 
   static Future<bool> verifyReward({required String rewardToken}) async {
-    // Note: Reusing trackExport with token for now or we can add a specific verifier
-    final result = await call(
-      functionName: 'trackExport',
-      payload: {'adToken': rewardToken, 'exportType': 'reward_verification'},
-    );
-    return result['success'] == true;
+    // Delegates to the dedicated verifyRewardAd cloud function
+    return verifyRewardAd(adTransactionId: rewardToken);
   }
 
   static Future<bool> healthCheck() async {
@@ -226,6 +279,23 @@ class FunctionsService {
         'email': email,
         'displayName': displayName,
         'deviceId': deviceId,
+      },
+    );
+  }
+
+  static Future<Map<String, dynamic>> submitIssueReport({
+    String? type,
+    String? title,
+    String? description,
+    String? steps,
+  }) async {
+    return call(
+      functionName: 'submitIssueReport',
+      payload: {
+        'issueType': type ?? 'Bug',
+        'title': title ?? '',
+        'description': description ?? '',
+        'steps': steps ?? '',
       },
     );
   }

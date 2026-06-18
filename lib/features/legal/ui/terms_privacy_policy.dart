@@ -20,16 +20,16 @@ class TermsPrivacyPolicyScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          _policyItem(context, 'Privacy Policy', LegalDocuments.privacyPolicy),
-          _policyItem(context, 'Terms of Use', LegalDocuments.termsOfUse),
-          _policyItem(context, 'AI Disclaimer', LegalDocuments.aiDisclaimer),
-          _policyItem(context, 'Ads & Monetization', LegalDocuments.adsPolicy),
+          _policyItem(context, 'Privacy Policy', LegalDocuments.privacyPolicy, LegalDocuments.privacyPolicyUrl),
+          _policyItem(context, 'Terms of Use', LegalDocuments.termsOfUse, LegalDocuments.termsOfServiceUrl),
+          _policyItem(context, 'AI Disclaimer', LegalDocuments.aiDisclaimer, LegalDocuments.aiDisclaimerUrl),
+          _policyItem(context, 'Ads & Monetization', LegalDocuments.adsPolicy, LegalDocuments.adsPolicyUrl),
         ],
       ),
     );
   }
 
-  Widget _policyItem(BuildContext context, String title, String content) {
+  Widget _policyItem(BuildContext context, String title, String content, [String? url]) {
     return Card(
       color: AppColors.card,
       margin: const EdgeInsets.only(bottom: 12),
@@ -40,7 +40,7 @@ class TermsPrivacyPolicyScreen extends StatelessWidget {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => DocumentViewScreen(title: title, content: content),
+            builder: (_) => DocumentViewScreen(title: title, content: content, onlineUrl: url),
           ),
         ),
       ),

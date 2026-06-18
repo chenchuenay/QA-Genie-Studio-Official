@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_spacing.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/core/network/network_guard.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 
 class ReportIssueScreen extends StatefulWidget {
   final String? screen;
@@ -79,33 +81,31 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
     final db = await DatabaseService.db;
     final data = await db.query('reported_issues', orderBy: 'createdAt DESC');
 
-    // Refresh status from Firestore if > 14 days
+    // Refresh status from cloud on every load
     List<Map<String, dynamic>> updatedData = List.from(data);
-    for (int i = 0; i < updatedData.length; i++) {
-      final item = Map<String, dynamic>.from(updatedData[i]);
-      final firestoreId = item['firestoreId'];
-      final lastSync = item['lastSyncAttempt'] != null
-          ? DateTime.parse(item['lastSyncAttempt'])
-          : null;
-
-      if (firestoreId != null &&
-          (lastSync == null ||
-              DateTime.now().difference(lastSync).inDays >= 14)) {
-        try {
-          final doc = await FirebaseFirestore.instance
-              .collection('issue_reports')
-              .doc(firestoreId)
-              .get();
-          if (doc.exists) {
-            final newStatus = doc.data()?['status'] ?? 'open';
-            await DatabaseService.updateIssueStatus(item['id'], newStatus);
-            item['status'] = newStatus;
-            updatedData[i] = item;
+    try {
+      final result = await FunctionsService.call(
+        functionName: 'getMyIssueReports',
+      );
+      final remoteReports = result['reports'] as List? ?? [];
+      for (final remote in remoteReports) {
+        if (remote is Map) {
+          final remoteId = remote['id'] as String?;
+          final remoteStatus = remote['status'] as String? ?? 'open';
+          for (int i = 0; i < updatedData.length; i++) {
+            if (updatedData[i]['firestoreId'] == remoteId) {
+              final ts = DateTime.now().toIso8601String();
+              await DatabaseService.updateIssueStatus(
+                updatedData[i]['id'], remoteStatus, ts,
+              );
+              updatedData[i]['status'] = remoteStatus;
+              break;
+            }
           }
-        } catch (e) {
-          debugPrint('Sync failed: $e');
         }
       }
+    } catch (e) {
+      debugPrint('Sync failed: $e');
     }
 
     if (mounted) setState(() => _feedbacks = updatedData);
@@ -198,8 +198,32 @@ class _ReportFormViewState extends State<_ReportFormView> {
   }
 
   Future<void> _submitReport() async {
+    if (_isSubmitting) return;
     if (!_formKey.currentState!.validate()) return;
+
+    if (!UsageManager.canGiveFeedback) {
+      if (mounted) {
+        showBlurredDialog(context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Feedback Unavailable', style: TextStyle(color: Colors.white)),
+            content: const Text('Feedback submission is limited to signed-in users. Sign in with Google to share your thoughts.', style: TextStyle(color: AppColors.textSecondary)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _isSubmitting = true);
+
+    if (!await NetworkGuard.ensureProductionOnline(context)) return;
 
     try {
       final user = AuthService.currentUser;
@@ -214,25 +238,23 @@ class _ReportFormViewState extends State<_ReportFormView> {
         appVersion = package.version;
       }
 
-      final reportData = {
-        'uid': uid,
-        'issueType': _issueType,
-        'title': _titleController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'platform': platform,
-        'deviceModel': deviceModel,
-        'appVersion': appVersion,
-        'status': 'open',
-        'screen': widget.screen ?? 'ReportIssueScreen',
-        'createdAt': FieldValue.serverTimestamp(),
-      };
-
       try {
-        final docRef = await FirebaseFirestore.instance
-            .collection('issue_reports')
-            .add(reportData);
+        final result = await FunctionsService.call(
+          functionName: 'submitIssueReport',
+          payload: {
+            'uid': uid,
+            'issueType': _issueType,
+            'title': _titleController.text.trim(),
+            'description': _descriptionController.text.trim(),
+            'platform': platform,
+            'deviceModel': deviceModel,
+            'appVersion': appVersion,
+            'screen': widget.screen ?? 'ReportIssueScreen',
+          },
+        );
+        final firestoreId = result['id'] as String?;
         await DatabaseService.insertReportedIssue({
-          'firestoreId': docRef.id,
+          'firestoreId': firestoreId ?? '',
           'issueType': _issueType,
           'title': _titleController.text.trim(),
           'description': _descriptionController.text.trim(),
@@ -260,8 +282,7 @@ class _ReportFormViewState extends State<_ReportFormView> {
       }
 
       if (!mounted) return;
-      await showDialog(
-        context: context,
+      await showBlurredDialog(context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppColors.surface,
           title: const Text(
@@ -287,13 +308,7 @@ class _ReportFormViewState extends State<_ReportFormView> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      debugPrint('Failed to submit: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -301,33 +316,6 @@ class _ReportFormViewState extends State<_ReportFormView> {
 
   @override
   Widget build(BuildContext context) {
-    if (AuthService.isAnonymous) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Sign in to share feedback',
-                  style: TextStyle(color: Colors.white, fontSize: 18)),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  showDialog(
-                      context: context,
-                      builder: (ctx) =>
-                          const AuthDialog(showGuestButton: false));
-                },
-                style:
-                    ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-                child:
-                    const Text('Sign In', style: TextStyle(color: Colors.black)),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
     return Form(
       key: _formKey,
       child: SingleChildScrollView(

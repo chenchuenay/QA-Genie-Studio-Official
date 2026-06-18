@@ -6,12 +6,14 @@ class GuidelinesDialog extends StatefulWidget {
   final bool showNeverAsk;
   final VoidCallback? onStartWalkthrough;
   final bool autoScroll;
+  final bool showTourButton;
 
   const GuidelinesDialog({
     super.key,
     this.showNeverAsk = true,
     this.onStartWalkthrough,
     this.autoScroll = false,
+    this.showTourButton = true,
   });
 
   @override State<GuidelinesDialog> createState() => _GuidelinesDialogState();
@@ -43,7 +45,7 @@ class _GuidelinesDialogState extends State<GuidelinesDialog> {
 
   Future<void> _savePreference() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('first_launch_guidelines_shown', false);
+    await prefs.setBool('first_launch_guidelines_shown', true);
     if (_dontShowAgain) {
       await prefs.setBool('never_show_guidelines', true);
     }
@@ -94,7 +96,7 @@ class _GuidelinesDialogState extends State<GuidelinesDialog> {
                     _comingSoonItem("Execution Progress Dashboard"),
                   ]),
                 ),
-                if (widget.onStartWalkthrough != null) ...[
+                if (widget.onStartWalkthrough != null && widget.showTourButton) ...[
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,

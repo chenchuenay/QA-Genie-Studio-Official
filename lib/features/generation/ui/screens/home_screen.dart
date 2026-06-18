@@ -8,26 +8,24 @@ import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/data/dto/generation_dto.dart';
 import 'package:qa_genie/core/utils/device_utils.dart';
-import 'package:qa_genie/core/network/network_guard.dart';
+import 'package:qa_genie/core/ui/network_ui_helper.dart';
 import 'package:qa_genie/core/config/app_environment.dart';
+import 'package:qa_genie/core/error/exceptions.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/core/state/generation_state.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
-import 'package:qa_genie/shared/ui/no_internet_screen.dart';
 import 'package:qa_genie/shared/widgets/animated_dots.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
-import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
-import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
+import 'package:qa_genie/features/account/ui/account_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -59,15 +57,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _rewardedRemaining = AppConfig.coreRewardedBatchesPerDay;
   int _proRemaining = AppConfig.proFreeBatchesPerDay;
   DateTime? _resetTime;
+  int _adAttempts = 0;
 
   @override
   void initState() {
     super.initState();
-    AdManager().loadRewardedAd();
     _authSubscription = AuthService.authStateChanges.listen((user) {
-      if (user != null) _refreshStatus();
+      if (user != null) {
+        UsageManager.invalidateCache();
+        _refreshStatus();
+      }
     });
-    _refreshStatus();
   }
 
   @override
@@ -80,18 +80,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _refreshStatus() async {
-    final isPro = await UsageManager.isPro();
-    final rewardedRemaining = await UsageManager.rewardedGensRemaining();
-    final proRemaining = await UsageManager.proGensRemaining();
-    final resetTime = await UsageManager.getResetTime();
-
-    if (!mounted) return;
-    setState(() {
-      _isPro = isPro;
-      _rewardedRemaining = rewardedRemaining;
-      _proRemaining = proRemaining;
-      _resetTime = resetTime;
-    });
+    try {
+      final results = await Future.wait([
+        UsageManager.isPro(),
+        UsageManager.rewardedGensRemaining(),
+        UsageManager.proGensRemaining(),
+        UsageManager.getResetTime(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _isPro = (results[0] as bool?) ?? false;
+        _rewardedRemaining = (results[1] as int?) ?? 0;
+        _proRemaining = (results[2] as int?) ?? 0;
+        _resetTime = results[3] as DateTime?;
+      });
+    } catch (e) {
+      debugPrint('⚠️ _refreshStatus failed: $e');
+    }
   }
 
   String _generationHint() {
@@ -99,7 +104,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       return 'Generates ${AppConfig.proCasesPerBatch} test cases per batch ($_proRemaining/${AppConfig.proFreeBatchesPerDay} left)';
     } else {
       if (_rewardedRemaining > 0) {
-        return 'Watch ads for $_rewardedRemaining more generations today (${AppConfig.coreCasesPerBatch} cases each)';
+        final batchWord = _rewardedRemaining == 1 ? 'batch' : 'batches';
+        return 'Tap Generate — watch an ad to unlock $_rewardedRemaining $batchWord remaining (${AppConfig.coreCasesPerBatch} cases each)';
       }
       String resetText = '';
       if (_resetTime != null) {
@@ -110,21 +116,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         } else {
           final h = diff.inHours;
           final m = diff.inMinutes % 60;
-          resetText = ' • Resets in ${h}h ${m}m';
+          resetText = ' • Resets in${h > 0 ? ' ${h}h ${m}m' : ' ${m}m'}';
         }
       }
       final suffix = AppConfig.isProduction
           ? ''
-          : ' or reset limits in Test mode.';
-      return 'Daily limit reached. quota resests in $resetText$suffix';
+          : ' Use Test mode to reset limits.';
+      return 'Daily limit reached${resetText.isNotEmpty ? resetText : ''}.$suffix';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Container(
+    final fullLock = loading;
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      backgroundColor: Colors.transparent,
+      body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFF050505), Color(0xFF0A0A0A), Color(0xFF0D0D0D)],
@@ -132,131 +140,118 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             end: Alignment.bottomCenter,
           ),
         ),
-        child: SafeArea(
-          child: ValueListenableBuilder<bool>(
-            valueListenable: AdManager().isAdLoading,
-            builder: (context, isAdLoading, _) {
-              final fullLock = loading || isAdLoading;
-              return AbsorbPointer(
-                absorbing: fullLock,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        physics: fullLock
-                            ? const NeverScrollableScrollPhysics()
-                            : const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(20),
-                        child: Form(
-                          key: formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 8),
-                              const Text(
-                                'SPECIFICATION',
-                                style: TextStyle(
-                                  color: Color(0xFF46DFFF),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 6,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Container(
-                                key: HomeScreen.moduleKey,
-                                child: _input(
-                                  'Module Name *',
-                                  'e.g. User Authentication',
-                                  mCtrl,
-                                  maxLength: 40,
-                                  enabled: !fullLock,
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                      ? 'Required'
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Container(
-                                key: HomeScreen.featureKey,
-                                child: _input(
-                                  'Feature *',
-                                  'e.g. Login with Google OAuth',
-                                  fCtrl,
-                                  maxLength: 70,
-                                  enabled: !fullLock,
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                      ? 'Required'
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              const Padding(
-                                padding: EdgeInsets.only(left: 22),
-                                child: Text(
-                                  'Platform *',
-                                  style: TextStyle(
-                                    color: Color(0xFFA7AFBF),
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                key: HomeScreen.platformKey,
-                                child: _platformSelector(fullLock),
-                              ),
-                              const SizedBox(height: 20),
-                              const Padding(
-                                padding: EdgeInsets.only(left: 22),
-                                child: Text(
-                                  'Constraints (optional)',
-                                  style: TextStyle(
-                                    color: Color(0xFFA7AFBF),
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              _constraints(fullLock),
-                              const SizedBox(height: 12),
-                              Center(
-                                child: Text(
-                                  _generationHint(),
-                                  style: AppText.hint,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                            ],
+        child: AbsorbPointer(
+          absorbing: fullLock,
+          child: SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: fullLock
+                        ? const NeverScrollableScrollPhysics()
+                        : const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    child: Form(
+                      key: formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 8),
+                          Text(
+                            'SPECIFICATION',
+                            style: TextStyle(
+                              color: AppColors.accent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 6,
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 16),
+                          Container(
+                            key: HomeScreen.moduleKey,
+                            child: _input(
+                              'Module Name *',
+                              'e.g. User Authentication',
+                              mCtrl,
+                              maxLength: 40,
+                              enabled: !fullLock,
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Required'
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            key: HomeScreen.featureKey,
+                            child: _input(
+                              'Feature *',
+                              'e.g. Login with Google OAuth',
+                              fCtrl,
+                              maxLength: 70,
+                              enabled: !fullLock,
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Required'
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Padding(
+                            padding: EdgeInsets.only(left: 22),
+                            child: Text(
+                              'Platform *',
+                              style: TextStyle(
+                                color: Color(0xFFA7AFBF),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            key: HomeScreen.platformKey,
+                            child: _platformSelector(fullLock),
+                          ),
+                          const SizedBox(height: 16),
+                          const Padding(
+                            padding: EdgeInsets.only(left: 22),
+                            child: Text(
+                              'Constraints (optional)',
+                              style: TextStyle(
+                                color: Color(0xFFA7AFBF),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          _constraints(fullLock),
+                          const SizedBox(height: 12),
+                          Center(
+                            child: Text(
+                              _generationHint(),
+                              style: AppText.hint,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-                      child: Container(
-                        key: HomeScreen.generateKey,
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: AdManager().isAdLoading,
-                          builder: (context, isAdLoading, _) {
-                            final lock = loading || isAdLoading;
-                            return Opacity(
-                              opacity: lock ? 0.5 : 1.0,
-                              child: _generateBtn(lock),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              );
-            },
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                  child: Container(
+                    key: HomeScreen.generateKey,
+                    child: AnimatedOpacity(
+                      opacity: fullLock ? 0.5 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: _generateBtn(fullLock),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -331,8 +326,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
                   gradient: selected
-                      ? const LinearGradient(
-                          colors: [Color(0xFF46DFFF), Color(0xFF7CEBFF)],
+                      ? LinearGradient(
+                          colors: [AppColors.accent, AppColors.accentLight],
                         )
                       : null,
                   color: selected ? null : const Color(0xFF12141A),
@@ -361,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _constraints(bool locked) {
     return TextFormField(
       controller: cCtrl,
-      maxLines: 3,
+      maxLines: 2,
       enabled: !locked,
       maxLength: EnvironmentAuthority.maxConstraintsLength,
       maxLengthEnforcement: MaxLengthEnforcement.enforced,
@@ -407,12 +402,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             gradient: isDisabled
                 ? LinearGradient(
                     colors: [
-                      const Color(0xFF46DFFF).withOpacity(0.5),
-                      const Color(0xFF7CEBFF).withOpacity(0.5),
+                      AppColors.accent.withOpacity(0.5),
+                      AppColors.accentLight.withOpacity(0.5),
                     ],
                   )
-                : const LinearGradient(
-                    colors: [Color(0xFF46DFFF), Color(0xFF7CEBFF)],
+                : LinearGradient(
+                    colors: [AppColors.accent, AppColors.accentLight],
                   ),
             borderRadius: BorderRadius.circular(22),
           ),
@@ -441,6 +436,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _generate() async {
+    if (loading) return;
     debugPrint('🚀 _generate: Initializing');
     FocusManager.instance.primaryFocus?.unfocus();
     if (!formKey.currentState!.validate()) {
@@ -451,31 +447,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() => loading = true);
     GenerationState.isGenerating.value = true;
 
-    if (AppConfig.isProduction) {
-      debugPrint('🚀 _generate: Checking internet');
-      final hasInternet = await NetworkGuard.hasInternet();
-      if (!hasInternet) {
-        debugPrint('❌ _generate: No internet');
-        if (mounted) setState(() => loading = false);
-        // Note: No SnackBar here
-        if (mounted)
-          setState(() {
-            loading = false;
-            GenerationState.isGenerating.value = false;
-          });
-        return;
-      }
+    // Await the check and stop if not allowed
+    if (!await NetworkUiHelper.ensureProductionOnline(context)) {
+      if (mounted)
+        setState(() {
+          loading = false;
+          GenerationState.isGenerating.value = false;
+        });
+      return;
     }
 
     final isPro = await UsageManager.isPro();
     final deviceId = await DeviceUtils.getUniqueId();
     String? adToken;
 
-    if (!isPro) {
+    if (!isPro && !AppConfig.allowOfflineGeneration) {
+      final remaining = await UsageManager.rewardedGensRemaining();
+      if (remaining <= 0) {
+        if (mounted) {
+          setState(() {
+            loading = false;
+            GenerationState.isGenerating.value = false;
+          });
+          _showLimitReachedDialog(
+            QuotaExceededException(
+              'You have used all your generations for today.',
+              resetTimeMillis: _resetTime?.difference(DateTime.now()).inMilliseconds,
+            ),
+          );
+        }
+        return;
+      }
+
       debugPrint('🚀 _generate: Showing ad dialog');
-      final shouldWatch = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
+      final shouldWatch = await showBlurredDialog<bool>(
+        context,
         builder: (ctx) =>
             const WatchAdDialog(featureName: 'Generate Test Cases'),
       );
@@ -490,41 +496,54 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
 
       debugPrint('🚀 _generate: Showing rewarded ad');
-      adToken = await AdManager().showRewardedAd();
-      if (adToken != null) {
-        debugPrint('🚀 _generate: Verifying ad token: $adToken');
-        // Removed SnackBar
-        final verified = await FunctionsService.verifyRewardAd(
-          adTransactionId: adToken,
-        );
-        if (!verified) {
-          debugPrint('❌ _generate: Ad verification failed');
-          if (mounted) {
-            setState(() {
-              loading = false;
-              GenerationState.isGenerating.value = false;
-            });
-            // Removed SnackBar
-          }
-          return;
-        }
-      } else {
-        debugPrint('❌ _generate: Ad token null (show ad failed)');
+      for (int adAttempt = 0; adAttempt < 2; adAttempt++) {
+        adToken = await AdManager().showRewardedAd();
+        if (adToken != null) break;
+        debugPrint('⚠️ _generate: Ad attempt $adAttempt failed, retrying...');
+      }
+      if (adToken == null) {
+        debugPrint('❌ _generate: Show ad failed after 2 attempts');
         if (mounted)
           setState(() {
             loading = false;
             GenerationState.isGenerating.value = false;
           });
-        AdManager().showStatusDialog(context, onRetry: () => _generate());
+        if (_adAttempts < 2) {
+          _adAttempts++;
+          AdManager().showStatusDialog(context, onRetry: () => _generate());
+        } else {
+          _adAttempts = 0;
+          if (mounted) {
+            showBlurredDialog(
+              context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: AppColors.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: const Text('Ad Unavailable', style: TextStyle(color: Colors.white)),
+                content: const Text(
+                  'We couldn\'t load an ad. Please check for ad blockers or network issues and try again.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+                  ),
+                ],
+              ),
+            );
+          }
+        }
         return;
       }
     }
+    _adAttempts = 0;
 
     try {
       final module = mCtrl.text.trim();
       final feature = fCtrl.text.trim();
       final notes = cCtrl.text.trim();
-      final currentPro = await UsageManager.isPro();
+      final currentPro = isPro;
       final hardLimit = currentPro
           ? AppConfig.proCasesPerBatch
           : AppConfig.coreCasesPerBatch;
@@ -542,7 +561,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           adToken: adToken,
           deviceId: deviceId,
         ),
-      );
+      ).timeout(const Duration(seconds: 60));
 
       debugPrint(
         '🚀 _generate: AI Succeeded, Saving suite. Cases: ${session.testCases.length}',
@@ -562,11 +581,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
       debugPrint('🚀 _generate: Suite saved');
 
-      debugPrint('🚀 _generate: Incrementing usage');
-      await UsageManager.incrementGeneration(
-        count: hardLimit,
-        rewarded: !currentPro,
-      );
+      debugPrint('🚀 _generate: Invalidating usage cache');
+      UsageManager.invalidateCache();
+      // Optimistic local decrement so hint updates immediately
+      if (!isPro && adToken != null) {
+        setState(() { _rewardedRemaining = (_rewardedRemaining - 1).clamp(0, 999); });
+      }
+      await _refreshStatus();
+      AccountScreen.markForRefresh();
 
       if (mounted) {
         if (session.testCases.isNotEmpty) {
@@ -585,7 +607,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           );
         } else {
           debugPrint('⚠️ _generate: No test cases returned');
-          // Removed SnackBar
+          if (context.mounted) {
+            showBlurredDialog(
+              context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: AppColors.surface,
+                title: const Text(
+                  'No Cases Generated',
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: const Text(
+                  'Generation produced no cases. Try a different input.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+                  ),
+                ],
+              ),
+            );
+          }
         }
       }
     } on QuotaExceededException catch (e) {
@@ -596,6 +639,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       debugPrint(stackTrace.toString());
       UiErrorService.handle(e, stackTrace: stackTrace, category: 'generation');
       if (!mounted) return;
+      final isRetriable = e is QaGenieException ? e.isRetriable : true;
       showBlurredDialog(
         context,
         builder: (ctx) => AlertDialog(
@@ -605,7 +649,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             style: TextStyle(color: Colors.white),
           ),
           content: Text(
-            '$e',
+            EnvironmentAuthority.isDev
+                ? '$e'
+                : isRetriable
+                    ? 'Something went wrong. Please try again.'
+                    : 'Generation cannot proceed with the current input. Please review and try a different approach.',
             style: const TextStyle(color: AppColors.textSecondary),
           ),
           actions: [
@@ -613,13 +661,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel'),
             ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _generate();
-              },
-              child: const Text('Retry'),
-            ),
+            if (isRetriable)
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _generate();
+                },
+                child: const Text('Retry'),
+              ),
           ],
         ),
       );
@@ -643,8 +692,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       message +=
           '\n\nYou have used all your generations for today. Limits reset every 24 hours.';
     }
-    showDialog(
-      context: context,
+    showBlurredDialog(
+      context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

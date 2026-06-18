@@ -8,21 +8,25 @@ flutter run --release --flavor prod
 
   
 
+
 Testing
-flutter run --flavor prod --dart-define=MODE=prod
+fiflutter run --flavor prod --dart-define=MODE=prod
 
 flutter run --flavor dev --dart-define=MODE=dev
 
 
-adb pull /sdcard/Download/QA_Genie_Forensics/latest_run.json ~/Desktop/
-adb pull /sdcard/Download/QA_Genie_Forensics/latest_run.log ~/Desktop/
-adb shell ls /storage/emulated/0/Download/QA_Genie_Forensics/full_dump_*.json
 
 
 
-
-adb pull /sdcard/Download/QA_Genie_Forensics/latest_run.json ~/Desktop/
-adb pull /sdcard/Download/QA_Genie_Forensics/ ~/Desktop/
+'''
+build_prod.sh
+./build_prod.sh          # builds prod APK
+./build_prod.sh appbundle  # builds prod app bundle
+run script
+./run               → dev debug (default)
+./run prod          → prod debug
+./run prod-release  → prod release
+'''
 
 
 
@@ -37,22 +41,6 @@ done
 
 
 
-#delete
-adb shell "rm /storage/emulated/0/Download/QA_Genie_Forensics/full_dump_*.json"
-
-adb shell "-rf /storage/emulated/0/Download/QA_Genie_Forensics/"
-
-
-#verify
-
-adb shell "ls /storage/emulated/0/Download/QA_Genie_Forensics/full_dump_*.json" 2>/dev/null
-
-
-#zip
-cd ~/Desktop/QA_Genie
-zip -r full_dumps.zip full_dumps/
-
-'''
 
 
 
@@ -64,11 +52,8 @@ zip -r full_dumps.zip full_dumps/
 
 
 
-flutter clean
-flutter pub get
-flutter test test/forensic_tests/headless/generation/generation_pipeline_test.dart
-flutter test test/forensic_tests/headless/generation/live_mass_generation_test.dart
-flutter test test/forensic_tests/headless/exports/full_export_test.dart
+
+
 
 
 
@@ -111,6 +96,8 @@ flutter build apk --release --flavor dev
 
 # Prod APK
 flutter build apk --release --flavor prod
+
+flutter build appbundle --dart-define=MODE=prod 
 
 
 
@@ -302,3 +289,15 @@ Hidden:
       }
     }
   }
+
+
+
+  GEMINI_API_KEY=AQ.Ab8RN6ItebfqyWP5cbn6RFfO0i35vUO_46Kzj21U8hsCBGymYw
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com
+
+
+GROQ_API_KEY=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
+
+
+DEEPSEEK_API_KEY=sk-6696e156f808472fac6c72c5e0b2ac56
+

@@ -35,8 +35,8 @@ class LocalDbSource {
   }
 
   Future<void> replaceSingleCase({required int suiteId, required FinalizedTestCase updatedCase}) async {
-    final allCases = await DatabaseService.getTestCasesForSuite(suiteId);
-    final updated = allCases.map((tc) => tc.dbId == updatedCase.dbId ? updatedCase : tc).toList();
-    await updateSuiteCases(suiteId: suiteId, cases: updated);
+    if (updatedCase.dbId != null) {
+      await DatabaseService.updateSingleCase(dbId: updatedCase.dbId!, tc: updatedCase);
+    }
   }
 }

@@ -1,7 +1,5 @@
-import 'package:equatable/equatable.dart';
-
 // ignore: must_be_immutable
-class TestStep extends Equatable {
+class TestStep {
   String action;
   String data;
   String expected;
@@ -30,6 +28,4 @@ class TestStep extends Equatable {
     );
   }
 
-  @override
-  List<Object?> get props => [action, data, expected];
 }

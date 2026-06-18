@@ -1,6 +1,7 @@
 import '../ontology/entities.dart';
 import '../ontology/actions.dart'; // Import to use ActionTypeExtension
 import '../planners/domain_detector.dart';
+import '../models/domain_context.dart';
 import '../planners/coverage_planner.dart';
 import '../planners/scenario_planner.dart';
 import '../planners/constraint_parser.dart';
@@ -17,6 +18,7 @@ class DeterministicEngine {
   final String platform;
   final String? constraints;
   final int targetCount;
+  final GenerationMode mode;
 
   DeterministicEngine({
     required this.module,
@@ -24,6 +26,7 @@ class DeterministicEngine {
     required this.platform,
     this.constraints,
     required this.targetCount,
+    this.mode = GenerationMode.core,
   });
 
   Future<List<FinalizedTestCase>> generate() async {
@@ -36,7 +39,7 @@ class DeterministicEngine {
 
     final coveragePlanner = CoveragePlanner(
       totalCount: targetCount,
-      mode: GenerationMode.pro,
+      mode: mode,
       constraints: constraints ?? '',
       seed: 'fallback_${DateTime.now().millisecondsSinceEpoch}',
     );
@@ -75,6 +78,10 @@ class DeterministicEngine {
       final priority = _priorityFromCategory(scenario.category);
       final type = scenario.category.toUpperCase();
 
+      final preconditions = _generatePreconditions(scenario.category, scenario.action, domain);
+      final testData = _generateTestData(scenario.category, scenario.action, domain);
+      final expectedResult = _generateExpectedResult(scenario.category);
+
       testCases.add(
         FinalizedTestCase(
           id: 'TC_${module.replaceAll(' ', '')}_${(testCases.length + 1).toString().padLeft(3, '0')}',
@@ -84,10 +91,10 @@ class DeterministicEngine {
           platform: platform,
           priority: priority,
           type: type,
-          preconditions: [], // Dynamic preconditions based on ontology to be added next
-          testData: '',      // Dynamic data to be added next
+          preconditions: preconditions,
+          testData: testData,
           steps: steps,
-          expectedResult: 'Success',
+          expectedResult: expectedResult,
           actualResult: '',
           status: 'Not Executed',
           source: CaseSource.fallback,
@@ -157,5 +164,84 @@ class DeterministicEngine {
     // Final fallback based on domain
     final domain = DomainDetector.detect(module, feature);
     return {_fallbackEntityForDomain(domain.id)};
+  }
+
+  List<String> _generatePreconditions(String category, ActionType action, DomainContext domain) {
+    final base = [
+      'User is authenticated with an active session and valid role',
+      'User is on the $feature screen with all UI elements rendered',
+      'Backend services are reachable and responding within normal latency',
+    ];
+    if (category == 'negative') {
+      return [
+        ...base,
+        'Test environment has malformed or out-of-range input data ready',
+        'No client-side validation bypasses are in place',
+      ];
+    }
+    if (category == 'security') {
+      return [
+        ...base,
+        'User has no special privileges (standard user role)',
+        'XSS/CSRF payloads are prepared for injection points',
+      ];
+    }
+    if (category == 'validation') {
+      return [
+        ...base,
+        'Input fields accept a wide range of characters (alphanumeric, special, Unicode)',
+        'Field length limits are known (e.g., max 255 chars for text inputs)',
+      ];
+    }
+    if (category == 'boundary') {
+      return [
+        ...base,
+        'System is configured with default maximum limits (no custom overrides)',
+        'Data sets include values at min, max, just below max, and just above max',
+      ];
+    }
+    if (category == 'session') {
+      return [
+        'User session has expired due to inactivity timeout',
+        'User is redirected to login page without data loss',
+      ];
+    }
+    return base;
+  }
+
+  String _generateTestData(String category, ActionType action, DomainContext domain) {
+    if (category == 'negative') return 'Malformed payload: missing required fields, invalid email format, negative numbers';
+    if (category == 'security') return 'Injection payload: <script>alert("xss")</script>; SQL: \' OR 1=1 --';
+    if (category == 'validation') return 'Empty required fields, special chars (!@#\$%), exceeds max length (300 chars), Unicode injection';
+    if (category == 'boundary') return 'Min=0, Max=9999999999, string length=256 chars, decimal with 6 places';
+    if (category == 'session') return 'Expired JWT token, missing Authorization header, malformed Bearer token';
+    if (category == 'positive') {
+      if (domain.id == 'identity') return 'Valid credentials: admin@domain.com / SecurePass789!';
+      if (domain.id == 'commerce') return 'Product SKU-7755 (in stock, \$49.99), quantity=2, valid coupon code SAVE10';
+      if (domain.id == 'transaction') return 'From account: XXXX-8901 (balance \$5,000), to account: XXXX-3456, amount \$250.00';
+      if (domain.id == 'scheduling') return 'Date range: 2026-08-01 to 2026-08-05, reason: Annual Leave, approver: manager@domain.com';
+      if (domain.id == 'records') return 'Record ID: REC-0042, patient: John Doe, DOB: 1990-05-15';
+      return 'Valid input data per $feature specification';
+    }
+    return 'Valid input data per $feature specification';
+  }
+
+  String _generateExpectedResult(String category) {
+    switch (category) {
+      case 'positive':
+        return 'Operation completes successfully — system returns 200/OK with correct response payload';
+      case 'negative':
+        return 'System rejects the request with a clear error message; no data corruption occurs';
+      case 'validation':
+        return 'Inline validation errors appear for each invalid field; form does not submit';
+      case 'security':
+        return 'Malicious input is sanitized or rejected with 403/400; no XSS or SQL injection succeeds';
+      case 'boundary':
+        return 'System handles boundary values gracefully — no crash, no truncation, no silent overflow';
+      case 'session':
+        return 'API returns 401 Unauthorized; user is redirected to re-authentication flow';
+      default:
+        return 'Operation completes as expected with correct state transition';
+    }
   }
 }

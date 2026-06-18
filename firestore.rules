@@ -19,5 +19,12 @@ service cloud.firestore {
       allow create: if request.auth != null;
       allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
+    // Cloud-function-only collections – deny all client access
+    match /guests/{doc} { allow read, write: if false; }
+    match /deviceUsage/{doc} { allow read, write: if false; }
+    match /deviceGuestMapping/{doc} { allow read, write: if false; }
+    match /deviceCooldown/{doc} { allow read, write: if false; }
+    match /the_qag_registry/{doc} { allow read, write: if false; }
+    match /processed_requests/{doc} { allow read, write: if false; }
   }
 }

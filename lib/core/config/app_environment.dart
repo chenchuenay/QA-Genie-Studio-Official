@@ -1,56 +1,20 @@
 // ============================================================
 // FILE: lib/core/config/app_environment.dart
 // ============================================================
+//
+// ☝️ SINGLE SOURCE OF TRUTH for dev vs prod environment.
+//
+// Example:
+//   flutter run                      → dev (default)
+//   flutter run  --dart-define=MODE=prod
+//   flutter build appbundle --dart-define=MODE=prod
+//
+// ============================================================
 
-/// ===============================================================
-///
-/// QA GENIE ENVIRONMENT AUTHORITY
-///
-/// SINGLE SOURCE OF TRUTH
-///
-/// ONLY TWO MODES EXIST:
-///
-/// 1. DEV
-///    - Internal testing
-///    - Mock authority
-///    - Local rewards
-///    - Debug tools
-///    - Fast iteration
-///
-/// 2. PROD
-///    - App Check enforced
-///    - Cloud authority enforced
-///    - Server-side quotas
-///    - Abuse prevention
-///    - Production monetization
-///
-/// IMPORTANT:
-/// NO STAGING
-/// NO HYBRID
-/// NO PARTIAL SECURITY
-///
-/// ===============================================================
 library;
-
-import 'package:qa_genie/app/config/app_config.dart';
 
 enum AppEnvironment { dev, prod }
 
-/// ===============================================================
-///
-/// ENVIRONMENT AUTHORITY
-///
-/// COMPILE-TIME CONTROLLED.
-///
-/// Example:
-///
-/// DEV:
-/// flutter run
-///
-/// PROD:
-/// flutter build appbundle --dart-define=MODE=prod
-///
-/// ===============================================================
 class EnvironmentAuthority {
   const EnvironmentAuthority._();
 
@@ -89,10 +53,7 @@ class EnvironmentAuthority {
 
   static bool get allowVerboseErrors => isDev;
 
-  /// 🛡️ PRODUCTION SAFETY LOCK:
-  /// Mock ads are allowed ONLY in the DEV environment AND when NOT in a Release build.
-  /// This ensures that any Release build (Dev or Prod) strictly uses real AdMob logic.
-  static bool get allowMockAds => isDev && !AppConfig.isProduction;
+  static bool get allowMockAds => isDev;
 
   static bool get allowLocalQuotaReset => isDev;
 
@@ -114,37 +75,20 @@ class EnvironmentAuthority {
   // RATE LIMITING
   // ============================================================
 
-  static Duration get minimumGenerationCooldown {
-    if (isProd) {
-      return const Duration(seconds: 30);
-    }
-
-    return const Duration(seconds: 1);
-  }
+  static Duration get minimumGenerationCooldown =>
+      isProd ? const Duration(seconds: 30) : const Duration(seconds: 1);
 
   // ============================================================
   // LOGGING
   // ============================================================
 
-  static int get forensicLogRetentionDays {
-    if (isProd) {
-      return 30;
-    }
-
-    return 3;
-  }
+  static int get forensicLogRetentionDays => isProd ? 30 : 3;
 
   // ============================================================
   // TOKEN LIMITS
   // ============================================================
 
-  static int get maxPromptCharacters {
-    if (isProd) {
-      return 12000;
-    }
-
-    return 20000;
-  }
+  static int get maxPromptCharacters => isProd ? 12000 : 20000;
 
   static int get maxConstraintsLength => 100;
 
@@ -158,31 +102,21 @@ class EnvironmentAuthority {
   // DISPLAY
   // ============================================================
 
-  static String get displayName {
-    switch (current) {
-      case AppEnvironment.dev:
-        return 'DEV';
-
-      case AppEnvironment.prod:
-        return 'PROD';
-    }
-  }
+  static String get displayName => isDev ? 'DEV' : 'PROD';
 
   // ============================================================
   // BUILD SUMMARY
   // ============================================================
 
-  static Map<String, dynamic> diagnostics() {
-    return {
-      'environment': displayName,
-      'allowDebugLogs': allowDebugLogs,
-      'allowMockAds': allowMockAds,
-      'requireCloudAuthority': requireCloudAuthority,
-      'requireAppCheck': requireAppCheck,
-      'requireSignedTokens': requireSignedTokens,
-      'requirePiiScrubbing': requirePiiScrubbing,
-      'requireForensicTracing': requireForensicTracing,
-      'strictExportValidation': strictExportValidation,
-    };
-  }
+  static Map<String, dynamic> diagnostics() => {
+        'environment': displayName,
+        'allowDebugLogs': allowDebugLogs,
+        'allowMockAds': allowMockAds,
+        'requireCloudAuthority': requireCloudAuthority,
+        'requireAppCheck': requireAppCheck,
+        'requireSignedTokens': requireSignedTokens,
+        'requirePiiScrubbing': requirePiiScrubbing,
+        'requireForensicTracing': requireForensicTracing,
+        'strictExportValidation': strictExportValidation,
+      };
 }

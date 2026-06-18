@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
@@ -16,9 +13,16 @@ import 'package:qa_genie/features/support/ui/report_issue_screen.dart';
 import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
+import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/core/network/network_guard.dart';
+import 'package:qa_genie/core/utils/device_utils.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
+
+  static bool _pendingRefresh = false;
+  static void markForRefresh() => _pendingRefresh = true;
 
   @override
   State<AccountScreen> createState() => _AccountScreenState();
@@ -33,15 +37,19 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _isSyncing = false;
   String? _lastSyncedText;
   String _appVersion = '';
+  String _guestDisplayName = '';
 
   @override
   void initState() {
     super.initState();
+    _user = AuthService.currentUser;
     _loadVersion();
-    _loadInitialData();
-    AuthService.authStateChanges.listen((user) {
-      if (mounted) _loadData();
-    });
+    _loadCachedData();
+    _refreshIsPro();
+    if (AccountScreen._pendingRefresh) {
+      AccountScreen._pendingRefresh = false;
+      _loadData();
+    }
   }
 
   Future<void> _loadVersion() async {
@@ -49,14 +57,9 @@ class _AccountScreenState extends State<AccountScreen> {
     if (mounted) setState(() => _appVersion = packageInfo.version);
   }
 
-  Future<void> _loadInitialData() async {
-    await _loadCachedData();
-    final prefs = await SharedPreferences.getInstance();
-    final lastSync = prefs.getInt('stats_last_sync') ?? 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - lastSync > 24 * 60 * 60 * 1000) {
-      _loadData();
-    }
+  Future<void> _refreshIsPro() async {
+    final pro = await UsageManager.isPro();
+    if (mounted) setState(() => _isPro = pro);
   }
 
   Future<void> _loadCachedData() async {
@@ -64,27 +67,27 @@ class _AccountScreenState extends State<AccountScreen> {
     final generations = prefs.getInt('stats_generations') ?? 0;
     final exports = prefs.getInt('stats_exports') ?? 0;
     final lastSync = prefs.getInt('stats_last_sync') ?? 0;
+    final cachedGuestName = prefs.getString('guest_display_name') ?? '';
 
     if (mounted) {
       setState(() {
         _totalGenerations = generations;
         _totalExports = exports;
+        _guestDisplayName = cachedGuestName;
         if (lastSync > 0) {
           final diff = DateTime.now().difference(
             DateTime.fromMillisecondsSinceEpoch(lastSync),
           );
-          
-          if (diff.inMinutes < 30) {
+          if (diff.inMinutes < 1) {
             _lastSyncedText = 'Sync just now';
+          } else if (diff.inMinutes < 60) {
+            _lastSyncedText = '${diff.inMinutes}m ago';
           } else if (diff.inHours < 24) {
-            _lastSyncedText = '${diff.inHours} ${diff.inHours == 1 ? 'hour' : 'hours'} ago';
-          } else if (diff.inDays < 7) {
-            _lastSyncedText = '${diff.inDays} ${diff.inDays == 1 ? 'day' : 'days'} ago';
+            _lastSyncedText = '${diff.inHours}h ago';
           } else if (diff.inDays < 30) {
-            final weeks = (diff.inDays / 7).floor();
-            _lastSyncedText = '$weeks ${weeks == 1 ? 'week' : 'weeks'} ago';
+            _lastSyncedText = '${diff.inDays}d ago';
           } else {
-            _lastSyncedText = '1 month ago';
+            _lastSyncedText = '${(diff.inDays / 30).floor()}mo ago';
           }
         } else {
           _lastSyncedText = 'Syncing...';
@@ -109,14 +112,25 @@ class _AccountScreenState extends State<AccountScreen> {
       generations = stats['generations'] ?? 0;
       exports = stats['exports'] ?? 0;
 
-      if (user != null && !user.isAnonymous) {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        if (userDoc.exists) {
-          final createdAt = userDoc.data()?['createdAt'] as Timestamp?;
-          if (createdAt != null) memberSince = createdAt.toDate();
+      if (user != null) {
+        final dashboard = await UsageManager.getDashboardData();
+        final identity = dashboard['identity'] as Map?;
+        if (identity != null) {
+          final isGuestUser = AuthService.isGuest;
+          final isRegularUser = !user.isAnonymous && !isGuestUser;
+          if (isRegularUser) {
+            final createdAt = identity['createdAt'];
+            if (createdAt is String) {
+              memberSince = DateTime.parse(createdAt);
+            }
+          } else {
+            final name = identity['displayName'] as String?;
+            if (name != null && name.isNotEmpty) {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('guest_display_name', name);
+              if (mounted) _guestDisplayName = name;
+            }
+          }
         }
       }
 
@@ -131,22 +145,24 @@ class _AccountScreenState extends State<AccountScreen> {
       debugPrint('AccountScreen: Error loading data: $e');
     }
 
-    if (mounted) {
-      setState(() {
-        _user = user;
-        _isPro = isPro;
-        _totalGenerations = generations;
-        _totalExports = exports;
-        _memberSince = memberSince;
-        _isSyncing = false;
-        _lastSyncedText = 'Sync just now';
-      });
-    }
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _isPro = isPro;
+          _totalGenerations = generations;
+          _totalExports = exports;
+          _memberSince = memberSince;
+          _guestDisplayName = _guestDisplayName;
+          _isSyncing = false;
+          _lastSyncedText = 'Sync just now';
+        });
+      }
   }
 
   Future<void> _confirmLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
+    if (!await NetworkGuard.ensureProductionOnline(context)) return;
+
+    final confirmed = await showBlurredDialog<bool>(context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('Sign Out?', style: TextStyle(color: Colors.white)),
@@ -178,22 +194,17 @@ class _AccountScreenState extends State<AccountScreen> {
     await prefs.remove('stats_generations');
     await prefs.remove('stats_exports');
     await prefs.remove('stats_last_sync');
-    await GoogleSignIn().signOut();
-    await FirebaseAuth.instance.signOut();
-
-    // After signing out, we need to sign in with the persistent guest account (per device)
-    // This is currently creating a new guest each time – we will fix it in the next step.
-    await AuthService.signInAnonymously();
+    await AuthService.signOut();
 
     if (mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
-      _loadData();
+      AccountScreen.markForRefresh();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isAnonymous = _user?.isAnonymous ?? true;
+    final isGuest = AuthService.isGuest;
     final email = _user?.email ?? '';
     final displayName = _user?.displayName ?? '';
 
@@ -210,25 +221,31 @@ class _AccountScreenState extends State<AccountScreen> {
         // Removed logout icon from app bar
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Column(
-          children: [
-            _buildInfoCard(isAnonymous, email, displayName),
-            const SizedBox(height: 16),
-            _buildMenuCard(),
-            const SizedBox(height: 24),
-          ],
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: AppColors.accent,
+        backgroundColor: AppColors.surface,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Column(
+            children: [
+              _buildInfoCard(isGuest, email, displayName),
+              const SizedBox(height: 16),
+              _buildMenuCard(),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Future<void> _confirmDeleteAccount() async {
+    if (!await NetworkGuard.ensureProductionOnline(context)) return;
+
     final textController = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
+    final confirmed = await showBlurredDialog<bool>(context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text(
@@ -276,24 +293,49 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _deleteAccount() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
     try {
-      await FunctionsService.call(functionName: 'deleteAccount', payload: {});
+      final deviceId = await DeviceUtils.getUniqueId();
+      final user = AuthService.currentUser;
+      await FunctionsService.call(functionName: 'deleteAccount', payload: {
+        'deviceId': deviceId,
+        if (user != null && !user.isAnonymous) 'email': user.email,
+      });
+      await DatabaseService.clearAll();
       await _logout();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete account: $e'),
-            backgroundColor: AppColors.error,
+        showBlurredDialog(
+          context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Account Deletion Failed', style: TextStyle(color: Colors.white)),
+            content: Text(
+              'Unable to delete your account at this time. Please try again later.',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+              ),
+            ],
           ),
         );
       }
     }
   }
 
-  Widget _buildInfoCard(bool isAnonymous, String email, String displayName) {
-    final name = isAnonymous
-        ? (displayName.isNotEmpty ? displayName : 'Guest')
+
+  Widget _buildInfoCard(bool isGuest, String email, String displayName) {
+    final name = isGuest
+        ? (_guestDisplayName.isNotEmpty
+            ? _guestDisplayName
+            : displayName.isNotEmpty
+                ? displayName
+                : 'Guest')
         : (displayName.isNotEmpty ? displayName : email.split('@').first);
 
     return Container(
@@ -316,7 +358,7 @@ class _AccountScreenState extends State<AccountScreen> {
               color: Colors.white,
             ),
           ),
-          if (!isAnonymous)
+          if (!isGuest)
             Text(
               email,
               style: const TextStyle(
@@ -354,7 +396,7 @@ class _AccountScreenState extends State<AccountScreen> {
             'Joined ${_memberSince != null ? _formatDate(_memberSince!) : '...'} • ${_lastSyncedText ?? 'Syncing...'}',
             style: const TextStyle(fontSize: 11, color: AppColors.textHint),
           ),
-          if (isAnonymous) ...[
+          if (isGuest) ...[
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -402,14 +444,25 @@ class _AccountScreenState extends State<AccountScreen> {
 
   String _monthAbbr(int month) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return months[month - 1];
   }
 
   Widget _buildMenuCard() {
-    final isAnonymous = _user?.isAnonymous ?? true;
+    final isGuest = AuthService.isGuest;
+    final isAnonymous = (_user?.isAnonymous ?? true) || isGuest;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -438,6 +491,25 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
           _divider(),
+          // Sign Out + Delete Account for signed-in users only
+          if (!isAnonymous) ...[
+            _divider(),
+            _menuItem(
+              icon: Icons.logout,
+              title: 'Sign Out',
+              subtitle: 'Log out of your account',
+              onTap: _confirmLogout,
+            ),
+            _divider(),
+            _menuItem(
+              icon: Icons.delete_forever,
+              title: 'Delete Account',
+              subtitle: 'Permanently remove all data',
+              onTap: _confirmDeleteAccount,
+              isDestructive: true,
+            ),
+          ],
+          _divider(),
           _menuItem(
             icon: Icons.description,
             title: 'Policies',
@@ -459,30 +531,12 @@ class _AccountScreenState extends State<AccountScreen> {
               MaterialPageRoute(builder: (_) => const AboutScreen()),
             ),
           ),
-          // Only show Sign Out for signed-in (non‑anonymous) users
-          if (!isAnonymous) ...[
-            _divider(),
-            _menuItem(
-              icon: Icons.logout,
-              title: 'Sign Out',
-              subtitle: 'Log out of your account',
-              onTap: _confirmLogout,
-            ),
-          ],
-          _divider(),
-          _menuItem(
-            icon: Icons.delete_forever,
-            title: 'Delete Account',
-            subtitle: 'Permanently remove all data',
-            onTap: _confirmDeleteAccount,
-            isDestructive: true,
-          ),
           _divider(),
           Container(
             padding: const EdgeInsets.all(16),
             width: double.infinity,
             child: const Text(
-              'Your data stays local.',
+              'Data stays local on this device and is not synced to the cloud.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,
@@ -533,12 +587,12 @@ class _AccountScreenState extends State<AccountScreen> {
     color: AppColors.border.withOpacity(0.5),
   );
 
-  void _showAuthDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.5),
+  void _showAuthDialog() async {
+    if (!await NetworkGuard.ensureProductionOnline(context)) return;
+
+    await showBlurredDialog(context,
       builder: (ctx) => const AuthDialog(showGuestButton: false),
     );
+    if (mounted) _loadData();
   }
 }

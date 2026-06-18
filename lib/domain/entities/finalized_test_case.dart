@@ -1,9 +1,8 @@
-import 'package:equatable/equatable.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 
 // ignore: must_be_immutable
-class FinalizedTestCase extends Equatable {
+class FinalizedTestCase {
   int? dbId;
   String id;
   String title;
@@ -38,8 +37,10 @@ class FinalizedTestCase extends Equatable {
     this.source = CaseSource.ai,
   });
 
+  static const _dbIdSentinel = Object();
+
   FinalizedTestCase copyWith({
-    int? dbId,
+    Object? dbId = _dbIdSentinel,
     String? id,
     String? title,
     List<String>? preconditions,
@@ -56,7 +57,7 @@ class FinalizedTestCase extends Equatable {
     CaseSource? source,
   }) {
     return FinalizedTestCase(
-      dbId: dbId ?? this.dbId,
+      dbId: identical(dbId, _dbIdSentinel) ? this.dbId : dbId as int?,
       id: id ?? this.id,
       title: title ?? this.title,
       preconditions: preconditions ?? List.from(this.preconditions),
@@ -74,22 +75,4 @@ class FinalizedTestCase extends Equatable {
     );
   }
 
-  @override
-  List<Object?> get props => [
-    dbId,
-    id,
-    title,
-    preconditions,
-    testData,
-    steps,
-    expectedResult,
-    actualResult,
-    priority,
-    status,
-    type,
-    module,
-    feature,
-    platform,
-    source,
-  ];
 }

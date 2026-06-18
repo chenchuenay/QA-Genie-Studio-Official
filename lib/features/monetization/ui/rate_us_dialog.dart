@@ -12,7 +12,7 @@ class _RateUsDialogContent extends StatelessWidget {
 
   Future<void> _openStore() async {
     final url = Uri.parse(
-      'https://play.google.com/store/apps/details?id=com.qa_genie.app',
+      'https://play.google.com/store/apps/details?id=com.enaykumar.qagenie',
     ); // replace with your app ID
     if (await canLaunchUrl(url)) {
       await launchUrl(url);

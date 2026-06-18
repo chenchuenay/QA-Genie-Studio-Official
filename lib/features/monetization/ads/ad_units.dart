@@ -1,5 +1,3 @@
-import 'package:qa_genie/app/config/app_config.dart';
-
 class AdUnits {
   // --- TEST AD UNIT IDS (Use these while testing) ---
   static const String _testRewarded = 'ca-app-pub-3940256099942544/5224354917';

@@ -27,6 +27,16 @@ abstract class QaGenieException implements Exception {
 
   const QaGenieException({required this.message, required this.code});
 
+  /// Whether retrying the operation might succeed.
+  /// Network/Server errors are retriable.
+  /// Validation, Security, and Quota errors are not.
+  bool get isRetriable {
+    return switch (code) {
+      'NETWORK_ERROR' || 'SERVER_ERROR' || 'API_ERROR' || 'AD_REWARD_ERROR' => true,
+      _ => false,
+    };
+  }
+
   @override
   String toString() {
     return '$runtimeType($code): $message';
@@ -181,11 +191,6 @@ class FallbackGenerationException extends QaGenieException {
 // ============================================================
 // MONETIZATION
 // ============================================================
-
-class QuotaExceededException extends QaGenieException {
-  const QuotaExceededException(String message)
-    : super(message: message, code: 'QUOTA_EXCEEDED');
-}
 
 class AdRewardException extends QaGenieException {
   const AdRewardException(String message)

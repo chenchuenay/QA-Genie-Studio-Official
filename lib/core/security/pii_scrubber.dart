@@ -89,6 +89,33 @@ class PIIScrubber {
 
   static final RegExp _cardRegex = RegExp(r'\b(?:\d[ -]*?){13,16}\b');
 
+  static bool _luhnCheck(String digits) {
+    if (digits.length < 13 || digits.length > 16) return false;
+    if (!RegExp(r'^[0-9]+$').hasMatch(digits)) return false;
+    int sum = 0;
+    bool alternate = false;
+    for (int i = digits.length - 1; i >= 0; i--) {
+      int n = digits.codeUnitAt(i) - 48;
+      if (alternate) {
+        n *= 2;
+        if (n > 9) n -= 9;
+      }
+      sum += n;
+      alternate = !alternate;
+    }
+    return sum % 10 == 0;
+  }
+
+  static String _replaceCards(String input) {
+    return input.replaceAllMapped(_cardRegex, (match) {
+      final raw = match.group(0)!;
+      final digits = raw.replaceAll(RegExp(r'[ -]'), '');
+      if (digits.length < 13 || digits.length > 16) return raw;
+      if (!_luhnCheck(digits)) return raw;
+      return '[REDACTED_CARD]';
+    });
+  }
+
   // ============================================================
   // LONG RANDOM TOKENS
   // ============================================================
@@ -124,7 +151,7 @@ class PIIScrubber {
 
     sanitized = sanitized.replaceAll(_uuidRegex, '[REDACTED_UUID]');
 
-    sanitized = sanitized.replaceAll(_cardRegex, '[REDACTED_CARD]');
+    sanitized = _replaceCards(sanitized);
 
     sanitized = sanitized.replaceAll(_longTokenRegex, '[REDACTED_TOKEN]');
 

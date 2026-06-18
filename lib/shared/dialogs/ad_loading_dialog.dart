@@ -11,9 +11,9 @@ class AdLoadingDialog extends StatelessWidget {
   const AdLoadingDialog({
     super.key,
     required this.onRetry,
-    this.title = 'Ad Engine Status',
+    this.title = 'Ad Not Ready',
     this.message =
-        'Sponsored Ads are currently preparing. Please wait a moment and try again to continue.',
+        'Ads help keep QA Genie free. Please disable any ad blocker and tap Retry.',
   });
 
   @override

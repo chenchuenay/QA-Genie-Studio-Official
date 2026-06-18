@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:qa_genie/features/monetization/ads/ad_units.dart';
 
 class NativeAdWidget extends StatefulWidget {
@@ -17,7 +18,11 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   @override
   void initState() {
     super.initState();
-    _loadAd();
+    if (!EnvironmentAuthority.allowMockAds) {
+      _loadAd();
+    } else {
+      if (mounted) setState(() => _isAdLoaded = true);
+    }
   }
 
   void _loadAd() {
@@ -66,11 +71,25 @@ class _NativeAdWidgetState extends State<NativeAdWidget> {
   @override
   Widget build(BuildContext context) {
     if (!_isAdLoaded || _nativeAd == null) {
+      if (EnvironmentAuthority.allowMockAds) {
+        return Container(
+          height: 90,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            'Sponsored Ad',
+            style: TextStyle(color: Colors.white38, fontSize: 13),
+          ),
+        );
+      }
       return const SizedBox.shrink();
     }
 
     return SizedBox(
-      height: 90, // Match suite card height
+      height: 90,
       child: AdWidget(ad: _nativeAd!),
     );
   }

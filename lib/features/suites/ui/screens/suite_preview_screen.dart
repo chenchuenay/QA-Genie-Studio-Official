@@ -10,9 +10,13 @@ import 'package:qa_genie/shared/dialogs/export_bottom_sheet.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
+import 'package:qa_genie/features/account/ui/account_screen.dart';
 import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
+import 'package:qa_genie/core/ui/network_ui_helper.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/core/database/database_service.dart';
 
 class SuitePreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -42,7 +46,10 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   Timer? _debounceTimer;
   bool isEditable = false;
   bool _hasUnsaved = false;
+  bool _isExporting = false;
   List<FinalizedTestCase>? _backupCases;
+  bool _selectionMode = false;
+  final Set<int> _selectedIndices = {};
 
   @override
   void initState() {
@@ -85,6 +92,10 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   void _markUnsaved() {
     if (!mounted) return;
     setState(() => _hasUnsaved = true);
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) _autoSave();
+    });
   }
 
   void _toggleEdit() {
@@ -96,10 +107,15 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     setState(() => isEditable = !isEditable);
   }
 
-  void _undoAndExitEdit() {
+  Future<void> _undoAndExitEdit() async {
     if (_backupCases != null) {
+      final saved = _backupCases!;
       widget.session.testCases.clear();
-      widget.session.testCases.addAll(_backupCases!);
+      widget.session.testCases.addAll(saved);
+      // Revert DB if auto-save already persisted edits
+      if (!_hasUnsaved) {
+        await _saveUseCase.saveSuite(suiteId: widget.suiteId, cases: saved);
+      }
       _backupCases = null;
       _hasUnsaved = false;
       setState(() {});
@@ -122,7 +138,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         screen: 'SuitePreviewScreen',
         stage: ErrorStage.unknown,
         severity: ErrorSeverity.error,
-        userMessage: 'Save failed: $e',
+        userMessage: 'Save failed. Please try again.',
         error: e,
         stack: stack,
       );
@@ -130,8 +146,10 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   }
 
   Future<void> _export(String type, String? adToken) async {
-    await _autoSave();
+    if (_isExporting) return;
+    _isExporting = true;
     try {
+      await _autoSave();
       await _exportUseCase.execute(
         type: type,
         cases: widget.session.testCases,
@@ -140,8 +158,8 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         adToken: adToken,
       );
       if (!mounted) return;
-      showDialog(
-        context: context,
+      AccountScreen.markForRefresh();
+      showBlurredDialog(context,
         builder: (_) =>
             ExportSuccessDialog(type: type, moduleName: widget.moduleName),
       );
@@ -152,14 +170,19 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         screen: 'SuitePreviewScreen',
         stage: ErrorStage.export,
         severity: ErrorSeverity.error,
-        userMessage: 'Export failed: $e',
+        userMessage: 'Export failed. Please try again.',
         error: e,
         stack: stackTrace,
       );
+    } finally {
+      _isExporting = false;
     }
   }
 
   Future<void> _openExport() async {
+    if (!await NetworkUiHelper.ensureProductionOnline(context)) {
+      return;
+    }
     await _autoSave();
     if (!mounted) return;
     await showModalBottomSheet<List<FinalizedTestCase>>(
@@ -178,13 +201,20 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
             cases: widget.session.testCases,
           );
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Changes saved'),
-                backgroundColor: AppColors.success,
+            showBlurredDialog(context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: AppColors.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: const Text('Saved', style: TextStyle(color: Colors.white)),
+                content: const Text('Changes saved.', style: TextStyle(color: AppColors.textSecondary)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+                  ),
+                ],
               ),
             );
-            // Force UI rebuild
             setState(() {});
           }
         },
@@ -210,7 +240,11 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
       context,
       MaterialPageRoute(
         builder: (_) => SummaryReportScreen(
-          session: widget.session,
+          session: GenerationSession(
+            traceId: widget.session.traceId,
+            testCases: widget.session.testCases.map((c) => c.copyWith()).toList(),
+            auditReport: widget.session.auditReport,
+          ),
           moduleName: widget.moduleName,
           feature: widget.feature,
           platform: widget.platform,
@@ -218,6 +252,165 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         ),
       ),
     );
+  }
+
+  void _onSelectionChanged(Set<int> indices) {
+    setState(() {
+      _selectedIndices.clear();
+      _selectedIndices.addAll(indices);
+      if (_selectedIndices.isNotEmpty && !_selectionMode) {
+        _selectionMode = true;
+        if (isEditable) {
+          _saveAndExitEdit();
+        }
+      } else if (_selectedIndices.isEmpty) {
+        _selectionMode = false;
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedIndices.clear();
+    });
+  }
+
+  Future<void> _batchCopy() async {
+    final suites = await AppDependencies.getHistoryUseCase.getAllSuites();
+    if (!mounted) return;
+    final targetSuiteId = await showBlurredDialog<int>(context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Copy to Suite', style: TextStyle(color: Colors.white)),
+        content: ListView.builder(
+          shrinkWrap: true,
+          itemCount: suites.length,
+          itemBuilder: (_, i) {
+            final s = suites[i];
+            final sid = (s['id'] as num?)?.toInt() ?? 0;
+            return ListTile(
+              title: Text('${s['moduleName']} · ${s['feature']}', style: const TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(ctx, sid),
+            );
+          },
+        ),
+      ),
+    );
+    if (targetSuiteId == null) return;
+    final casesToCopy = _selectedIndices.map((i) {
+      final tc = widget.session.testCases[i];
+      return tc.copyWith(id: '${tc.id}_copy', dbId: null);
+    }).toList();
+    await DatabaseService.insertTestCases(suiteId: targetSuiteId, cases: casesToCopy);
+    _exitSelectionMode();
+    if (mounted) {
+      showBlurredDialog(context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Copied', style: TextStyle(color: Colors.white)),
+          content: Text('Copied ${casesToCopy.length} case(s).', style: const TextStyle(color: AppColors.textSecondary)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _batchMove() async {
+    final suites = await AppDependencies.getHistoryUseCase.getAllSuites();
+    if (!mounted) return;
+    final targetSuiteId = await showBlurredDialog<int>(context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Move to Suite', style: TextStyle(color: Colors.white)),
+        content: ListView.builder(
+          shrinkWrap: true,
+          itemCount: suites.length,
+          itemBuilder: (_, i) {
+            final s = suites[i];
+            final sid = (s['id'] as num?)?.toInt() ?? 0;
+            if (sid == widget.suiteId) return const SizedBox.shrink();
+            return ListTile(
+              title: Text('${s['moduleName']} · ${s['feature']}', style: const TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(ctx, sid),
+            );
+          },
+        ),
+      ),
+    );
+    if (targetSuiteId == null) return;
+    final indices = List.from(_selectedIndices)..sort((a, b) => b.compareTo(a));
+    final casesToMove = indices.map((i) => widget.session.testCases[i]).toList();
+    final deleteIds = casesToMove.map((tc) => tc.dbId).whereType<int>().toList();
+    await DatabaseService.insertTestCases(suiteId: targetSuiteId, cases: casesToMove);
+    if (deleteIds.isNotEmpty) await DatabaseService.batchDeleteTestCases(deleteIds);
+    for (final i in indices) {
+      widget.session.testCases.removeAt(i);
+    }
+    _exitSelectionMode();
+    if (mounted) {
+      setState(() {});
+      showBlurredDialog(context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Moved', style: TextStyle(color: Colors.white)),
+          content: Text('Moved ${casesToMove.length} case(s).', style: const TextStyle(color: AppColors.textSecondary)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _batchDelete() async {
+    final count = _selectedIndices.length;
+    final confirmed = await showBlurredDialog<bool>(context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Delete Cases?', style: TextStyle(color: Colors.white)),
+        content: Text('Delete $count selected case(s)? This cannot be undone.', style: const TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final indices = List.from(_selectedIndices)..sort((a, b) => b.compareTo(a));
+    final deleteIds = indices.map((i) => widget.session.testCases[i].dbId).whereType<int>().toList();
+    if (deleteIds.isNotEmpty) await DatabaseService.batchDeleteTestCases(deleteIds);
+    for (final i in indices) {
+      widget.session.testCases.removeAt(i);
+    }
+    _exitSelectionMode();
+    if (mounted) {
+      setState(() {});
+      showBlurredDialog(context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Deleted', style: TextStyle(color: Colors.white)),
+          content: Text('Deleted $count case(s).', style: const TextStyle(color: AppColors.textSecondary)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   @override
@@ -244,21 +437,32 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () async {
-                          if (await _onWillPop() && mounted)
+                          if (_selectionMode) {
+                            _exitSelectionMode();
+                          } else if (await _onWillPop() && mounted) {
                             Navigator.pop(context);
+                          }
                         },
                       ),
                       const SizedBox(width: 8),
-                      const Text(
-                        "Suite",
-                        style: TextStyle(
+                      Text(
+                        _selectionMode ? '${_selectedIndices.length} selected' : 'Suite',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                       const Spacer(),
-                      if (!isEditable) ...[
+                      if (_selectionMode) ...[
+                        _selIcon(Icons.content_copy, 'Copy', _batchCopy),
+                        const SizedBox(width: 2),
+                        _selIcon(Icons.drive_file_move, 'Move', _batchMove),
+                        const SizedBox(width: 2),
+                        _selIcon(Icons.delete, 'Delete', _batchDelete, isDestructive: true),
+                        const SizedBox(width: 6),
+                        _selIcon(Icons.close, 'Done', _exitSelectionMode),
+                      ] else if (!isEditable) ...[
                         OutlinedButton.icon(
                           onPressed: _openSummary,
                           icon: const Icon(
@@ -314,7 +518,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                       ],
                       if (isEditable) ...[
                         TextButton(
-                          onPressed: _undoAndExitEdit,
+                          onPressed: () => _undoAndExitEdit(),
                           style: TextButton.styleFrom(
                             foregroundColor: AppColors.error,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -355,6 +559,8 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                   const SizedBox(height: 12),
                   Text(
                     '${widget.moduleName} · ${widget.platform} · ${widget.session.testCases.length} cases',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                     style: AppText.subheading,
                   ),
                   if (!AppConfig.isProduction) ...[
@@ -412,6 +618,9 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                   suiteId: widget.suiteId,
                   getOtherSuites: () async =>
                       AppDependencies.getHistoryUseCase.getAllSuites(),
+                  selectionMode: _selectionMode,
+                  selectedIndices: _selectedIndices,
+                  onSelectionChanged: _onSelectionChanged,
                 ),
               ),
             ),
@@ -452,6 +661,25 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _selIcon(IconData icon, String tooltip, VoidCallback onPressed, {bool isDestructive = false}) {
+    final color = isDestructive ? Colors.red.shade300 : Colors.white70;
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+        color: color,
+        tooltip: tooltip,
+        splashRadius: 18,
+        style: IconButton.styleFrom(
+          backgroundColor: isDestructive ? Colors.red.withOpacity(0.15) : Colors.white.withOpacity(0.1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       ),
     );

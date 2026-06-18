@@ -15,8 +15,6 @@ import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/export/adapters/json_adapter.dart';
 import 'package:qa_genie/features/export/adapters/excel_adapter.dart';
 import 'package:qa_genie/domain/usecases/export_validation_service.dart';
-import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/features/export/folder/export_folder_service.dart';
 
 class ExportTestCasesUseCase {
@@ -50,17 +48,6 @@ class ExportTestCasesUseCase {
       final safeModule = _safeModulePrefix(effectiveModule);
       final code = _shortCode();
       final fileName = 'TC_${safeModule}_${normalizedType}_$code';
-
-      // Call cloud function to track export (with token)
-      await FunctionsService.call(
-        functionName: 'trackExport',
-        payload: {
-          'isPro': await UsageManager.isPro(),
-          'adToken': adToken,
-          'exportType': normalizedType,
-          'target': normalizedType,
-        },
-      );
 
       switch (normalizedType) {
         case 'excel':
@@ -135,17 +122,6 @@ class ExportTestCasesUseCase {
           moduleName ?? (cases.isNotEmpty ? cases.first.module : 'Unknown');
       final effectiveFeature =
           featureName ?? (cases.isNotEmpty ? cases.first.feature : 'Unknown');
-
-      // Call cloud function to track export (with token)
-      await FunctionsService.call(
-        functionName: 'trackExport',
-        payload: {
-          'isPro': await UsageManager.isPro(),
-          'adToken': adToken,
-          'exportType': 'summary',
-          'summary': true,
-        },
-      );
 
       final data = ExportMapper.toSummaryReport(
         cases,
@@ -395,7 +371,12 @@ class ExportTestCasesUseCase {
     return cleaned.length > 20 ? cleaned.substring(0, 20) : cleaned;
   }
 
-  String _shortCode() => (DateTime.now().millisecondsSinceEpoch % 10000)
-      .toString()
-      .padLeft(4, '0');
+  static int _exportCounter = 0;
+
+  String _shortCode() {
+    _exportCounter = (_exportCounter + 1) % 10000;
+    return ((DateTime.now().microsecondsSinceEpoch + _exportCounter) % 100000)
+        .toString()
+        .padLeft(5, '0');
+  }
 }

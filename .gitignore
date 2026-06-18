@@ -85,6 +85,11 @@ linux/
 macos/
 windows/
 
+# Environment files with API keys
+.env.dev
+.env.prod
+functions/.env.yaml
+
 # Other
 *.bak
 *.swp

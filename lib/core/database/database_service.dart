@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
@@ -12,6 +14,7 @@ class DatabaseService {
   static String? _currentIdentity;
   static const String _dbName = 'qa_genie.db';
   static const int _version = 3;
+  static List<Map<String, dynamic>>? _suitesCache;
 
   static Future<Database> get db async {
     if (_db != null) return _db!;
@@ -78,29 +81,80 @@ class DatabaseService {
   }
 
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Simplified for this scope, assuming existing migration logic
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS test_cases (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          suite_id INTEGER NOT NULL,
+          case_json TEXT NOT NULL,
+          FOREIGN KEY (suite_id) REFERENCES suites(id) ON DELETE CASCADE
+        )
+      ''');
+    }
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS reported_issues (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          firestoreId TEXT,
+          issueType TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          status TEXT DEFAULT 'open',
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          isSynced INTEGER DEFAULT 0,
+          lastSyncAttempt TEXT,
+          platform TEXT,
+          deviceModel TEXT,
+          appVersion TEXT,
+          screen TEXT
+        )
+      ''');
+    }
   }
   
   static Future<int> insertSuite({required String moduleName, required String feature, required String platform}) async {
     final db = await DatabaseService.db;
-    return await db.insert('suites', {'moduleName': moduleName, 'feature': feature, 'platform': platform});
+    // Check for existing suite with same (moduleName, feature, platform)
+    final existing = await db.query('suites',
+        where: 'moduleName = ? AND feature = ? AND platform = ?',
+        whereArgs: [moduleName, feature, platform]);
+    if (existing.isNotEmpty) return existing.first['id'] as int;
+    final id = await db.insert('suites', {'moduleName': moduleName, 'feature': feature, 'platform': platform});
+    invalidateSuitesCache();
+    return id;
   }
 
   static Future<List<Map<String, dynamic>>> getAllSuites() async {
+    if (_suitesCache != null) return _suitesCache!;
     final db = await DatabaseService.db;
-    return await db.query('suites', orderBy: 'created_at DESC');
+    _suitesCache = await db.query('suites', orderBy: 'created_at DESC');
+    return _suitesCache!;
+  }
+
+  static void invalidateSuitesCache() {
+    _suitesCache = null;
+  }
+
+  static Future<void> renameSuite(int id, String newName) async {
+    final db = await DatabaseService.db;
+    await db.update('suites', {'moduleName': newName}, where: 'id = ?', whereArgs: [id]);
+    invalidateSuitesCache();
   }
 
   static Future<void> deleteSuite(int id) async {
     final db = await DatabaseService.db;
+    await db.delete('test_cases', where: 'suite_id = ?', whereArgs: [id]);
     await db.delete('suites', where: 'id = ?', whereArgs: [id]);
+    invalidateSuitesCache();
   }
 
   static Future<void> insertTestCases({required int suiteId, required List<FinalizedTestCase> cases}) async {
     final db = await DatabaseService.db;
+    final batch = db.batch();
     for (final tc in cases) {
-      await db.insert('test_cases', {'suite_id': suiteId, 'case_json': _encodeTestCase(tc)});
+      batch.insert('test_cases', {'suite_id': suiteId, 'case_json': _encodeTestCase(tc)});
     }
+    await batch.commit(noResult: true);
   }
 
   static Future<List<FinalizedTestCase>> getTestCasesForSuite(int suiteId) async {
@@ -113,15 +167,36 @@ class DatabaseService {
     final db = await DatabaseService.db;
     await db.transaction((txn) async {
       await txn.delete('test_cases', where: 'suite_id = ?', whereArgs: [suiteId]);
+      final batch = txn.batch();
       for (final tc in cases) {
-        await txn.insert('test_cases', {'suite_id': suiteId, 'case_json': _encodeTestCase(tc)});
+        batch.insert('test_cases', {'suite_id': suiteId, 'case_json': _encodeTestCase(tc)});
       }
+      await batch.commit(noResult: true);
     });
+  }
+
+  static Future<void> updateSingleCase({required int dbId, required FinalizedTestCase tc}) async {
+    final db = await DatabaseService.db;
+    await db.update(
+      'test_cases',
+      {'case_json': _encodeTestCase(tc)},
+      where: 'id = ?',
+      whereArgs: [dbId],
+    );
   }
 
   static Future<void> deleteTestCase(int id) async {
     final db = await DatabaseService.db;
     await db.delete('test_cases', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<void> batchDeleteTestCases(List<int> ids) async {
+    final db = await DatabaseService.db;
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.delete('test_cases', where: 'id = ?', whereArgs: [id]);
+      }
+    });
   }
 
   static String _encodeTestCase(FinalizedTestCase tc) {
@@ -171,8 +246,111 @@ class DatabaseService {
     return await db.insert('reported_issues', issue);
   }
   
-  static Future<void> updateIssueStatus(int id, String status) async {
+  static Future<void> updateIssueStatus(int id, String status, [String? lastSyncAttempt]) async {
     final db = await DatabaseService.db;
-    await db.update('reported_issues', {'status': status, 'lastSyncAttempt': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [id]);
+    await db.update('reported_issues', {
+      'status': status,
+      'lastSyncAttempt': lastSyncAttempt ?? DateTime.now().toIso8601String(),
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Migrates all suites & test cases from [fromIdentity]'s database into the
+  /// currently active database. Duplicate suites (same moduleName+feature+platform)
+  /// are skipped; their test cases are merged under the existing suite.
+  static Future<void> migrateDataToCurrentDb(String fromIdentity) async {
+    final sanitized = sha256.convert(utf8.encode(fromIdentity)).toString();
+    final appDir = await getApplicationSupportDirectory();
+    final oldDbPath = '${appDir.path}/data/qa_genie/$sanitized/$_dbName';
+
+    final oldFile = File(oldDbPath);
+    if (!await oldFile.exists()) return;
+
+    Database? oldDb;
+    try {
+      oldDb = await openDatabase(oldDbPath);
+      final suites = await oldDb.query('suites');
+      if (suites.isEmpty) return;
+
+      final allTestCases = await oldDb.query('test_cases');
+      final target = await DatabaseService.db;
+      final Map<int, int> suiteIdMap = {};
+
+      for (final suite in suites) {
+        final oldId = suite['id'] as int;
+        final existing = await target.query(
+          'suites',
+          where: 'moduleName = ? AND feature = ? AND platform = ?',
+          whereArgs: [suite['moduleName'], suite['feature'], suite['platform']],
+        );
+
+        int newId;
+        if (existing.isNotEmpty) {
+          newId = existing.first['id'] as int;
+        } else {
+          newId = await target.insert('suites', {
+            'moduleName': suite['moduleName'],
+            'feature': suite['feature'],
+            'platform': suite['platform'],
+            'created_at': suite['created_at'],
+          });
+        }
+        suiteIdMap[oldId] = newId;
+      }
+
+      for (final tc in allTestCases) {
+        final oldSuiteId = tc['suite_id'] as int;
+        final newSuiteId = suiteIdMap[oldSuiteId];
+        if (newSuiteId != null) {
+          await target.insert('test_cases', {
+            'suite_id': newSuiteId,
+            'case_json': tc['case_json'],
+          });
+        }
+      }
+
+      invalidateSuitesCache();
+    } finally {
+      await oldDb?.close();
+    }
+  }
+
+  static Future<void> clearAll() async {
+    final db = await DatabaseService.db;
+    await db.delete('suites');
+    await db.delete('test_cases');
+    await db.delete('reported_issues');
+  }
+
+  /// Syncs only `status` field for already-submitted reports, once per week on Monday.
+  /// Never resends full reports — only pulls latest status from Firestore.
+  static Future<void> syncPendingReports() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    if (now.weekday != DateTime.monday) return;
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final lastSync = prefs.getInt('last_status_sync_day') ?? 0;
+    if (lastSync >= todayStart) return;
+    await prefs.setInt('last_status_sync_day', todayStart);
+
+    final db = await DatabaseService.db;
+    final rows = await db.query('reported_issues', where: 'firestoreId IS NOT NULL AND firestoreId != ?', whereArgs: ['']);
+    for (final row in rows) {
+      final firestoreId = row['firestoreId'] as String?;
+      if (firestoreId == null || firestoreId.isEmpty) continue;
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('issue_reports')
+            .doc(firestoreId)
+            .get();
+        if (snap.exists) {
+          final remoteStatus = snap.data()?['status'] as String? ?? 'open';
+          await db.update('reported_issues',
+            {'status': remoteStatus, 'lastSyncAttempt': DateTime.now().toIso8601String()},
+            where: 'id = ?', whereArgs: [row['id']]);
+        }
+      } catch (_) {
+        // Will retry next week
+      }
+    }
   }
 }

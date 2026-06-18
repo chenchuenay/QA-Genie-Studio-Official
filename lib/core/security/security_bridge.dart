@@ -1,7 +1,6 @@
-import 'dart:async';
 import 'package:qa_genie/core/config/app_environment.dart';
-import 'package:qa_genie/core/error/exceptions.dart';
 import 'package:qa_genie/core/network/cloud_authority_service.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 // ============================================================
 // FILE: lib/core/security/security_bridge.dart
 // ============================================================
@@ -177,8 +176,6 @@ class DevSecurityService implements ISecurityService {
 class ProductionSecurityService implements ISecurityService {
   final CloudAuthorityService cloudAuthorityService;
 
-  DateTime? _lastRequestTime;
-
   ProductionSecurityService({required this.cloudAuthorityService});
 
   // ============================================================
@@ -187,35 +184,7 @@ class ProductionSecurityService implements ISecurityService {
 
   @override
   Future<String> acquireGenerationToken({required String actionType}) async {
-    // ==========================================================
-    // CLIENT RATE LIMIT
-    // ==========================================================
-
-    final now = DateTime.now();
-
-    if (_lastRequestTime != null) {
-      final diff = now.difference(_lastRequestTime!);
-
-      if (diff < EnvironmentAuthority.minimumGenerationCooldown) {
-        throw SecurityException('Generation cooldown active.');
-      }
-    }
-
-    _lastRequestTime = now;
-
-    // ==========================================================
-    // CLOUD AUTHORITY
-    // ==========================================================
-
-    final token = await cloudAuthorityService.requestGenerationToken(
-      actionType: actionType,
-    );
-
-    if (token.trim().isEmpty) {
-      throw SecurityException('Server refused authorization.');
-    }
-
-    return token;
+    throw UnimplementedError('acquireGenerationToken not wired');
   }
 
   // ============================================================
@@ -229,7 +198,7 @@ class ProductionSecurityService implements ISecurityService {
 
   @override
   Future<void> trackGeneration() async {
-    await cloudAuthorityService.trackGeneration();
+    await FunctionsService.trackGenerationUsage();
   }
 
   // ============================================================

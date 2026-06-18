@@ -58,8 +58,8 @@ class QAButton extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: loading
                 ? LinearGradient(colors: [AppColors.card, AppColors.surface])
-                : const LinearGradient(
-                    colors: [Color(0xFF46DFFF), Color(0xFF7CEBFF)],
+                : LinearGradient(
+                    colors: [AppColors.accent, AppColors.accentLight],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -68,7 +68,7 @@ class QAButton extends StatelessWidget {
 
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF46DFFF).withOpacity(0.16),
+                color: AppColors.accent.withOpacity(0.16),
                 blurRadius: 22,
                 spreadRadius: -10,
                 offset: const Offset(0, 10),

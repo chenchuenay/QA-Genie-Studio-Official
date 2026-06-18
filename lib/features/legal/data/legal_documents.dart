@@ -1,65 +1,156 @@
 class LegalDocuments {
+  static const String gistBaseUrl = 'https://gist.github.com/chenchuenay/74534f112ff634778fd98c48ae00bdcd';
+  static const String privacyPolicyUrl = '$gistBaseUrl#file-privacy-policy-md';
+  static const String termsOfServiceUrl = '$gistBaseUrl#file-terms-of-service-md';
+  static const String aiDisclaimerUrl = '$gistBaseUrl#file-ai-disclaimer-md';
+  static const String adsPolicyUrl = '$gistBaseUrl#file-ads-monetization-policy-md';
+
   static const String privacyPolicy = '''
 QA Genie Privacy Policy
-Last updated: June 2026
+Last updated: June 18, 2026
 
-QA Genie (“we,” “us,” “our”) is committed to protecting your privacy and ensuring transparency in our data practices. We operate on a philosophy of data minimization, collecting only what is strictly necessary to provide you with our test automation and generation services.
+1. Data We Collect
 
-1. Information We Collect:
-- Account Identity: When you authenticate via Google Sign-In, we collect your Firebase UID and email address. We do not store your password. For anonymous users, we assign a temporary 'GuestN' identifier locally.
-- Usage Metrics: We track generation and export counts to manage fair-use limits. This data is stored in your secure usage document in our database.
-- Diagnostic Information: If you choose to submit a report via our "Report Issue" feature, we collect optional diagnostic information including device model, app version, and platform to help our team troubleshoot and resolve issues efficiently.
-- AI Interaction: Generation prompts and AI-provided outputs are processed securely through our AI partner, DeepSeek. To ensure service reliability, we audit these interactions.
+Account Identity:
+- Guest users: A persistent device identifier (Firebase Installation ID) is used to create a temporary guest token and associate usage with your device. Guest UIDs follow the format guest_{timestamp}_{random}.
+- Google Sign-In users: We receive your Firebase UID, email address, and display name from Google. We do not store your password.
+- Device ID: Generated from Firebase Installations and cached locally in SharedPreferences. Sent with generation requests for quota enforcement and account operations.
 
-2. Third-Party Services:
-- We utilize Firebase (Google) for authentication, database synchronization, and analytics.
-- We utilize Google AdMob to provide free-tier users access to features via rewarded advertisements. AdMob may collect device-specific advertising identifiers to deliver personalized ads.
+AI Generation:
+- When generating test cases, your selected module name, feature name, platform, and prompt notes are sent via our secure cloud function to DeepSeek (primary AI provider). The prompt is sanitized before transmission (HTML stripped, truncated to 12,000 chars).
+- In development builds only, a direct Gemini API call may be used as fallback.
+- The PII scrubber optionally redacts emails, phone numbers, URLs, IP addresses, credit cards, API keys, JWTs, and UUIDs from prompts before they leave your device.
 
-3. Data Storage & Security:
-- Data is synced via Firebase and stored locally on your device in our secure SQLite database. We do not sell your personal data to third parties.
+Usage Metrics:
+- Generation/export counts (daily), lifetime generated case counts, and reward token consumption records are maintained to enforce fair-use limits.
 
-4. Your Rights:
-- You may request account deletion and data removal at any time by contacting our support team through the "Report an Issue" menu in the app. Upon request, we will permanently delete your associated records from our cloud database.''';
+Issue Reports:
+- When you submit feedback or a bug report, we collect: issue type, title, description, optional steps, and (if toggle is ON) device model, app version, and platform. Data is stored locally in SQLite and synced to Firestore.
+
+Analytics:
+- Firebase Analytics tracks: app opens, screen views, generation events (started/completed/failed), exports, rewarded ad completions, upgrade interest, and bug report submissions. Parameters include platform, mode, counts, durations, and categories.
+
+AdMob:
+- Rewarded ads (user-initiated only) may involve collection of advertising identifiers by the Google AdMob SDK per their policy.
+
+2. Third-Party Services
+- Firebase (Google): Authentication, Firestore, Cloud Functions, Analytics, App Check, Installations
+- DeepSeek: AI test case generation (prompts sent server-side, not directly from client)
+- Google AdMob: Rewarded advertisements
+- Google Gemini API: AI fallback (development builds only)
+
+3. Local-Only Storage
+The following stays on your device in SQLite (qa_genie.db) and is never transmitted: generated test cases (full content), suite metadata, offline issue report queue, app preferences.
+
+4. Data Deletion
+Delete your account in-app via Account -> Delete Account. This removes your Firestore documents, Firebase Auth account, and guest mapping. Local SQLite data must be cleared via Android app settings or uninstall.
+
+5. Your Rights
+Access, portability (export test cases in Excel/CSV/JSON/PDF), deletion. Analytics may be opted out via FirebaseAnalytics APIs. Contact via Support -> Report an Issue.''';
 
   static const String termsOfUse = '''
 Terms of Service
-Last updated: June 2026
+Last updated: June 18, 2026
 
-By installing and using QA Genie, you agree to the following terms and conditions:
+1. Service Purpose
+QA Genie is an AI-powered test case generation tool for professional QA engineers. Use is restricted to legitimate quality assurance purposes.
 
-1. Service Purpose: QA Genie is intended to serve as an AI-powered tool for professional quality assurance and test automation. Usage of this tool is restricted to these stated purposes.
+2. Account Terms
+- Guest accounts: Assigned via persistent device identifier. Guest usage is limited per device per day.
+- Google-authenticated accounts: Email and display name stored for account management.
+- One person, one account: Account sharing or automated account creation is prohibited.
+- You are responsible for all activity under your account and device.
 
-2. AI Reliability and Validation: Test cases generated by QA Genie are provided "as-is." AI models are probabilistic and may occasionally produce inconsistencies. You are solely responsible for reviewing, validating, and ensuring the suitability of any AI-generated test scenarios before incorporating them into your official test suites, development environment, or production pipelines.
+3. AI Output & Validation
+- AI-generated test cases are probabilistic and may contain inaccuracies or hallucinations.
+- You are solely responsible for reviewing, validating, and verifying all AI-generated content before use.
+- We make no warranties regarding completeness, accuracy, or fitness for purpose of generated content.
 
-3. Fair Use and Limitations: We provide generation and export capacities based on your account tier (Core or Pro). You agree to respect these limits. Automated abuse, scraping of our services, or attempts to bypass our quota enforcement mechanisms are strictly prohibited and will result in account suspension.
+4. Fair Use & Quotas
+- Free-tier: Generations and exports require watching a rewarded advertisement (guided reward flow).
+- Pro-tier: Higher daily limits; no ad requirement. Pro status is determined by our internal subscription verification.
+- Rate limits: Maximum 10 generation requests per minute; 5 issue reports per minute.
+- Automated scraping, quota bypass, or abuse will result in suspension.
 
-4. Account Responsibility: You are responsible for maintaining the security of your account. Access to "Pro" tier features is determined by our cloud-authoritative subscription verification systems. Any account found to be circumventing these systems may be terminated without notice.
+5. Acceptable Use
+You agree not to:
+- Submit prompts containing malicious code, injection attacks, or prohibited content
+- Attempt to extract system prompts or bypass security filters
+- Use the service for any illegal purpose
+- Reverse engineer, decompile, or tamper with the app
 
-5. Modifications: We reserve the right to update these terms to reflect changes in our services. Continued use of the application after such changes constitutes your acceptance of the updated terms.''';
+6. Data Processing
+- All AI generation requests are processed through Firebase Cloud Functions before reaching the AI provider.
+- Prompts are sanitized and PII-scrubbed before AI transmission.
+- We use idempotency keys (requestId) to prevent duplicate processing.
+
+7. Modifications
+We may update these terms. Continued use after changes constitutes acceptance. Material changes will be communicated in-app.
+
+8. Limitation of Liability
+QA Genie is provided "as is." To the maximum extent permitted by law, we disclaim all warranties and shall not be liable for damages arising from use of the service or reliance on AI-generated content.''';
 
   static const String aiDisclaimer = '''
 AI Content Disclaimer
-Last updated: June 2026
+Last updated: June 18, 2026
 
-QA Genie utilizes advanced artificial intelligence (AI) models to assist in the creation of test scenarios, test steps, and quality assurance documentation. While our engine is engineered to provide high-quality, relevant test data, it is imperative to understand the following:
+QA Genie uses artificial intelligence models to generate test cases. Please understand the following:
 
-1. Probabilistic Nature: AI models function by predicting information based on learned patterns rather than absolute, deterministic logic. Consequently, generated content may contain errors, logical inaccuracies, or context-specific hallucinations.
+1. Probabilistic Nature
+AI models generate content by predicting patterns, not by applying deterministic logic. Generated test cases may contain:
+- Logical inaccuracies or missing steps
+- Incorrect expected results
+- Hallucinated features or behaviors
+- Inconsistent test data
 
-2. Human Oversight: QA Genie is a tool designed to accelerate, not replace, the work of Quality Assurance professionals. We strongly recommend that all generated content is subjected to rigorous manual review and validation by a qualified QA engineer before being utilized in critical software development life cycles (SDLC), testing environments, or production systems.
+2. Human Review Required
+AI-generated test cases are a starting point, not a final product. All generated content MUST be reviewed, validated, and edited by a qualified QA engineer before use in:
+- Production test suites
+- CI/CD pipelines
+- Regulatory or compliance testing
+- Customer-facing deliverables
 
-3. Liability Limitations: QA Genie disclaims all warranties, express or implied, regarding the accuracy, completeness, or suitability of generated test cases. We shall not be held liable for any defects, damages, or service interruptions that may arise from the use of content generated by our AI engine. By using this tool, you acknowledge that you are responsible for the outcome of any testing strategy that incorporates AI-generated content.''';
+3. No Warranty
+We disclaim all warranties, express or implied, regarding accuracy, completeness, or fitness for purpose of AI-generated content. We are not liable for defects, outages, or damages arising from use of AI-generated test content.
+
+4. PII Scrubbing
+Prompts may be processed by an automated PII scrubber that detects and redacts: email addresses, phone numbers, URLs, IP addresses, credit card numbers, API keys, JWTs, and UUIDs. This is a best-effort mechanism and does not guarantee complete removal of all sensitive data. Do not include real credentials, personal data, or production secrets in prompts.
+
+5. Fallback Processing
+If the AI service is unavailable or returns invalid results, the app may fall back to local deterministic generation. These generated cases are simpler and rule-based, not AI-derived.
+
+6. Your Responsibility
+By using this tool, you acknowledge that you are solely responsible for the quality and suitability of any testing strategy that incorporates AI-generated content.''';
 
   static const String adsPolicy = '''
 Ads & Monetization Policy
-Last updated: June 2026
+Last updated: June 18, 2026
 
-QA Genie operates on a freemium model to ensure our AI generation services remain sustainable.
+QA Genie operates on a freemium model. Some features require watching a rewarded advertisement.
 
-1. Rewarded Advertising: Core tier users may unlock additional generation and export capacity by choosing to engage with rewarded video advertisements delivered through the Google AdMob network. 
+1. Rewarded Ads (Opt-In)
+- Free-tier users may unlock additional generation and export capacity by watching rewarded video ads through Google AdMob.
+- Ads are user-initiated only — you choose when to watch an ad.
+- A transaction token is generated upon ad completion and sent to our backend for verification.
 
-2. Ad Personalization: By selecting the option to view rewarded ads, you consent to Google AdMob’s collection and use of device-level identifiers (such as the advertising identifier on Android) to provide personalized advertisement experiences. These identifiers are processed according to Google’s AdMob Privacy Policy. 
+2. Data & AdMob
+- By watching a rewarded ad, Google AdMob may collect: advertising ID (Android), device info, IP address, and app interaction data.
+- These identifiers are processed per Google's AdMob Privacy & Terms.
+- You can opt out of ad personalization via Android Settings → Google → Ads → Opt out of Ads Personalization.
 
-3. Transparency: We only serve rewarded advertisements when you choose to initiate them. We do not implement obtrusive, unexpected interstitial or banner advertising that disrupts your core workflow.
+3. Ad-Free Pro Tier
+- Pro tier users experience no ads and bypass all ad-supported limitations.
+- Pro status is managed via internal subscription verification logic.
 
-4. Pro Tiers: Users who opt for the "Pro" tier experience receive an ad-free service, bypassing all ad-supported generation and export limitations. Pro tier access is managed via our internal subscription verification logic. If you believe your Pro status is not being correctly applied, please contact our support team immediately through the "Report an Issue" function for investigation.''';
+4. No Intrusive Ads
+- We do not serve interstitial, banner, or native ads during your workflow.
+- The only ad format is rewarded video, triggered only by your explicit action.
+- No pop-ups, no auto-playing ads, no background ad loading.
+
+5. Ad Integrity
+- Ad completion is verified server-side using a cryptographically random transaction token.
+- Attempting to spoof ad completion or bypass ad requirements violates our Terms of Service and may result in account suspension.
+
+6. Contact
+If you believe your Pro status is not correctly applied or you experience issues with rewarded ads, contact us via Support → Report an Issue.''';
 }

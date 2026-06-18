@@ -37,19 +37,27 @@ class AppCheckService {
       return;
     }
 
-    try {
-      await FirebaseAppCheck.instance.activate(
-        androidProvider: isProduction
-            ? AndroidProvider.playIntegrity
-            : AndroidProvider.debug,
+    debugPrint('🔍 APPCHECK: kDebugMode=$kDebugMode, isProduction=$isProduction');
 
-        appleProvider: isProduction
-            ? AppleProvider.deviceCheck
-            : AppleProvider.debug,
+    try {
+      final androidProv =
+          kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity;
+      final appleProv =
+          kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck;
+
+      debugPrint('🔍 APPCHECK: activating android=$androidProv apple=$appleProv');
+
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: androidProv,
+        appleProvider: appleProv,
       );
 
+      debugPrint('🔍 APPCHECK: activate() OK');
+
       _initialized = true;
+      debugPrint('🔍 APPCHECK: initialized=true');
     } catch (e) {
+      debugPrint('🔍 APPCHECK: activate() threw: $e');
       rethrow;
     }
   }
@@ -60,8 +68,11 @@ class AppCheckService {
 
   static Future<String?> getToken({bool forceRefresh = false}) async {
     try {
-      return await FirebaseAppCheck.instance.getToken(forceRefresh);
-    } catch (_) {
+      final token = await FirebaseAppCheck.instance.getToken(forceRefresh);
+      debugPrint('🔍 APPCHECK: getToken() OK, length=${token?.length}');
+      return token;
+    } catch (e) {
+      debugPrint('🔍 APPCHECK: getToken() failed: $e');
       return null;
     }
   }
@@ -83,13 +94,7 @@ class AppCheckService {
   // ============================================================
 
   static Future<bool> isAvailable() async {
-    try {
-      final token = await getToken();
-
-      return token != null && token.trim().isNotEmpty;
-    } catch (_) {
-      return false;
-    }
+    return _initialized;
   }
 
   // ============================================================

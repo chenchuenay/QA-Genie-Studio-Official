@@ -31,6 +31,17 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
   final _testerCtrl = TextEditingController(text: 'QA Tester');
   final _envCtrl = TextEditingController(text: 'Staging');
   bool _editing = false;
+  int _total = 0;
+  int _passed = 0;
+  int _failed = 0;
+  int _blocked = 0;
+  String _passRate = '0.0';
+
+  @override
+  void initState() {
+    super.initState();
+    _recompute();
+  }
 
   @override
   void dispose() {
@@ -39,23 +50,22 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
     super.dispose();
   }
 
-  String get _tester => _testerCtrl.text.trim();
-  String get _environment => _envCtrl.text.trim();
-
-  int get _total => widget.session.testCases.length;
-  int get _passed =>
-      widget.session.testCases.where((c) => c.status == 'Pass').length;
-  int get _failed =>
-      widget.session.testCases.where((c) => c.status == 'Fail').length;
-  int get _blocked =>
-      widget.session.testCases.where((c) => c.status == 'Blocked').length;
-
-  String get _passRate {
+  void _recompute() {
+    _total = widget.session.testCases.length;
+    _passed =
+        widget.session.testCases.where((c) => c.status == 'Pass').length;
+    _failed =
+        widget.session.testCases.where((c) => c.status == 'Fail').length;
+    _blocked =
+        widget.session.testCases.where((c) => c.status == 'Blocked').length;
     final executed = _passed + _failed + _blocked;
-    return executed == 0
+    _passRate = executed == 0
         ? '0.0'
         : (_passed / executed * 100).toStringAsFixed(1);
   }
+
+  String get _tester => _testerCtrl.text.trim();
+  String get _environment => _envCtrl.text.trim();
 
   void _toggleEdit() => setState(() => _editing = !_editing);
 
@@ -482,7 +492,10 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
               .toList(),
           onChanged: (v) {
             if (v == null) return;
-            setState(() => tc.status = v);
+            setState(() {
+              tc.status = v;
+              _recompute();
+            });
           },
         ),
       ),

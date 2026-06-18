@@ -4,7 +4,7 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/app/theme/app_spacing.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/features/monetization/ui/upgrade_coming_soon_screen.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
 
 class UpgradeScreen extends StatefulWidget {
   const UpgradeScreen({super.key});
@@ -14,12 +14,22 @@ class UpgradeScreen extends StatefulWidget {
 }
 
 class _UpgradeScreenState extends State<UpgradeScreen> {
-  late Future<bool> _isProFuture;
+  bool _isPro = false;
+  bool _proLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _isProFuture = UsageManager.isPro();
+    _checkPro();
+  }
+
+  Future<void> _checkPro() async {
+    final pro = await UsageManager.isPro();
+    if (!mounted) return;
+    setState(() {
+      _isPro = pro;
+      _proLoaded = true;
+    });
   }
 
   @override
@@ -39,21 +49,12 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: FutureBuilder<bool>(
-        future: _isProFuture,
-        builder: (context, proSnapshot) {
-          if (!proSnapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-          }
-          final isPro = proSnapshot.data!;
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: isPro ? _buildProContent() : _buildUpgradeContent(),
-            ),
-          );
-        },
+      body: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: _proLoaded && _isPro ? _buildProContent() : _buildUpgradeContent(),
+        ),
       ),
     );
   }
@@ -65,14 +66,13 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       children: [
         _compactHero(
           "PRO ACTIVE",
-          "You're enjoying the full QA Genie experience.",
+          "You're enjoying the full QA Genie experience (${AppConfig.proMonthlyPrice}/mo value).",
         ),
         const SizedBox(height: AppSpacing.md),
         _benefitsGrid(isPro: true),
         const SizedBox(height: AppSpacing.lg),
         _compactCompareCard(),
         const SizedBox(height: AppSpacing.xl),
-        // Restore Purchase hidden for initial launch (Investor request)
       ],
     );
   }
@@ -83,8 +83,8 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _compactHero(
-          "Generate More. Export More. Stay Focused.",
-          "Unlock larger generations, unlimited exports, and an uninterrupted workflow.",
+          "Interested in Pro?",
+          "Larger batches, unlimited exports, and an ad-free experience at ${AppConfig.proMonthlyPrice}/mo.",
         ),
         const SizedBox(height: AppSpacing.md),
         _benefitsGrid(isPro: false),
@@ -128,22 +128,22 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       _BenefitItem(
         icon: Icons.flash_on,
         title: "Larger Suites",
-        description: isPro ? "Up to ${AppConfig.proCasesPerBatch} cases per run" : "Generate bigger suites",
+        description: isPro ? "Up to ${AppConfig.proCasesPerBatch} cases per run" : "Coming soon — bigger batches",
       ),
       _BenefitItem(
         icon: Icons.description,
         title: "Export Freely",
-        description: isPro ? "Unlimited exports" : "Export without limits",
+        description: isPro ? "Unlimited exports" : "Coming soon — no limits",
       ),
       _BenefitItem(
         icon: Icons.bar_chart,
         title: "Reports",
-        description: isPro ? "Unlimited summary reports" : "Create unlimited reports",
+        description: isPro ? "Unlimited summary reports" : "Coming soon — unlimited",
       ),
       _BenefitItem(
         icon: Icons.block,
         title: "No Ads",
-        description: isPro ? "Ad-free experience" : "Remove ads",
+        description: isPro ? "Ad-free experience" : "Coming soon — ad-free",
       ),
     ];
     return GridView.count(
@@ -152,7 +152,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       crossAxisCount: 2,
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 1.2,
+      childAspectRatio: 1.05,
       children: items.map((item) => _BenefitCard(item: item)).toList(),
     );
   }
@@ -203,37 +203,57 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   Widget _pricingAndCta() {
     return Column(
       children: [
-        const Center(
-          child: Text(
-            "\$6.99 / month",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Center(
-          child: Text(
-            "Cancel anytime. No hidden fees.",
-            style: TextStyle(color: AppColors.textHint, fontSize: 12),
-          ),
-        ),
         const SizedBox(height: 20),
+        Text(
+          'Just ${AppConfig.proMonthlyPrice}/mo',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
             onPressed: () async {
-              // Master Alignment: Map 'Unlock Pro' to Firestore interests
               await UsageManager.trackProInterest('upgrade_screen_cta');
-              
               if (!context.mounted) return;
-              Navigator.push(
+              showBlurredDialog(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const UpgradeComingSoonScreen(),
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: AppColors.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.dialog),
+                  ),
+                  title: const Text(
+                    'Thanks for your interest!',
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  content: const Text(
+                    'Our billing system is still cooking.\nWe\'ll notify you when it\'s ready.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
+                    textAlign: TextAlign.center,
+                  ),
+                  actions: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
                 ),
               );
             },
@@ -303,6 +323,7 @@ class _BenefitCard extends StatelessWidget {
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
+            maxLines: 1,
           ),
           const SizedBox(height: 4),
           Text(
@@ -312,6 +333,7 @@ class _BenefitCard extends StatelessWidget {
               fontSize: 11,
             ),
             textAlign: TextAlign.center,
+            maxLines: 2,
           ),
         ],
       ),

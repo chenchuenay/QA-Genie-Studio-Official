@@ -1,7 +1,5 @@
-import 'dart:io';
-import 'package:device_info_plus/device_info_plus.dart';
+import 'package:firebase_installations/firebase_installations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 class DeviceUtils {
   static const String _deviceIdKey = 'unique_device_identifier';
@@ -14,23 +12,14 @@ class DeviceUtils {
       return id;
     }
 
-    // Generate a persistent hardware-linked ID
-    final deviceInfo = DeviceInfoPlugin();
     try {
-      if (Platform.isAndroid) {
-        final androidInfo = await deviceInfo.androidInfo;
-        id = androidInfo.id; // Usually consistent across reinstalls
-      } else if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        id = iosInfo.identifierForVendor;
-      }
+      id = await FirebaseInstallations.id;
     } catch (_) {
-      // Fallback to random UUID if hardware ID fails
-      id = const Uuid().v4();
+      id = '${DateTime.now().millisecondsSinceEpoch}';
     }
 
     if (id == null || id.isEmpty) {
-      id = const Uuid().v4();
+      id = '${DateTime.now().millisecondsSinceEpoch}';
     }
 
     await prefs.setString(_deviceIdKey, id);

@@ -1,0 +1,9 @@
+'''
+build_prod.sh
+./build_prod.sh          # builds prod APK
+./build_prod.sh appbundle  # builds prod app bundle
+run script
+./run               → dev debug (default)
+./run prod          → prod debug
+./run prod-release  → prod release
+'''

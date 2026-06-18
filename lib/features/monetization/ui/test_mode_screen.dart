@@ -29,7 +29,7 @@ class _TestModeScreenState extends State<TestModeScreen> {
   Future<void> _togglePro(bool v) async {
     if (!AppConfig.allowDebugTools) return;
     await UsageManager.setPro(v);
-    setState(() => _isPro = v);
+    if (mounted) setState(() => _isPro = v);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

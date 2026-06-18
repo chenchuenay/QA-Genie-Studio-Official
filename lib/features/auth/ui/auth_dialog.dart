@@ -1,9 +1,30 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/features/legal/ui/terms_privacy_policy.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
+
+String _friendlyAuthError(dynamic e) {
+  if (e is FirebaseAuthException) {
+    switch (e.code) {
+      case 'user-disabled': return 'This account has been disabled.';
+      case 'operation-not-allowed': return 'Please try the other sign-in method.';
+      case 'account-exists-with-different-credential': return 'An account already exists with a different sign-in method.';
+      case 'network-request-failed': return 'Please check your internet and try again.';
+      case 'too-many-requests': return 'Please wait a moment and try again.';
+      case 'invalid-credential': return 'Please try again.';
+      case 'requires-recent-login': return 'Please sign out and sign in again.';
+      default: return 'Please try again.';
+    }
+  }
+  final msg = e.toString().replaceFirst('Exception: ', '');
+  if (msg.contains('network') || msg.contains('Network')) return 'Please check your internet and try again.';
+  if (msg.contains('unavailable') || msg.contains('Unavailable')) return 'Please check your internet and try again.';
+  return 'Please try again.';
+}
 
 class AuthDialog extends StatefulWidget {
   final bool showGuestButton;
@@ -19,34 +40,42 @@ class _AuthDialogState extends State<AuthDialog> {
   String? _errorMessage;
 
   Future<void> _handleContinueWithGoogle() async {
+    if (_isLoading) return;
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
+    if (!await NetworkGuard.ensureProductionOnline(context)) return;
     try {
       await AuthService.linkWithGoogle();
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = _friendlyAuthError(e);
         _isLoading = false;
       });
     }
   }
 
   Future<void> _handleContinueAsGuest() async {
+    if (_isGuestLoading) return;
+    if (!mounted) return;
     setState(() {
       _isGuestLoading = true;
       _errorMessage = null;
     });
+    if (!await NetworkGuard.ensureProductionOnline(context)) return;
     try {
-      await AuthService.signInAnonymously();
+      await AuthService.signInAsGuest();
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = _friendlyAuthError(e);
         _isGuestLoading = false;
       });
     }

@@ -20,10 +20,12 @@ class PipelineExecutionResult {
   final List<FinalizedTestCase> cases;
   final PipelineAuditReport auditReport;
   final String traceId;
+  final String? hardErrorCode;
   PipelineExecutionResult({
     required this.cases,
     required this.auditReport,
     required this.traceId,
+    this.hardErrorCode,
   });
 }
 
@@ -125,6 +127,53 @@ class PipelineOrchestrator {
     final acceptedAiCases = validationResult.validCases;
     final rejectedCount = validationResult.rejectedCount;
 
+    if (aiResult.hardErrorCode != null) {
+      debugPrint('PIPELINE: Hard error ${aiResult.hardErrorCode} — skipping fallback');
+      final auditReport = PipelineAuditReport(
+        traceId: request.traceId,
+        rejectedCases: validationResult.rejectedCases,
+        repairLog: repairResult.repairLog,
+        diversityBalance: const {},
+        averageConfidence: 0,
+        fallbackTriggers: const [],
+        totalInputCases: aiReturnedCount,
+        finalizedCases: 0,
+        repairedCases: repairResult.repairedCount,
+        rejectedCount: validationResult.rejectedCount,
+        missingIntentIds: const [],
+        prompt: prompt,
+        rawAiResponse: aiResult.rawResponse,
+        aiLatencyMs: aiResult.latencyMs,
+        aiStatusCode: aiResult.statusCode,
+        aiReturnedCount: aiReturnedCount,
+        aiAcceptedCount: acceptedAiCases.length,
+        structuralRejectedCount: validationResult.structuralRejectedCount,
+        semanticRejectedCount: validationResult.semanticRejectedCount,
+        realismRejectedCount: validationResult.realismRejectedCount,
+        exportSafetyRejectedCount: validationResult.exportSafetyRejectedCount,
+        repairedCount: repairResult.repairedCount,
+        fallbackCount: 0,
+        aiModelName: aiResult.modelName,
+        aiApiUrl: aiResult.apiUrl,
+        aiHttpStatusCode: aiResult.statusCode,
+        aiErrorDetails: aiResult.errorDetails,
+        cloudFunctionName: 'generate',
+        cloudFunctionRegion: 'us-central1',
+        networkErrorType: aiResult.hasTransportError
+            ? ErrorCaptureUtils.extractNetworkErrorType(aiResult.errorMessage)
+            : null,
+        totalRetriesAttempted: aiResult.totalRetries,
+        wasResponseMalformed: parsingResult.malformed,
+        parserErrorMessages: parsingResult.parserErrors,
+      );
+      return PipelineExecutionResult(
+        cases: const [],
+        auditReport: auditReport,
+        traceId: request.traceId,
+        hardErrorCode: aiResult.hardErrorCode,
+      );
+    }
+
     if (rejectedCount > 0) {
       unawaited(FunctionsService.trackValidatorRejected(rejectedCount));
     }
@@ -156,23 +205,23 @@ class PipelineOrchestrator {
       'missingCount=${coverage.missingCount}',
     );
 
-    final fallbackCases = await _fallbackStage.fillMissing(
-      request: request,
-      existing: acceptedAiCases,
-      coverage: coverage,
-    );
-    PipelineForensics.instance.onTraceEvent(
-      '\n[SECTION 10 — FALLBACK OUTPUT]\nfallbackGeneratedCount=${fallbackCases.length}',
-    );
-
-    final finalWorkingCases = <WorkingCase>[
-      ...acceptedAiCases,
-      ...fallbackCases,
-    ].take(request.requestedCaseCount).toList();
-
-    final totalFinalized = finalWorkingCases.length;
-    if (totalFinalized > 0) {
-      unawaited(FunctionsService.trackGeneration(totalFinalized));
+    // Fallback only when ALL AI cases were rejected (full regeneration needed).
+    // Partial successes use only AI cases — no fallback filling.
+    List<WorkingCase> finalWorkingCases;
+    int fallbackCount = 0;
+    if (acceptedAiCases.isEmpty && coverage.requiresFullFallback) {
+      final fallbackCases = await _fallbackStage.fillMissing(
+        request: request,
+        existing: acceptedAiCases,
+        coverage: coverage,
+      );
+      fallbackCount = fallbackCases.length;
+      PipelineForensics.instance.onTraceEvent(
+        '\n[SECTION 10 — FALLBACK OUTPUT]\nfallbackGeneratedCount=$fallbackCount',
+      );
+      finalWorkingCases = fallbackCases.take(request.requestedCaseCount).toList();
+    } else {
+      finalWorkingCases = acceptedAiCases;
     }
 
     final finalized = _finalizationStage.execute(
@@ -184,7 +233,7 @@ class PipelineOrchestrator {
       '\n[SECTION 11 — FINAL OUTPUT]\naiAcceptedCount=${acceptedAiCases.length}',
     );
     PipelineForensics.instance.onTraceEvent(
-      'fallbackAcceptedCount=${fallbackCases.length}',
+      'fallbackAcceptedCount=$fallbackCount',
     );
     PipelineForensics.instance.onTraceEvent(
       'finalCaseCount=${finalized.length}',
@@ -227,7 +276,7 @@ class PipelineOrchestrator {
       realismRejectedCount: validationResult.realismRejectedCount,
       exportSafetyRejectedCount: validationResult.exportSafetyRejectedCount,
       repairedCount: repairResult.repairedCount,
-      fallbackCount: fallbackCases.length,
+      fallbackCount: fallbackCount,
       cloudRequestId: metadata?['requestId'],
       cloudFunctionVersion: metadata?['functionVersion'],
       cloudLatencyMs: metadata?['latencyMs'],
@@ -269,12 +318,12 @@ class PipelineOrchestrator {
           : const <String, dynamic>{};
       final raw = Map<String, dynamic>.from(parsedCases[i]);
       final category = _normalizeCategory(
-        _firstText(raw['categoryLock'], raw['category'], plan['category']),
+        _firstText(plan['category'], raw['categoryLock'], raw['category']),
       );
       raw['id'] = _firstText(raw['id'], _buildAiCaseId(request.module, i + 1));
       raw['module'] = _firstText(raw['module'], request.module);
       raw['feature'] = _firstText(raw['feature'], request.feature);
-      raw['platform'] = _firstText(raw['platform'], request.platform);
+      raw['platform'] = _firstText(request.platform, raw['platform']);
       raw['priority'] = _firstText(raw['priority'], plan['priority'], 'Medium');
       raw['type'] = _firstText(
         raw['type'],

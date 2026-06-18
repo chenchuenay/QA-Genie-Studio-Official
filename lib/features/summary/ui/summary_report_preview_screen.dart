@@ -3,16 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
-import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/shared/widgets/animated_dots.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
 import 'package:qa_genie/features/monetization/ads/ad_units.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
+import 'package:qa_genie/features/account/ui/account_screen.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
+import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
+import 'package:qa_genie/app/config/app_config.dart';
 
 class SummaryReportPreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -42,42 +45,64 @@ class _SummaryReportPreviewScreenState
   bool _isProcessing = false;
   bool _isSharing = false;
 
-  int get _total => widget.session.testCases.length;
-  int get _passed =>
-      widget.session.testCases.where((c) => c.status == 'Pass').length;
-  int get _failed =>
-      widget.session.testCases.where((c) => c.status == 'Fail').length;
-  int get _blocked =>
-      widget.session.testCases.where((c) => c.status == 'Blocked').length;
+  late final int _total;
+  late final int _passed;
+  late final int _failed;
+  late final int _blocked;
+  late final String _passRate;
 
-  String get _passRate {
+  @override
+  void initState() {
+    super.initState();
+    _recompute();
+  }
+
+  void _recompute() {
+    _total = widget.session.testCases.length;
+    _passed =
+        widget.session.testCases.where((c) => c.status == 'Pass').length;
+    _failed =
+        widget.session.testCases.where((c) => c.status == 'Fail').length;
+    _blocked =
+        widget.session.testCases.where((c) => c.status == 'Blocked').length;
     final executed = _passed + _failed + _blocked;
-    return executed == 0
+    _passRate = executed == 0
         ? '0.0'
         : (_passed / executed * 100).toStringAsFixed(1);
   }
 
   Future<void> _exportPDF(BuildContext context) async {
     if (_isProcessing) return;
+    setState(() => _isProcessing = true);
     FocusScope.of(context).unfocus();
+
+    if (!await NetworkGuard.ensureProductionOnline(context)) {
+      if (mounted) setState(() => _isProcessing = false);
+      return;
+    }
 
     final isPro = await UsageManager.isPro();
     String? adToken;
+    final skipAds = isPro || AppConfig.allowOfflineGeneration;
 
-    if (!isPro) {
+    if (!skipAds) {
       final shouldWatch = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (ctx) =>
             const WatchAdDialog(featureName: 'Export Summary Report'),
       );
-      if (shouldWatch != true) return;
+      if (shouldWatch != true) {
+        if (mounted) setState(() => _isProcessing = false);
+        return;
+      }
 
       // Use AdManager to show the rewarded ad
       adToken = await AdManager().showRewardedAd(
         adUnitId: AdUnits.rewardedSummaryExport,
       );
       if (adToken == null) {
+        if (mounted) setState(() => _isProcessing = false);
         // Show recovery dialog
         AdManager().showStatusDialog(
           context,
@@ -115,149 +140,152 @@ class _SummaryReportPreviewScreenState
         _isSharing = false;
       });
 
+      AccountScreen.markForRefresh();
       showBlurredDialog(
         context,
         builder: (ctx) =>
             ExportSuccessDialog(type: 'pdf', moduleName: widget.moduleName),
       );
-    } catch (e, stack) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _isProcessing = false;
           _isSharing = false;
         });
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text('Export Failed', style: TextStyle(color: Colors.white)),
+            content: Text(
+              EnvironmentAuthority.isDev ? e.toString() : 'Export failed. Please try again.',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+              ),
+            ],
+          ),
+        );
       }
-      UiErrorService.logAndShow(
-        context: context,
-        source: ErrorSource.exportEngine,
-        screen: 'SummaryReportPreviewScreen',
-        stage: ErrorStage.export,
-        severity: ErrorSeverity.error,
-        userMessage: 'Export failed: $e',
-        error: e,
-        stack: stack,
-      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: AdManager().isAdLoading,
-      builder: (context, isAdLoading, _) {
-        final fullLock = _isProcessing || isAdLoading || _isSharing;
+    final fullLock = _isProcessing || AdManager().isAdLoading.value || _isSharing;
 
-        Widget content = AbsorbPointer(
-          absorbing: fullLock,
-          child: Scaffold(
-            backgroundColor: AppColors.background,
-            appBar: AppBar(
-              backgroundColor: AppColors.surface,
-              title: const Text(
-                'Summary Report Preview',
-                style: TextStyle(color: Colors.white),
-              ),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
+    Widget content = AbsorbPointer(
+      absorbing: fullLock,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          title: const Text(
+            'Summary Report Preview',
+            style: TextStyle(color: Colors.white),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                physics: fullLock
+                    ? const NeverScrollableScrollPhysics()
+                    : const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'TEST SUMMARY REPORT',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _infoRow(
+                      'Suite',
+                      '${widget.moduleName} · ${widget.feature}',
+                    ),
+                    _infoRow('Platform', widget.platform),
+                    _infoRow('Date', _currentDate()),
+                    if (widget.testerName.isNotEmpty)
+                      _infoRow('Tester', widget.testerName),
+                    if (widget.environment.isNotEmpty)
+                      _infoRow('Environment', widget.environment),
+                    const SizedBox(height: 24),
+                    _executionSummaryTable(),
+                    const SizedBox(height: 24),
+                    _priorityBreakdown(),
+                    const SizedBox(height: 24),
+                    _detailedResultsTable(),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
             ),
-            body: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: fullLock
-                        ? const NeverScrollableScrollPhysics()
-                        : const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'TEST SUMMARY REPORT',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: fullLock ? null : () => _exportPDF(context),
+                    icon: fullLock
+                        ? const SizedBox.shrink()
+                        : const Icon(
+                            Icons.picture_as_pdf,
+                            color: Colors.black,
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        _infoRow(
-                          'Suite',
-                          '${widget.moduleName} · ${widget.feature}',
-                        ),
-                        _infoRow('Platform', widget.platform),
-                        _infoRow('Date', _currentDate()),
-                        if (widget.testerName.isNotEmpty)
-                          _infoRow('Tester', widget.testerName),
-                        if (widget.environment.isNotEmpty)
-                          _infoRow('Environment', widget.environment),
-                        const SizedBox(height: 24),
-                        _executionSummaryTable(),
-                        const SizedBox(height: 24),
-                        _priorityBreakdown(),
-                        const SizedBox(height: 24),
-                        _detailedResultsTable(),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                ),
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton.icon(
-                        onPressed: fullLock ? null : () => _exportPDF(context),
-                        icon: fullLock
-                            ? const SizedBox.shrink()
-                            : const Icon(
-                                Icons.picture_as_pdf,
-                                color: Colors.black,
-                              ),
-                        label: fullLock
-                            ? const AnimatedDots(
-                                label: '⚡ Processing',
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : const Text(
-                                'Export PDF',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: fullLock
-                              ? AppColors.accent.withOpacity(0.5)
-                              : AppColors.accent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                    label: fullLock
+                        ? const AnimatedDots(
+                            label: '⚡ Processing',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : const Text(
+                            'Export PDF',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
                           ),
-                        ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: fullLock
+                          ? AppColors.accent.withOpacity(0.5)
+                          : AppColors.accent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        );
-
-        if (_isSharing) {
-          return BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: content,
-          );
-        }
-        return content;
-      },
+          ],
+        ),
+      ),
     );
+
+    if (_isSharing) {
+      return BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: content,
+      );
+    }
+    return content;
   }
 
   String _currentDate() => DateTime.now().toIso8601String().substring(0, 10);
@@ -441,6 +469,8 @@ class _SummaryReportPreviewScreenState
             flex: flex.toInt(),
             child: Text(
               cell.isEmpty ? '-' : cell,
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
               style: TextStyle(
                 color: isHeader
                     ? AppColors.accent
