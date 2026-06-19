@@ -136,6 +136,24 @@ class RecordsDomain {
         toState: StateType.restricted,
       ),
 
+      // create record
+      Relationship(
+        source: EntityType.patient,
+        target: EntityType.record,
+        action: ActionType.create,
+        fromState: StateType.active,
+        toState: StateType.active,
+      ),
+
+      // delete record
+      Relationship(
+        source: EntityType.record,
+        target: EntityType.record,
+        action: ActionType.delete,
+        fromState: StateType.active,
+        toState: StateType.inactive,
+      ),
+
       // redaction
       Relationship(
         source: EntityType.redaction,

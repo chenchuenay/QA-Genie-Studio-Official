@@ -50,52 +50,87 @@ class ScenarioPlanner {
       final needed = categoryCounts[category] ?? 0;
       if (needed == 0) continue;
       final conditions = _getConditionsForCategory(category);
-      for (final rel in reachable) {
-        if (scenarios.length >= needed) break;
-        if (rel.action == null || rel.toState == null) continue;
+      final relList = reachable.toList();
+      int relIndex = 0;
+      while (scenarios.length < needed) {
         for (final condition in conditions) {
-          if (!_isConditionCompatible(rel, condition)) continue;
-          final scenario = Scenario(
-            entity: rel.source,
-            action: rel.action!,
-            targetState: _targetStateForCondition(rel, condition),
-            category: category,
-          );
-          final fingerprint =
-              '${scenario.entity.name}|${scenario.action.name}|${condition}|${scenario.targetState.name}';
-          if (usedFingerprints.contains(fingerprint)) continue;
-          usedFingerprints.add(fingerprint);
-          scenarios.add(scenario);
           if (scenarios.length >= needed) break;
+          for (int r = 0; r < relList.length; r++) {
+            if (scenarios.length >= needed) break;
+            final rel = relList[(relIndex + r) % relList.length];
+            if (rel.action == null || rel.toState == null) continue;
+            if (!_isConditionCompatible(rel, condition)) continue;
+            final scenario = Scenario(
+              entity: rel.source,
+              action: rel.action!,
+              targetState: _targetStateForCondition(rel, condition),
+              category: category,
+              condition: condition,
+            );
+            final fingerprint =
+                '${scenario.entity.name}|${scenario.action.name}|${condition}|${scenario.targetState.name}';
+            if (usedFingerprints.contains(fingerprint)) continue;
+            usedFingerprints.add(fingerprint);
+            scenarios.add(scenario);
+          }
         }
+        relIndex++;
+        if (relIndex > 5) break; // safety valve
       }
     }
 
     final totalNeeded = categoryCounts.values.fold(0, (a, b) => a + b);
     if (scenarios.length < totalNeeded) {
       if (reachable.isNotEmpty) {
-        final defaultRel = reachable.first;
+        final relList = reachable.toList();
+        final fallbackConditions = <String>['valid', 'invalid', 'expired', 'locked', 'empty'];
+        int ri = 0, ci = 0;
+        int lastSize = scenarios.length;
+        int stalledCycles = 0;
         while (scenarios.length < totalNeeded) {
-          scenarios.add(
-            Scenario(
-              entity: defaultRel.source,
-              action: defaultRel.action!,
-              targetState: defaultRel.toState ?? StateType.active,
-              category: 'positive',
-            ),
+          final rel = relList[ri % relList.length];
+          final cond = fallbackConditions[ci % fallbackConditions.length];
+          ri++;
+          ci++;
+          if (rel.action == null || rel.toState == null) continue;
+          final scenario = Scenario(
+            entity: rel.source,
+            action: rel.action!,
+            targetState: _targetStateForCondition(rel, cond),
+            category: 'positive',
+            condition: cond,
           );
+          final fp = '${scenario.entity.name}|${scenario.action.name}|$cond|${scenario.targetState.name}';
+          if (usedFingerprints.add(fp)) {
+            scenarios.add(scenario);
+          }
+          // Safety valve: if a full cycle completes without progress, break
+          if (ri % relList.length == 0 && ci % fallbackConditions.length == 0) {
+            if (scenarios.length == lastSize) {
+              stalledCycles++;
+              if (stalledCycles >= 2) break;
+            } else {
+              lastSize = scenarios.length;
+              stalledCycles = 0;
+            }
+          }
         }
       } else {
-        // ULTIMATE FALLBACK: This should not happen with hardened seed entities
+        final fallbackPairs = [(EntityType.account, ActionType.login, 'valid'),
+                               (EntityType.credential, ActionType.create, 'empty'),
+                               (EntityType.session, ActionType.refresh, 'expired')];
+        int fi = 0;
         while (scenarios.length < totalNeeded) {
-          scenarios.add(
-            Scenario(
-              entity: EntityType.account,
-              action: ActionType.view,
-              targetState: StateType.active,
-              category: 'positive',
-            ),
+          final pair = fallbackPairs[fi % fallbackPairs.length];
+          final scenario = Scenario(
+            entity: pair.$1,
+            action: pair.$2,
+            targetState: StateType.active,
+            category: 'positive',
+            condition: pair.$3,
           );
+          scenarios.add(scenario);
+          fi++;
         }
       }
     }
@@ -145,17 +180,19 @@ class ScenarioPlanner {
   }
 
   bool _isConditionCompatible(Relationship rel, String condition) {
+    // Security/validation/boundary/session conditions are universal
+    if (['sql_injection', 'xss', 'bruteforce', 'credential_stuffing',
+         'empty', 'invalid_format', 'duplicate', 'max_length', 'min_length',
+         'maximum', 'minimum',
+         'expired', 'revoked', 'concurrent'].contains(condition)) {
+      return true;
+    }
     final action = rel.action;
     if (action == ActionType.login || action == ActionType.authenticate) {
-      return ['valid', 'invalid', 'expired', 'locked'].contains(condition);
+      return condition == 'valid' || condition == 'invalid' || condition == 'locked';
     }
     if (action == ActionType.pay) {
-      return [
-        'valid',
-        'expired',
-        'insufficient',
-        'duplicate',
-      ].contains(condition);
+      return ['valid', 'expired', 'insufficient', 'duplicate'].contains(condition);
     }
     if (action == ActionType.apply) {
       return ['valid', 'expired', 'already_used'].contains(condition);

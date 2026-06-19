@@ -160,7 +160,10 @@ class DatabaseService {
   static Future<List<FinalizedTestCase>> getTestCasesForSuite(int suiteId) async {
     final db = await DatabaseService.db;
     final rows = await db.query('test_cases', where: 'suite_id = ?', whereArgs: [suiteId]);
-    return rows.map((row) => _decodeTestCase(row['case_json'] as String)).toList();
+    return rows.map((row) {
+      final tc = _decodeTestCase(row['case_json'] as String);
+      return tc.copyWith(dbId: row['id'] as int?);
+    }).toList();
   }
 
   static Future<void> replaceAllTestCases({required int suiteId, required List<FinalizedTestCase> cases}) async {

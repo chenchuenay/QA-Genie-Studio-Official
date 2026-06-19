@@ -71,8 +71,8 @@ class DomainRegistry {
         requiredPreconditions: [EntityState.initialized],
         postCondition: EntityState.approved,
         stepsByPlatform: {
-          'Web': ['SelectDates', 'SubmitRequest', 'VerifyStatus'],
-          'Mobile': ['TapLeaveMenu', 'EnterDates', 'TapSubmit']
+          'Web': ['NavigateToDateRange', 'SubmitRequestForm', 'VerifyApprovalStatus'],
+          'Mobile': ['TapLeaveMenu', 'EnterLeaveDates', 'TapSubmitRequest']
         },
       ),
     },
@@ -82,7 +82,23 @@ class DomainRegistry {
         postCondition: EntityState.processed,
         stepsByPlatform: {
           'Web': ['NavigateToRecords', 'ClickViewDetail', 'VerifyDataLoad'],
-          'Mobile': ['TapDocuments', 'OpenPDF', 'VerifyContentVisibility']
+          'Mobile': ['TapDocuments', 'OpenPDFDocument', 'VerifyContentVisibility']
+        },
+      ),
+      'create': ActionPattern(
+        requiredPreconditions: [EntityState.authenticated],
+        postCondition: EntityState.processed,
+        stepsByPlatform: {
+          'Web': ['NavigateToRecords', 'ClickAddNewRecord', 'FillPatientInfo', 'ClickSaveRecord', 'VerifyRecordCreated'],
+          'Mobile': ['TapRecordsMenu', 'TapAddRecord', 'EnterPatientData', 'TapSaveRecord', 'VerifyRecordAdded'],
+        },
+      ),
+      'delete': ActionPattern(
+        requiredPreconditions: [EntityState.authenticated],
+        postCondition: EntityState.processed,
+        stepsByPlatform: {
+          'Web': ['NavigateToRecords', 'ClickDeleteRecord', 'ConfirmDeletion', 'VerifyRecordRemoved'],
+          'Mobile': ['TapRecordsMenu', 'TapDeleteRecord', 'ConfirmDeletion', 'VerifyRecordRemoved'],
         },
       ),
     },
@@ -91,7 +107,7 @@ class DomainRegistry {
         requiredPreconditions: [EntityState.initialized],
         postCondition: EntityState.processed,
         stepsByPlatform: {
-          'API': ['TriggerPipeline', 'MonitorBuild', 'VerifyDeployment']
+          'API': ['ClickTriggerPipeline', 'MonitorBuildStatus', 'VerifyDeploymentSuccess']
         },
       ),
     }

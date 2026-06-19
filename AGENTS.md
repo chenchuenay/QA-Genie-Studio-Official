@@ -29,4 +29,8 @@ AGENTS SHOULD FOLLOW BELOW RULES BEFORE PLANING OR FIXING
 
 ##### VERY IMPORTANT
 
+shortcuts for runs -when i said = what i meant
+run prod = fiflutter run --flavor prod --dart-define=MODE=prod
+run dev = flutter run --flavor dev --dart-define=MODE=dev
+
 AGENTS SHOULD ACKNWLWDGE IN THE CHAT THAT THEY READ AND FOLLOWING RULES FROM AGENTS.MD

@@ -135,23 +135,26 @@ class PIIScrubber {
 
     // ==========================================================
     // ORDER MATTERS
+    // Most-specific → least-specific to avoid regex cross-match.
+    // UUID, cards, API keys, JWTs, URLs, IPs before phone/email
+    // because phone regex matches digit-dash patterns in UUIDs/cards.
     // ==========================================================
 
-    sanitized = sanitized.replaceAll(_jwtRegex, '[REDACTED_JWT]');
+    sanitized = sanitized.replaceAll(_uuidRegex, '[REDACTED_UUID]');
+
+    sanitized = _replaceCards(sanitized);
 
     sanitized = sanitized.replaceAll(_apiKeyRegex, '[REDACTED_API_KEY]');
 
-    sanitized = sanitized.replaceAll(_emailRegex, '[REDACTED_EMAIL]');
+    sanitized = sanitized.replaceAll(_jwtRegex, '[REDACTED_JWT]');
 
-    sanitized = sanitized.replaceAll(_phoneRegex, '[REDACTED_PHONE]');
+    sanitized = sanitized.replaceAll(_emailRegex, '[REDACTED_EMAIL]');
 
     sanitized = sanitized.replaceAll(_urlRegex, '[REDACTED_URL]');
 
     sanitized = sanitized.replaceAll(_ipRegex, '[REDACTED_IP]');
 
-    sanitized = sanitized.replaceAll(_uuidRegex, '[REDACTED_UUID]');
-
-    sanitized = _replaceCards(sanitized);
+    sanitized = sanitized.replaceAll(_phoneRegex, '[REDACTED_PHONE]');
 
     sanitized = sanitized.replaceAll(_longTokenRegex, '[REDACTED_TOKEN]');
 

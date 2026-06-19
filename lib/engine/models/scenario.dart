@@ -9,6 +9,8 @@ class Scenario {
   final StateType targetState; // the state we expect after action
   final String
   category; // positive, negative, validation, boundary, security, session
+  final String
+  condition; // specific condition driving this scenario (sql_injection, xss, invalid, empty, etc.)
   final bool isPositive; // derived from category
 
   Scenario({
@@ -16,6 +18,7 @@ class Scenario {
     required this.action,
     required this.targetState,
     required this.category,
+    this.condition = 'valid',
   }) : isPositive = category == 'positive';
 
   @override
@@ -24,12 +27,13 @@ class Scenario {
     return other is Scenario &&
         other.entity == entity &&
         other.action == action &&
-        other.targetState == targetState;
+        other.targetState == targetState &&
+        other.condition == condition;
   }
 
   @override
-  int get hashCode => Object.hash(entity, action, targetState);
+  int get hashCode => Object.hash(entity, action, targetState, condition);
 
   @override
-  String toString() => 'Scenario($entity, $action, $targetState, $category)';
+  String toString() => 'Scenario($entity, $action, $targetState, $category, $condition)';
 }
