@@ -15,7 +15,6 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
-import 'package:qa_genie/app/config/app_config.dart';
 
 class SummaryReportPreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -83,11 +82,11 @@ class _SummaryReportPreviewScreenState
 
     final isPro = await UsageManager.isPro();
     String? adToken;
-    final skipAds = isPro || AppConfig.allowOfflineGeneration;
+    final skipAds = isPro;
 
     if (!skipAds) {
-      final shouldWatch = await showDialog<bool>(
-        context: context,
+      final shouldWatch = await showBlurredDialog<bool>(
+        context,
         barrierDismissible: false,
         builder: (ctx) =>
             const WatchAdDialog(featureName: 'Export Summary Report'),
@@ -152,8 +151,8 @@ class _SummaryReportPreviewScreenState
           _isProcessing = false;
           _isSharing = false;
         });
-        showDialog(
-          context: context,
+        showBlurredDialog(
+          context,
           builder: (ctx) => AlertDialog(
             backgroundColor: AppColors.surface,
             title: const Text('Export Failed', style: TextStyle(color: Colors.white)),
@@ -248,8 +247,8 @@ class _SummaryReportPreviewScreenState
                             color: Colors.black,
                           ),
                     label: fullLock
-                        ? const AnimatedDots(
-                            label: '⚡ Processing',
+                        ? const Text(
+                            '⚡ Processing...',
                             style: TextStyle(
                               color: Colors.black,
                               fontWeight: FontWeight.bold,

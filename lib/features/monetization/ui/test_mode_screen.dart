@@ -4,6 +4,7 @@ import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/forensics/production_diagnostics_screen.dart';
+import 'package:qa_genie/features/dev/fallback_analyzer_screen.dart';
 
 class TestModeScreen extends StatefulWidget {
   final VoidCallback? onRestart;
@@ -172,6 +173,36 @@ class _TestModeScreenState extends State<TestModeScreen> {
                         ),
                         label: const Text(
                           "Production Diagnostics",
+                          style: TextStyle(color: AppColors.accent),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.accent),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: AppConfig.isProduction ? null : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const FallbackAnalyzerScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.assessment,
+                          color: AppColors.accent,
+                        ),
+                        label: const Text(
+                          "Fallback Quality Analyzer",
                           style: TextStyle(color: AppColors.accent),
                         ),
                         style: OutlinedButton.styleFrom(

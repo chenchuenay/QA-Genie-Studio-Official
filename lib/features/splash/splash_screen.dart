@@ -1,15 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/features/update/logic/update_manager.dart';
-import 'package:qa_genie/features/update/ui/update_required_screen.dart';
 import 'package:qa_genie/shared/dialogs/guidelines_dialog.dart';
 import 'package:qa_genie/shared/navigation/main_screen.dart';
 import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
+import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/engine/prompts/prompt_cache_manager.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -31,34 +32,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _init() async {
-    await Future.wait([
-      _initGuestAuth(),
-      UsageManager.getDashboardData(),
-      PromptCacheManager.warmup().catchError((_) {}),
-      NetworkGuard.initialize().catchError((_) {}),
-    ]);
-    // Fire ad preload in background — don't block navigation
-    AdManager().loadRewardedAd().catchError((_) {});
-
-    final check = await UpdateManager.checkForUpdate().timeout(
-      const Duration(seconds: 1),
-      onTimeout: () => UpdateManager.noUpdate(),
-    );
-    if (!mounted) return;
-    if (check.updateRequired) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => UpdateRequiredScreen(check: check),
-        ),
-      );
-      return;
-    }
-
-    final user = AuthService.currentUser;
-    final identity = user?.uid ?? 'guest_default';
-    await DatabaseService.initDatabase(identity);
-    if (!mounted) return;
-
+    // Only local operations before navigation — no network/cloud calls.
     final prefs = await AppConfig.sharedPrefs;
     final firstLaunch = prefs.getBool('first_launch_completed') ?? false;
 
@@ -72,7 +46,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
       if (mounted) {
         final neverShow = prefs.getBool('never_show_guidelines') ?? false;
-        final alreadyShown = prefs.getBool('first_launch_guidelines_shown') ?? false;
+        final alreadyShown =
+            prefs.getBool('first_launch_guidelines_shown') ?? false;
         if (!neverShow && !alreadyShown) {
           await prefs.setBool('first_launch_guidelines_shown', true);
           if (mounted) {
@@ -90,11 +65,32 @@ class _SplashScreenState extends State<SplashScreen> {
       }
     }
 
+    // Navigate immediately — splash should be invisible to the user.
     if (!mounted) return;
     MainScreenState.shouldAutoStartTour = _showGuidelines;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const MainScreen()),
     );
+
+    // All network / async init work fires in the background after navigation.
+    unawaited(UsageManager.getDashboardData());
+    unawaited(PromptCacheManager.warmup().catchError((_) {}));
+    unawaited(NetworkGuard.initialize().catchError((_) {}));
+    unawaited(AdManager().loadRewardedAd().catchError((_) {}));
+    unawaited(_backgroundInit());
+  }
+
+  Future<void> _backgroundInit() async {
+    final guestAuthDone = _initGuestAuth().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => null,
+    );
+    await guestAuthDone;
+    final identity = await DeviceUtils.getUniqueId();
+    await DatabaseService.initDatabase(identity);
+    // One-time migration from legacy UID-based identity to device-level identity
+    final oldUid = AuthService.currentUser?.uid ?? 'guest_default';
+    await DatabaseService.migrateDataToCurrentDb(oldUid);
   }
 
   Future<void> _initGuestAuth() async {

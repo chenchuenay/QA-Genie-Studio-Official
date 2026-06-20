@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:qa_genie/core/security/content_filter.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
@@ -96,10 +97,10 @@ class AiGenerationStage {
     final payload = <String, dynamic>{
       'requestId': request.traceId,
       'prompt': prompt,
-      'module': request.module,
-      'feature': request.feature,
+      'module': ContentFilter.sanitizeField(request.module),
+      'feature': ContentFilter.sanitizeField(request.feature),
       'platform': request.platform,
-      'notes': request.constraints,
+      'notes': ContentFilter.sanitizeField(request.constraints),
       'isPro': request.generationMode.toLowerCase() == 'pro',
       'deviceId': request.deviceId,
     };
@@ -111,6 +112,7 @@ class AiGenerationStage {
     final result = await FunctionsService.call(
       functionName: 'generate',
       payload: payload,
+      timeout: const Duration(seconds: 60),
     );
     return jsonEncode(result);
   }

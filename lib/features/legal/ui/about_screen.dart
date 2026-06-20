@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
 
@@ -22,6 +24,15 @@ class _AboutScreenState extends State<AboutScreen> {
     if (mounted) setState(() => _appVersion = packageInfo.version);
   }
 
+  Future<void> _launchEmail() async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'qagenieai@gmail.com',
+      queryParameters: {'subject': 'QA Genie Feedback'},
+    );
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -32,36 +43,129 @@ class _AboutScreenState extends State<AboutScreen> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
         child: Column(
           children: [
-            Image.asset('assets/logo.png', width: 80, height: 80),
-            const SizedBox(height: 16),
+            Image.asset('assets/logo.png', width: 72, height: 72),
+            const SizedBox(height: 12),
             const Text(
               'QA Genie',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 4),
+            Text(
+              'Version $_appVersion',
+              style: const TextStyle(fontSize: 13, color: AppColors.textHint),
+            ),
+            const SizedBox(height: 2),
             const Text(
               'AI-Powered Test Flow Engine',
               style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 24),
-            _infoRow('Developer', 'Enay Kumar'),
-            _infoRow('Version', _appVersion),
-            _infoRow('Tech Stack', 'Flutter, Firebase, DeepSeek AI'),
-            const SizedBox(height: 24),
-            const Divider(color: AppColors.border),
-            const SizedBox(height: 16),
-            const Text(
-              'QA Genie generates professional test cases and QA documentation using AI, '
-              'with support for Excel, Jira, Xray, and PDF exports.',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
-              textAlign: TextAlign.center,
+            const SizedBox(height: 28),
+            _sectionCard(
+              children: [
+                _sectionHeader('About QA Genie'),
+                const SizedBox(height: 10),
+                const Text(
+                  'QA Genie is a mobile-first QA companion that generates professional '
+                  'test cases from natural-language prompts. Built for QA engineers, '
+                  'developers, and test managers who need high-quality test documentation '
+                  'in seconds — not hours.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            _sectionCard(
+              children: [
+                _sectionHeader('Key Features'),
+                const SizedBox(height: 10),
+                _featureItem(
+                  'AI Test Generation',
+                  'Describe your feature and get a full test suite tailored to your project.',
+                ),
+                _featureItem(
+                  'Multiple Export Formats',
+                  'Excel (.xlsx), Jira/Xray XML, and PDF — ready to share or import.',
+                ),
+                _featureItem(
+                  'Test Suites',
+                  'Organise, edit, and revisit your generated test cases anytime.',
+                ),
+                _featureItem(
+                  'Smart Fallback',
+                  'Works offline with a local fallback engine when AI is unavailable.',
+                ),
+                _featureItem(
+                  'Export Summaries',
+                  'Share concise test-summary reports with your team.',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _sectionCard(
+              children: [
+                _sectionHeader('Built With'),
+                const SizedBox(height: 10),
+                const Text(
+                  'Flutter • Firebase (Auth, Firestore, Cloud Functions, Analytics) • '
+                  ' AI • Google AdMob • Google Sign-In • '
+                  'sqflite • PDF • Excel • share_plus • url_launcher • '
+                  'connectivity_plus • device_info_plus • package_info_plus',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    height: 1.6,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _sectionCard(
+              children: [
+                _sectionHeader('Contact'),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: _launchEmail,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.email_outlined,
+                        size: 16,
+                        color: AppColors.accent,
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'qagenieai@gmail.com',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.accent,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Developer: Enay Kumar',
+                  style: TextStyle(fontSize: 13, color: AppColors.textHint),
+                ),
+              ],
+            ),
+            const SizedBox(height: 28),
             const Text(
-              '© 2025 Enay Kumar',
+              '© 2026 Enay Kumar',
               style: TextStyle(fontSize: 12, color: AppColors.textHint),
             ),
             const SizedBox(height: 32),
@@ -71,19 +175,64 @@ class _AboutScreenState extends State<AboutScreen> {
     );
   }
 
-  Widget _infoRow(String label, String value) {
+  Widget _sectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: Colors.white,
+      ),
+    );
+  }
+
+  Widget _sectionCard({required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: children,
+      ),
+    );
+  }
+
+  Widget _featureItem(String title, String description) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$label  ',
-            style: const TextStyle(fontSize: 14, color: AppColors.textHint),
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Icon(Icons.check_circle, size: 16, color: AppColors.accent),
           ),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500),
+          const SizedBox(width: 10),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+                children: [
+                  TextSpan(
+                    text: '$title — ',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  TextSpan(text: description),
+                ],
+              ),
+            ),
           ),
         ],
       ),

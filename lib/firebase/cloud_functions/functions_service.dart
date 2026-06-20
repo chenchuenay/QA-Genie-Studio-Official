@@ -33,11 +33,9 @@ class FunctionsService {
     return value;
   }
 
-  static const int _maxRetries = 3;
+  static const int _maxRetries = 1;
   static const List<Duration> _retryDelays = [
     Duration(seconds: 1),
-    Duration(seconds: 2),
-    Duration(seconds: 4),
   ];
 
   static bool _isRetriable(Object error) {
@@ -47,15 +45,11 @@ class FunctionsService {
         case 'deadline-exceeded':
         case 'internal':
         case 'resource-exhausted':
-        case 'unauthenticated':
           return true;
         default:
           return false;
       }
     }
-    if (error is SocketException) return true;
-    if (error is TimeoutException) return true;
-    if (error is HttpException) return true;
     return false;
   }
 
@@ -187,11 +181,6 @@ class FunctionsService {
     return call(functionName: 'getUserDashboard', payload: {'type': 'user'});
   }
 
-  static Future<void> trackGenerationUsage() async {
-    // Redundant as 'generate' now tracks usage server-side, but keep for manual fallbacks
-    await call(functionName: 'trackGeneration');
-  }
-
   static Future<bool> verifyReward({required String rewardToken}) async {
     // Delegates to the dedicated verifyRewardAd cloud function
     return verifyRewardAd(adTransactionId: rewardToken);
@@ -208,13 +197,6 @@ class FunctionsService {
 
   static String generateAdToken() {
     return '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}';
-  }
-
-  static Future<void> trackGeneration(int generatedCount) async {
-    await call(
-      functionName: 'trackGeneration',
-      payload: {'generatedCount': generatedCount},
-    );
   }
 
   static Future<void> trackExport({
@@ -243,10 +225,10 @@ class FunctionsService {
     );
   }
 
-  static Future<String> getGuestToken({required String deviceId}) async {
+  static Future<String> getGuestToken({required String deviceId, bool forceReturning = false}) async {
     final result = await call(
       functionName: 'getOrCreateGuestToken',
-      payload: {'deviceId': deviceId},
+      payload: {'deviceId': deviceId, 'forceReturning': forceReturning},
     );
     // Check for success flag or presence of token
     if (result.containsKey('token') && result['token'] is String) {

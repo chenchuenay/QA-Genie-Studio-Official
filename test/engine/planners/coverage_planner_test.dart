@@ -100,37 +100,40 @@ void main() {
     });
 
     group('default plan with core mode', () {
-      test('returns core default distribution when count is 8', () {
+      test('returns diverse distribution when count is 8', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 8, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 6);
+        expect(result.categoryCounts['positive'], 3);
         expect(result.categoryCounts['negative'], 1);
         expect(result.categoryCounts['boundary'], 1);
+        expect(result.categoryCounts['validation'], 1);
+        expect(result.categoryCounts['security'], 1);
+        expect(result.categoryCounts['session'], 1);
         expect(result.totalCount, 8);
       });
 
-      test('adjusts positive count upward when totalCount > default sum', () {
+      test('adjusts counts proportionally when totalCount > 10', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 12, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 10);
-        expect(result.categoryCounts['negative'], 1);
-        expect(result.categoryCounts['boundary'], 1);
+        expect(result.categoryCounts['positive'], 2);
+        expect(result.categoryCounts['negative'], 2);
+        expect(result.categoryCounts['boundary'], 2);
+        expect(result.categoryCounts['validation'], 2);
+        expect(result.categoryCounts['security'], 2);
+        expect(result.categoryCounts['session'], 2);
         expect(result.totalCount, 12);
       });
 
-      test('uses security edge when constraints contain security', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 8, constraints: 'security', seed: '');
+      test('includes all 6 categories in default plan', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 10, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts.containsKey('security'), isTrue);
-        expect(result.categoryCounts.containsKey('boundary'), isFalse);
-        expect(result.riskFocus, ['HIGH']);
-      });
-
-      test('uses boundary edge when constraints do not contain security', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 8, constraints: '', seed: '');
-        final result = planner.plan();
+        expect(result.categoryCounts.containsKey('positive'), isTrue);
+        expect(result.categoryCounts.containsKey('negative'), isTrue);
         expect(result.categoryCounts.containsKey('boundary'), isTrue);
-        expect(result.categoryCounts.containsKey('security'), isFalse);
+        expect(result.categoryCounts.containsKey('validation'), isTrue);
+        expect(result.categoryCounts.containsKey('security'), isTrue);
+        expect(result.categoryCounts.containsKey('session'), isTrue);
+        expect(result.totalCount, 10);
       });
     });
 
@@ -138,9 +141,12 @@ void main() {
       test('returns pro default distribution when count is 16', () {
         final planner = CoveragePlanner(mode: GenerationMode.pro, totalCount: 16, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 10);
-        expect(result.categoryCounts['negative'], 4);
+        expect(result.categoryCounts['positive'], 6);
+        expect(result.categoryCounts['negative'], 2);
         expect(result.categoryCounts['boundary'], 2);
+        expect(result.categoryCounts['validation'], 2);
+        expect(result.categoryCounts['security'], 2);
+        expect(result.categoryCounts['session'], 2);
         expect(result.totalCount, 16);
       });
     });
@@ -176,11 +182,14 @@ void main() {
         expect(result.categoryCounts, {'session': 3});
       });
 
-      test('uses core default when multiple constraint keywords present', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 8, constraints: 'security negative', seed: '');
+      test('uses diverse default when multiple constraint keywords present', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 10, constraints: 'security negative', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 6);
-        expect(result.categoryCounts['negative'], 1);
+        expect(result.categoryCounts['positive'], 3);
+        expect(result.categoryCounts['negative'], 2);
+        expect(result.categoryCounts['security'], 2);
+        expect(result.totalCount, 10);
+        expect(result.categoryCounts.keys.length, 6);
       });
     });
 

@@ -162,22 +162,37 @@ class CoveragePlanner {
       categoryCounts = {'session': totalCount};
     } else {
       // Default distribution based on mode (Core vs Pro)
+      // AI-like diversity: positive + negative + boundary + validation + security + session
       if (mode == GenerationMode.core) {
-        // Core: 6 Positive, 1 Negative, 1 Edge (boundary or security)
-        categoryCounts = {'positive': 6, 'negative': 1};
-        // If constraints mention security, use security as the edge; otherwise boundary
-        if (constraints.toLowerCase().contains('security')) {
-          categoryCounts['security'] = 1;
+        if (totalCount == 10) {
+          categoryCounts = {
+            'positive': 4, 'negative': 2, 'boundary': 1,
+            'validation': 1, 'security': 1, 'session': 1,
+          };
         } else {
-          categoryCounts['boundary'] = 1;
+          final base = totalCount ~/ 6;
+          final rem = totalCount % 6;
+          categoryCounts = {
+            'positive': base + rem, 'negative': base, 'boundary': base,
+            'validation': base, 'security': base, 'session': base,
+          };
+        }
+        if (constraints.toLowerCase().contains('security')) {
+          categoryCounts['security'] = (categoryCounts['security'] ?? 0) + 1;
         }
       } else {
-        // PRO: 10 Positive, 4 Negative, 2 Edge (boundary or security)
-        categoryCounts = {'positive': 10, 'negative': 4};
-        if (constraints.toLowerCase().contains('security')) {
-          categoryCounts['security'] = 2;
+        if (totalCount == 20) {
+          categoryCounts = {
+            'positive': 8, 'negative': 4, 'boundary': 2,
+            'validation': 2, 'security': 2, 'session': 2,
+          };
         } else {
-          categoryCounts['boundary'] = 2;
+          final base = totalCount ~/ 6;
+          final rem = totalCount % 6;
+          categoryCounts = {
+            'positive': base + rem, 'negative': base, 'boundary': base,
+            'validation': base, 'security': base, 'session': base,
+          };
         }
       }
     }

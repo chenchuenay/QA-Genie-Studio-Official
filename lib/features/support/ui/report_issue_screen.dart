@@ -37,6 +37,49 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Guests see a professional message instead of the report form
+    if (AuthService.isGuest) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          title: const Text('Support'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline, size: 48, color: AppColors.textHint),
+                const SizedBox(height: 20),
+                const Text(
+                  'Sign in to submit a report',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Only signed-in users can submit a report. '
+                  'Sign in with Google to share your feedback and track its status.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 15,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -54,7 +97,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
         controller: _tabController,
         children: [
           _ReportFormView(screen: widget.screen),
-          const _MyFeedbacksView(),
+          _MyFeedbacksView(onShareFeedback: () => _tabController.animateTo(0)),
         ],
       ),
     );
@@ -62,7 +105,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
 }
 
 class _MyFeedbacksView extends StatefulWidget {
-  const _MyFeedbacksView();
+  final VoidCallback? onShareFeedback;
+  const _MyFeedbacksView({this.onShareFeedback});
 
   @override
   State<_MyFeedbacksView> createState() => _MyFeedbacksViewState();
@@ -70,6 +114,7 @@ class _MyFeedbacksView extends StatefulWidget {
 
 class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
   List<Map<String, dynamic>> _feedbacks = [];
+  DateTime? _lastSync;
 
   @override
   void initState() {
@@ -81,7 +126,12 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
     final db = await DatabaseService.db;
     final data = await db.query('reported_issues', orderBy: 'createdAt DESC');
 
-    // Refresh status from cloud on every load
+    // Only sync status from cloud once per 7 days (Rule 13)
+    if (_lastSync != null && DateTime.now().difference(_lastSync!).inDays < 7) {
+      if (mounted) setState(() => _feedbacks = List.from(data));
+      return;
+    }
+
     List<Map<String, dynamic>> updatedData = List.from(data);
     try {
       final result = await FunctionsService.call(
@@ -104,6 +154,7 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
           }
         }
       }
+      _lastSync = DateTime.now();
     } catch (e) {
       debugPrint('Sync failed: $e');
     }
@@ -126,7 +177,7 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
               ),
               const SizedBox(height: AppSpacing.md),
               ElevatedButton(
-                onPressed: () => DefaultTabController.of(context).animateTo(0),
+                onPressed: widget.onShareFeedback ?? () => DefaultTabController.of(context).animateTo(0),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accent,
                 ),
@@ -174,7 +225,7 @@ class _ReportFormView extends StatefulWidget {
 
 class _ReportFormViewState extends State<_ReportFormView> {
   final _formKey = GlobalKey<FormState>();
-  String _issueType = 'Bug';
+  String _issueType = 'Feedback';
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   bool _includeDeviceInfo = true;
@@ -403,13 +454,7 @@ class _ReportFormViewState extends State<_ReportFormView> {
                     borderRadius: BorderRadius.circular(AppRadius.button),
                   ),
                 ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Send Report'),
+                child: const Text('Send Report'),
               ),
             ),
           ],

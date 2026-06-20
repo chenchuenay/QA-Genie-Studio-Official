@@ -57,8 +57,6 @@ class EnvironmentAuthority {
 
   static bool get allowLocalQuotaReset => isDev;
 
-  static bool get allowOfflineGeneration => isDev;
-
   static bool get requireCloudAuthority => isProd;
 
   static bool get requireAppCheck => isProd;

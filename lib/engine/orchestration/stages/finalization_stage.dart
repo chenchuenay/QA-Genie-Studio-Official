@@ -52,6 +52,46 @@ class FinalizationStage {
   }
 
   String _normalizeTitle(String title) {
-    return title.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return _splitDualConcept(title.trim().replaceAll(RegExp(r'\s+'), ' '));
+  }
+
+  static bool _isSecondConcept(String phrase) {
+    final low = phrase.toLowerCase().trim();
+    final words = low.split(RegExp(r'\s+'));
+    if (words.isEmpty) return false;
+
+    const newConceptStarts = {
+      'verify', 'check', 'ensure', 'confirm', 'test', 'validate',
+      'login', 'logout', 'register', 'signup', 'signin',
+      'delete', 'remove', 'cancel', 'undo', 'create', 'add',
+      'update', 'edit', 'modify', 'view', 'show', 'navigate',
+      'submit', 'send', 'post', 'upload', 'download', 'export', 'import',
+      'receive', 'search', 'approve', 'reject', 'accept',
+      'pay', 'checkout', 'purchase', 'book', 'reschedule', 'schedule',
+      'should', 'must', 'will', 'user', 'system', 'app',
+    };
+
+    if (newConceptStarts.contains(words.first)) return true;
+
+    if (words.first == 'the' && words.length > 1) {
+      return newConceptStarts.contains(words[1]);
+    }
+
+    return false;
+  }
+
+  String _splitDualConcept(String title) {
+    int searchStart = 0;
+    while (true) {
+      final andIndex = title.indexOf(' and ', searchStart);
+      if (andIndex < 0) break;
+
+      final afterAnd = title.substring(andIndex + 5).trimLeft();
+      if (afterAnd.isNotEmpty && _isSecondConcept(afterAnd)) {
+        return title.substring(0, andIndex).trim();
+      }
+      searchStart = andIndex + 5;
+    }
+    return title;
   }
 }

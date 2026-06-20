@@ -3,7 +3,8 @@ import 'package:qa_genie/app/app.dart';
 import 'firebase/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:qa_genie/app/config/app_config.dart';
+import 'package:qa_genie/core/forensics/forensics_provider.dart';
+import 'package:qa_genie/core/forensics/forensics_service_prod.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/firebase/app_check/app_check_service.dart';
 
@@ -12,11 +13,13 @@ Future<void> main() async {
 
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.android);
-    await AppCheckService.initialize(isProduction: AppConfig.isProduction);
+    await AppCheckService.initialize(isProduction: true);
     await MobileAds.instance.initialize();
   } catch (e) {
     debugPrint("Startup critical error: $e");
   }
+
+  ForensicsProvider.init(ForensicsServiceProd());
 
   FlutterError.onError = (details) {
     debugPrint('🔥 FlutterError: ${details.exception}');
@@ -25,13 +28,6 @@ Future<void> main() async {
   runApp(const QaGenieApp());
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-    if (!AppConfig.isProduction) {
-      try {
-        final prefs = await AppConfig.sharedPrefs;
-        AppConfig.initTestProMode(prefs.getBool('testProMode') ?? false);
-      } catch (_) {}
-    }
-
     try {
       await DatabaseService.syncPendingReports();
     } catch (_) {}

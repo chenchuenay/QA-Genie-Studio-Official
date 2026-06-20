@@ -1,7 +1,7 @@
 name: qa_genie
 description: "QA Genie – AI-Powered Test Flow Engine"
 publish_to: "none"
-version: 1.2.306
+version: 1.2.34
 
 environment:
   sdk: ^3.11.0
@@ -21,7 +21,6 @@ dependencies:
   device_info_plus: ^9.1.2
   package_info_plus: ^8.1.0
   pdf: ^3.12.0
-  flutter_dotenv: ^5.0.2
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.4.0
   google_mobile_ads: ^9.0.0

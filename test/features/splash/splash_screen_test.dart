@@ -8,5 +8,7 @@ void main() {
       home: const SplashScreen(),
     ));
     expect(find.text('QA Genie'), findsOneWidget);
+    // Drain pending timeout timers from _init() background work
+    await tester.pump(const Duration(seconds: 5));
   });
 }

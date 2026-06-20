@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qa_genie/engine/forensics/pipeline_audit_report.dart';
+import 'package:qa_genie/engine/models/pipeline_models.dart';
 
 void main() {
   group('PipelineAuditReport', () {

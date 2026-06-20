@@ -2,17 +2,23 @@ import 'dart:io' show Platform;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
-Future<T?> showBlurredDialog<T>(BuildContext context, {required WidgetBuilder builder}) {
+Future<T?> showBlurredDialog<T>(
+  BuildContext context, {
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+  AlignmentGeometry alignment = Alignment.center,
+}) {
   // Skip blur on Android < 31 (GPU host buffer OOM risk) and low-RAM devices
   final useBlur = !Platform.isAndroid ||
       (Platform.isAndroid && _androidVersion() >= 31);
   return showGeneralDialog<T>(
     context: context,
-    barrierDismissible: true,
+    barrierDismissible: barrierDismissible,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withOpacity(useBlur ? 0.5 : 0.7),
     pageBuilder: (_, __, ___) {
-      Widget child = Center(
+      Widget child = Align(
+        alignment: alignment,
         child: Material(
           color: Colors.transparent,
           child: Builder(builder: builder),

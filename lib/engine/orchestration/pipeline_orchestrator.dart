@@ -205,11 +205,10 @@ class PipelineOrchestrator {
       'missingCount=${coverage.missingCount}',
     );
 
-    // Fallback only when ALL AI cases were rejected (full regeneration needed).
-    // Partial successes use only AI cases — no fallback filling.
+    // Fallback fills ALL missing cases — both full and partial rejections
     List<WorkingCase> finalWorkingCases;
     int fallbackCount = 0;
-    if (acceptedAiCases.isEmpty && coverage.requiresFullFallback) {
+    if (coverage.needsFallback) {
       final fallbackCases = await _fallbackStage.fillMissing(
         request: request,
         existing: acceptedAiCases,
@@ -219,7 +218,10 @@ class PipelineOrchestrator {
       PipelineForensics.instance.onTraceEvent(
         '\n[SECTION 10 — FALLBACK OUTPUT]\nfallbackGeneratedCount=$fallbackCount',
       );
-      finalWorkingCases = fallbackCases.take(request.requestedCaseCount).toList();
+      finalWorkingCases = [
+        ...acceptedAiCases,
+        ...fallbackCases,
+      ].take(request.requestedCaseCount).toList();
     } else {
       finalWorkingCases = acceptedAiCases;
     }

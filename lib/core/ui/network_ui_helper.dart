@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/shared/ui/no_internet_screen.dart';
 
 class NetworkUiHelper {
   static Future<bool> ensureProductionOnline(BuildContext context) async {
     if (!NetworkGuard.isOnline) {
       if (!context.mounted) return false;
-      final bool? result = await showDialog<bool>(
-        context: context,
+      final bool? result = await showBlurredDialog<bool>(
+        context,
         barrierDismissible: false,
         builder: (_) => const NoInternetScreen(),
       );
@@ -18,8 +19,8 @@ class NetworkUiHelper {
     if (reallyOnline) return true;
 
     if (!context.mounted) return false;
-    final bool? result = await showDialog<bool>(
-      context: context,
+    final bool? result = await showBlurredDialog<bool>(
+      context,
       barrierDismissible: false,
       builder: (_) => const NoInternetScreen(),
     );

@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "88626021268-hmvakd01votbgrvap2uq2568h88ghcf0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.enaykumar.qagenie",
+            "certificate_hash": "085cf046135ac85605f44ef92c879a552531d167"
+          }
+        },
+        {
           "client_id": "88626021268-f0u2amqbp3s6ih2hl83c1p7iv60p7lt6.apps.googleusercontent.com",
           "client_type": 3
         }

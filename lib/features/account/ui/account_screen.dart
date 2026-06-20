@@ -116,14 +116,13 @@ class _AccountScreenState extends State<AccountScreen> {
         final dashboard = await UsageManager.getDashboardData();
         final identity = dashboard['identity'] as Map?;
         if (identity != null) {
+          // Parse creation date for both users and guests
+          final createdAt = identity['createdAt'];
+          if (createdAt is String) {
+            memberSince = DateTime.parse(createdAt);
+          }
           final isGuestUser = AuthService.isGuest;
-          final isRegularUser = !user.isAnonymous && !isGuestUser;
-          if (isRegularUser) {
-            final createdAt = identity['createdAt'];
-            if (createdAt is String) {
-              memberSince = DateTime.parse(createdAt);
-            }
-          } else {
+          if (isGuestUser) {
             final name = identity['displayName'] as String?;
             if (name != null && name.isNotEmpty) {
               final prefs = await SharedPreferences.getInstance();

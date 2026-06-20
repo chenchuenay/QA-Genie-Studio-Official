@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/shared/dialogs/export_preview_dialog.dart';
 
@@ -31,9 +32,8 @@ class ExportBottomSheet extends StatefulWidget {
 
 class _ExportBottomSheetState extends State<ExportBottomSheet> {
   void _openPreview(String type) async {
-    await showDialog<List<FinalizedTestCase>>(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
+    await showBlurredDialog<List<FinalizedTestCase>>(
+      context,
       builder: (ctx) => ExportPreviewDialog(
         type: type,
         cases: widget.cases,

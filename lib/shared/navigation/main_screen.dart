@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/app.dart';
-import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
@@ -9,10 +8,11 @@ import 'package:qa_genie/shared/dialogs/guidelines_dialog.dart';
 import 'package:qa_genie/shared/widgets/walkthrough_overlay.dart';
 import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/features/suites/ui/screens/suites_screen.dart';
-import 'package:qa_genie/features/monetization/ui/test_mode_screen.dart';
 import 'package:qa_genie/features/account/ui/account_screen.dart';
 import 'package:qa_genie/features/generation/ui/screens/home_screen.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/features/update/logic/update_manager.dart';
+import 'package:qa_genie/features/update/ui/update_required_screen.dart';
 
 class MainScreen extends StatefulWidget {
   static final _suitesTabKey = GlobalKey();
@@ -34,9 +34,27 @@ class MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _checkProStatus();
-    if (shouldAutoStartTour) {
-      shouldAutoStartTour = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) => startWalkthrough());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (shouldAutoStartTour) {
+        shouldAutoStartTour = false;
+        startWalkthrough();
+      }
+    });
+    _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    final check = await UpdateManager.checkForUpdate().timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => UpdateManager.noUpdate(),
+    );
+    if (!mounted) return;
+    if (check.updateRequired) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => UpdateRequiredScreen(check: check),
+        ),
+      );
     }
   }
 
@@ -170,21 +188,7 @@ class MainScreenState extends State<MainScreen> {
                       ),
                     ),
             ),
-            if (!AppConfig.isProduction)
-              IconButton(
-                icon: const Icon(Icons.science, color: AppColors.accent),
-                tooltip: 'Test Mode',
-                onPressed: isGenerating
-                    ? null
-                    : () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => TestModeScreen(
-                            onRestart: () => QaGenieApp.restartApp(context),
-                          ),
-                        ),
-                      ),
-              ),
+            ...QaGenieApp.appBarActions,
           ],
         ),
         body: Column(

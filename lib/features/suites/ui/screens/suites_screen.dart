@@ -271,7 +271,7 @@ class SuitesScreenState extends State<SuitesScreen> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(color: AppColors.accent),
+                    child: Text('Loading...', style: TextStyle(color: AppColors.textSecondary)),
                   );
                 }
                 final suites = snapshot.data ?? [];

@@ -92,5 +92,42 @@ void main() {
       final result = stage.execute(cases: [], module: 'Empty');
       expect(result, isEmpty);
     });
+
+    group('_splitDualConcept', () {
+      test('truncates at and when a second concept follows', () {
+        final stage = FinalizationStage();
+        final cases = [makeCase(title: 'Login with valid credentials and Logout functionality')];
+        final result = stage.execute(cases: cases, module: 'Auth');
+        expect(result[0].title, equals('Login with valid credentials'));
+      });
+
+      test('truncates at second and when first and is within-concept', () {
+        final stage = FinalizationStage();
+        final cases = [makeCase(title: 'Login with valid email and password and verify dashboard loads')];
+        final result = stage.execute(cases: cases, module: 'Auth');
+        expect(result[0].title, equals('Login with valid email and password'));
+      });
+
+      test('keeps title unchanged when no dual concept after and', () {
+        final stage = FinalizationStage();
+        final cases = [makeCase(title: 'Login with valid email and password')];
+        final result = stage.execute(cases: cases, module: 'Auth');
+        expect(result[0].title, equals('Login with valid email and password'));
+      });
+
+      test('keeps title unchanged when no and present', () {
+        final stage = FinalizationStage();
+        final cases = [makeCase(title: 'Login with valid credentials')];
+        final result = stage.execute(cases: cases, module: 'Auth');
+        expect(result[0].title, equals('Login with valid credentials'));
+      });
+
+      test('truncates at and verify pattern', () {
+        final stage = FinalizationStage();
+        final cases = [makeCase(title: 'User can register and verify email notification')];
+        final result = stage.execute(cases: cases, module: 'Auth');
+        expect(result[0].title, equals('User can register'));
+      });
+    });
   });
 }

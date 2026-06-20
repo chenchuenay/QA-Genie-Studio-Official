@@ -54,7 +54,6 @@ class AppConfig {
   static const int maxConstraintsLength = 100;
 
   // Dev-mode toggles (all read-only, determined by compile-time env)
-  static bool get allowOfflineGeneration => EnvironmentAuthority.allowOfflineGeneration;
   static bool get allowDebugTools => !isProduction;
   static bool get allowMockAds => EnvironmentAuthority.allowMockAds;
 

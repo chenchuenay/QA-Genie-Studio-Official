@@ -2,11 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/app/theme/app_spacing.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
+import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 
-class WatchAdDialog extends StatelessWidget {
+class WatchAdDialog extends StatefulWidget {
   final String featureName;
 
   const WatchAdDialog({super.key, required this.featureName});
+
+  @override
+  State<WatchAdDialog> createState() => _WatchAdDialogState();
+}
+
+class _WatchAdDialogState extends State<WatchAdDialog> {
+  @override
+  void initState() {
+    super.initState();
+    if (!EnvironmentAuthority.allowMockAds) {
+      AdManager().loadRewardedAd();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +63,7 @@ class WatchAdDialog extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                featureName,
+                widget.featureName,
                 style: AppText.cardTitle.copyWith(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -59,7 +74,7 @@ class WatchAdDialog extends StatelessWidget {
               Flexible(
                 child: SingleChildScrollView(
                   child: Text(
-                    '$featureName is supported by a short ad to help keep QA Genie free and growing.',
+                    '${widget.featureName} is supported by a short ad to help keep QA Genie free and growing.',
                     style: AppText.body.copyWith(
                       color: AppColors.textSecondary,
                       height: 1.4,

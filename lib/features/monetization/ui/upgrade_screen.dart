@@ -15,21 +15,12 @@ class UpgradeScreen extends StatefulWidget {
 
 class _UpgradeScreenState extends State<UpgradeScreen> {
   bool _isPro = false;
-  bool _proLoaded = false;
+  bool _isTapping = false;
 
   @override
   void initState() {
     super.initState();
-    _checkPro();
-  }
-
-  Future<void> _checkPro() async {
-    final pro = await UsageManager.isPro();
-    if (!mounted) return;
-    setState(() {
-      _isPro = pro;
-      _proLoaded = true;
-    });
+    _isPro = false;
   }
 
   @override
@@ -53,7 +44,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: _proLoaded && _isPro ? _buildProContent() : _buildUpgradeContent(),
+          child: _isPro ? _buildProContent() : _buildUpgradeContent(),
         ),
       ),
     );
@@ -218,9 +209,11 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
-            onPressed: () async {
+            onPressed: _isTapping ? null : () async {
+              setState(() => _isTapping = true);
               await UsageManager.trackProInterest('upgrade_screen_cta');
               if (!context.mounted) return;
+              setState(() => _isTapping = false);
               showBlurredDialog(
                 context,
                 builder: (ctx) => AlertDialog(

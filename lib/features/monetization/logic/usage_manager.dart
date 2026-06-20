@@ -76,21 +76,6 @@ class UsageManager {
     _invalidateCache();
   }
 
-  static void updateCacheFromUsage(Map<String, dynamic> usage) {
-    final uid = _currentUid();
-    _dashboardCache = {
-      'metrics': {
-        'rewardedGenCount': usage['rewardedGenCount'] ?? 0,
-        'proFreeGenCount': usage['proFreeGenCount'] ?? 0,
-        'lifetimeGeneratedCases': usage['lifetimeGeneratedCases'] ?? 0,
-      },
-      'resetTimestamp': usage['resetTimestamp'],
-      'isPro': usage['isPro'] ?? false,
-    };
-    _dashboardCacheTime = DateTime.now();
-    _dashboardCacheUid = uid;
-  }
-
   static Future<void> incrementExport({bool summary = false, String target = 'unknown', String extension = ''}) async {
     try {
       await FunctionsService.call(functionName: 'trackExport', payload: {'summary': summary, 'target': target, 'extension': extension});
@@ -197,13 +182,19 @@ class UsageManager {
 
   static Future<Map<String, dynamic>> getDashboardData() => _getDashboard();
 
-  /// Returns true if the current user can give feedback.
-  /// Users (authenticated) can always give feedback.
-  /// First-time guests (6-quota) can give feedback.
-  /// Returning guests (1-quota, "gets") cannot.
-  static bool get canGiveFeedback {
-    if (AuthService.isGuest && _dashboardCache != null) {
-      return _dashboardCache!['guestTier'] != 'returning';
+  /// Returns true if the current user can submit feedback/reports.
+  /// Only signed-in (non-guest) users can give feedback. Guests must sign in.
+  static bool get canGiveFeedback => !AuthService.isGuest;
+
+  /// Returns true if the star rating should be shown in export success dialog.
+  /// Shown for signed-in users and first-time (6-quota) guests.
+  /// Hidden for returning (1-quota) guests.
+  static Future<bool> canShowStars() async {
+    if (AuthService.isGuest) {
+      if (_dashboardCache?['guestTier'] == null) {
+        await _getDashboard();
+      }
+      return _dashboardCache?['guestTier'] == 'first';
     }
     return true;
   }

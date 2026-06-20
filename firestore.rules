@@ -23,7 +23,7 @@ service cloud.firestore {
     match /guests/{doc} { allow read, write: if false; }
     match /deviceUsage/{doc} { allow read, write: if false; }
     match /deviceGuestMapping/{doc} { allow read, write: if false; }
-    match /deviceCooldown/{doc} { allow read, write: if false; }
+    match /emailCooldown/{doc} { allow read, write: if false; }
     match /the_qag_registry/{doc} { allow read, write: if false; }
     match /processed_requests/{doc} { allow read, write: if false; }
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,35 +13,55 @@ import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 class DatabaseService {
   static Database? _db;
   static String? _currentIdentity;
+  static bool _isInitializing = false;
+  static final Completer<void> _initCompleter = Completer();
   static const String _dbName = 'qa_genie.db';
   static const int _version = 3;
   static List<Map<String, dynamic>>? _suitesCache;
 
   static Future<Database> get db async {
     if (_db != null) return _db!;
+    if (_isInitializing) {
+      await _initCompleter.future.timeout(const Duration(seconds: 10));
+      if (_db != null) return _db!;
+    }
     throw Exception('Database not initialized. Call initDatabase first.');
   }
 
   static Future<void> initDatabase(String identity) async {
     if (_db != null && _currentIdentity == identity) return;
     
-    if (_db != null) await _db!.close();
-
-    final sanitizedIdentity = sha256.convert(utf8.encode(identity)).toString();
-    final appDir = await getApplicationSupportDirectory();
-    final dbDir = Directory('${appDir.path}/data/qa_genie/$sanitizedIdentity');
-    
-    if (!await dbDir.exists()) {
-      await dbDir.create(recursive: true);
+    if (_isInitializing) {
+      await _initCompleter.future;
+      if (_currentIdentity == identity) return;
     }
 
-    _currentIdentity = identity;
-    _db = await openDatabase(
-      '${dbDir.path}/$_dbName',
-      version: _version,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
+    _isInitializing = true;
+
+    if (_db != null) await _db!.close();
+
+    try {
+      final sanitizedIdentity = sha256.convert(utf8.encode(identity)).toString();
+      final appDir = await getApplicationSupportDirectory();
+      final dbDir = Directory('${appDir.path}/data/qa_genie/$sanitizedIdentity');
+      
+      if (!await dbDir.exists()) {
+        await dbDir.create(recursive: true);
+      }
+
+      _currentIdentity = identity;
+      _db = await openDatabase(
+        '${dbDir.path}/$_dbName',
+        version: _version,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+      await _db!.execute('PRAGMA journal_mode=WAL');
+      await _db!.execute('PRAGMA busy_timeout=5000');
+    } finally {
+      _isInitializing = false;
+      if (!_initCompleter.isCompleted) _initCompleter.complete();
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -322,6 +343,8 @@ class DatabaseService {
     await db.delete('suites');
     await db.delete('test_cases');
     await db.delete('reported_issues');
+    await db.execute('DELETE FROM sqlite_sequence');
+    invalidateSuitesCache();
   }
 
   /// Syncs only `status` field for already-submitted reports, once per week on Monday.

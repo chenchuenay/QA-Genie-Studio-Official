@@ -1,3 +1,4 @@
+import 'package:qa_genie/core/security/content_filter.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
@@ -15,10 +16,10 @@ class FallbackWrapper {
     if (missingCount <= 0) return [];
 
     final engine = DeterministicEngine(
-      module: request.module,
-      feature: request.feature,
+      module: ContentFilter.sanitizeField(request.module),
+      feature: ContentFilter.sanitizeField(request.feature),
       platform: request.platform,
-      constraints: request.constraints,
+      constraints: ContentFilter.sanitizeField(request.constraints),
       targetCount: missingCount,
       mode: GenerationMode.values.byName(request.generationMode),
     );

@@ -251,6 +251,7 @@ class _MasterTableState extends State<MasterTable> {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     child: TextField(
                       controller: idCtrls[i],
+                      maxLines: null,
                       style: const TextStyle(color: _cyanColor, fontSize: 13, fontWeight: FontWeight.w600),
                       decoration: InputDecoration(
                         border: const OutlineInputBorder(),
@@ -262,7 +263,7 @@ class _MasterTableState extends State<MasterTable> {
                   )
                 : Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(idCtrls[i].text, overflow: TextOverflow.ellipsis, maxLines: 2, style: const TextStyle(color: _cyanColor, fontSize: 13, fontWeight: FontWeight.w600)),
+                    child: Text(idCtrls[i].text, style: const TextStyle(color: _cyanColor, fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
             const SizedBox(height: 4),
             _sourceBadge(tc.source),

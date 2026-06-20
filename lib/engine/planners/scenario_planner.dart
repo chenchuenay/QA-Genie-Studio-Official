@@ -52,11 +52,12 @@ class ScenarioPlanner {
       final conditions = _getConditionsForCategory(category);
       final relList = reachable.toList();
       int relIndex = 0;
-      while (scenarios.length < needed) {
+      int catCount = 0;
+      while (catCount < needed) {
         for (final condition in conditions) {
-          if (scenarios.length >= needed) break;
+          if (catCount >= needed) break;
           for (int r = 0; r < relList.length; r++) {
-            if (scenarios.length >= needed) break;
+            if (catCount >= needed) break;
             final rel = relList[(relIndex + r) % relList.length];
             if (rel.action == null || rel.toState == null) continue;
             if (!_isConditionCompatible(rel, condition)) continue;
@@ -72,6 +73,7 @@ class ScenarioPlanner {
             if (usedFingerprints.contains(fingerprint)) continue;
             usedFingerprints.add(fingerprint);
             scenarios.add(scenario);
+            catCount++;
           }
         }
         relIndex++;

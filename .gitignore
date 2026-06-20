@@ -136,3 +136,14 @@ project_context_snapshot.dart
 Full_structure.txt
 
 qa_genie_forensics/
+
+# Generated analysis artifacts
+fallback_analysis_*.json
+fallback_data*.json
+commands.txt
+gen_feature_graphic.py
+public/
+
+# Play store data safety exports
+*Data_safety*
+*_collection_types_permissions*

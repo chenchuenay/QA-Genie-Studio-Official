@@ -8,7 +8,7 @@ import 'package:qa_genie/engine/orchestration/pipeline_orchestrator.dart';
 import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
-import 'package:qa_genie/core/config/app_environment.dart';
+import 'package:qa_genie/core/security/content_filter.dart';
 import 'package:qa_genie/core/security/security_filter.dart';
 
 class GenerateTestCasesUseCase {
@@ -17,38 +17,6 @@ class GenerateTestCasesUseCase {
     : _orchestrator = orchestrator;
 
   Future<GenerationSession> execute({required GenerationDto dto}) async {
-    // ----- Offline dev mode: bypass AI pipeline entirely -----
-    if (EnvironmentAuthority.allowOfflineGeneration) {
-      debugPrint('🏭 OFFLINE DEV MODE: deterministic engine only');
-      final engine = DeterministicEngine(
-        module: dto.module,
-        feature: dto.feature,
-        platform: dto.platform,
-        constraints: dto.constraints,
-        targetCount: dto.count,
-        mode: dto.mode,
-      );
-      final testCases = await engine.generate();
-      final auditReport = PipelineAuditReport(
-        traceId: dto.traceId,
-        totalInputCases: 0,
-        finalizedCases: testCases.length,
-        fallbackCount: testCases.length,
-        aiErrorCode: 'OFFLINE_DEV_MODE',
-        prompt: 'N/A (Offline Dev)',
-        rawAiResponse: '',
-        aiModelName: 'Deterministic',
-        aiApiUrl: 'N/A',
-        cloudFunctionName: 'N/A',
-        cloudFunctionRegion: 'N/A',
-      );
-      return GenerationSession(
-        traceId: dto.traceId,
-        testCases: testCases,
-        auditReport: auditReport,
-      );
-    }
-
     // ----- Try AI generation first -----
     try {
       final planner = PromptPlanner(
@@ -82,7 +50,7 @@ class GenerateTestCasesUseCase {
       PipelineForensics.instance.onTraceEvent(
         '[AI REQUEST]\ntraceId=${dto.traceId}',
       );
-      PipelineForensics.instance.onTraceEvent('model=gemini-2.5-flash-lite');
+      PipelineForensics.instance.onTraceEvent('model=deepseek-v4-flash');
       PipelineForensics.instance.onTraceEvent('promptLength=${safePrompt.length}');
       PipelineForensics.instance.onTraceEvent(
         'promptPreview=${safePrompt.length > 500 ? safePrompt.substring(0, 500) : safePrompt}',
@@ -149,19 +117,14 @@ class GenerateTestCasesUseCase {
       if (errMsg.contains('AD_TOKEN_EXPIRED')) {
         throw Exception('Ad token expired. Please watch another ad.');
       }
-      // In prod, AI failures are never silently replaced with fallback.
-      // The UI shows the error to the user.
-      if (EnvironmentAuthority.isProd) {
-        rethrow;
-      }
-      // ----- Dev-only: AI failed – fall back to deterministic engine -----
+      // ----- AI failed – fall back to deterministic engine (both prod and dev) -----
       debugPrint('AI generation failed, using deterministic engine: $e');
       
       final engine = DeterministicEngine(
-        module: dto.module,
-        feature: dto.feature,
+        module: ContentFilter.sanitizeField(dto.module),
+        feature: ContentFilter.sanitizeField(dto.feature),
         platform: dto.platform,
-        constraints: dto.constraints,
+        constraints: ContentFilter.sanitizeField(dto.constraints),
         targetCount: dto.count,
         mode: dto.mode,
       );

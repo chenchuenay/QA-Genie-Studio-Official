@@ -36,96 +36,96 @@ class TitleGenerator {
       }
       return _sessionTitle(action, entityName, capAction, capEntity, actionName, feature);
     }
-    return '${actionName} ${entityName} — $feature';
+    return '${capAction} ${capEntity} — $feature';
   }
 
   static String _positiveTitle(ActionType action, String entity, String capAction, String capEntity, String actionName, String feature) {
     switch (action) {
       case ActionType.login:
-        return 'Verify user can successfully log in with valid email and password — $feature';
+        return 'Login with valid credentials — $feature';
       case ActionType.logout:
-        return 'User can log out successfully and session is terminated — $feature';
+        return 'Successful logout — $feature';
       case ActionType.authenticate:
-        return 'User authenticates successfully with valid credentials and receives session token — $feature';
+        return 'Authentication with valid credentials — $feature';
       case ActionType.create:
-        return 'User can create a new $entity with all required fields and save it successfully — $feature';
+        return 'Create $entity with required fields — $feature';
       case ActionType.update:
-        return 'User can update existing $entity fields and changes are persisted correctly — $feature';
+        return 'Update $entity fields — $feature';
       case ActionType.delete:
-        return 'User can delete a $entity after confirmation and it is removed from the system — $feature';
+        return 'Delete $entity after confirmation — $feature';
       case ActionType.view:
-        return 'User can view $entity details and all fields are displayed accurately — $feature';
+        return 'View $entity details — $feature';
       case ActionType.refresh:
-        return 'Session token refresh returns a new valid token without requiring re-authentication — $feature';
+        return 'Session token refresh — $feature';
       case ActionType.reset:
-        return 'Password reset flow completes successfully and new credentials are accepted — $feature';
+        return 'Password reset with valid token — $feature';
       case ActionType.verify:
-        return 'OTP/token verification succeeds with valid code and grants access — $feature';
+        return 'OTP verification with valid code — $feature';
       case ActionType.authorize:
-        return 'OAuth authorization grants access to requested resources successfully — $feature';
+        return 'OAuth authorization grants access — $feature';
       case ActionType.add:
-        return 'User can add a $entity to the cart and quantity updates correctly — $feature';
+        return 'Add $entity to cart — $feature';
       case ActionType.remove:
-        return 'User can remove a $entity from the cart and total updates accordingly — $feature';
+        return 'Remove $entity from cart — $feature';
       case ActionType.checkout:
-        return 'Checkout flow completes with valid payment and generates order confirmation — $feature';
+        return 'Checkout with valid payment — $feature';
       case ActionType.pay:
-        return 'Payment is processed successfully and receipt is generated — $feature';
+        return 'Payment with valid method — $feature';
       case ActionType.confirm:
-        return 'User can confirm the $entity and system updates the status — $feature';
+        return 'Confirm $entity — $feature';
       case ActionType.cancel:
-        return 'User can cancel the $entity and cancellation is reflected immediately — $feature';
+        return 'Cancel $entity — $feature';
       case ActionType.reschedule:
-        return 'User can reschedule the $entity and updated time slot is confirmed — $feature';
+        return 'Reschedule $entity — $feature';
       case ActionType.book:
-        return 'User can book an available $entity slot and receives confirmation — $feature';
+        return 'Book $entity — $feature';
       case ActionType.transfer:
-        return 'Funds transfer to a valid beneficiary completes and balances update correctly — $feature';
+        return 'Transfer to valid beneficiary — $feature';
       case ActionType.deposit:
-        return 'Deposit to the account is credited and balance reflects the new amount — $feature';
+        return 'Deposit to account — $feature';
       case ActionType.withdraw:
-        return 'Withdrawal from account with sufficient funds processes successfully — $feature';
+        return 'Withdrawal from account — $feature';
       case ActionType.send:
-        return 'API request with valid payload is sent and processed successfully — $feature';
+        return 'API call with valid payload — $feature';
       case ActionType.trigger:
-        return 'Webhook event triggers successfully and callback is delivered — $feature';
+        return 'Webhook event triggers — $feature';
       case ActionType.share:
-        return 'User can share $entity with authorized recipients and access is granted — $feature';
+        return 'Share $entity with recipients — $feature';
       default:
-        return '$capAction $capEntity — verify successful $actionName of $entity in $feature';
+        return '$capAction $capEntity — $feature';
     }
   }
 
   static String _negativeTitle(ActionType action, String entity, String capAction, String capEntity, String actionName, String feature) {
     switch (action) {
       case ActionType.login:
-        return 'Attempt to log in with invalid credentials should display error message — $feature';
+        return 'Login with invalid credentials — $feature';
       case ActionType.authenticate:
-        return 'Authentication with invalid credentials returns appropriate error — $feature';
+        return 'Authentication with invalid credentials — $feature';
       case ActionType.create:
-        return 'Creating $entity with missing required fields should show validation errors — $feature';
+        return 'Creating $entity with missing fields fails — $feature';
       case ActionType.update:
-        return 'Updating $entity with invalid data should be rejected with error — $feature';
+        return 'Update $entity with invalid data — $feature';
       case ActionType.delete:
-        return 'Deleting a non-existent $entity should return not found error — $feature';
+        return 'Delete non-existent $entity — $feature';
       case ActionType.pay:
-        return 'Payment with expired card is rejected and user is prompted to use another method — $feature';
+        return 'Payment with expired card — $feature';
       case ActionType.apply:
-        return 'Applying an expired or invalid coupon code shows rejection message — $feature';
+        return 'Applying expired coupon — $feature';
       case ActionType.transfer:
-        return 'Transfer attempt with insufficient funds should display insufficient balance error — $feature';
+        return 'Transfer with insufficient funds — $feature';
       case ActionType.reschedule:
-        return 'Rescheduling to an unavailable time slot should show conflict error — $feature';
+        return 'Reschedule to unavailable slot — $feature';
       case ActionType.book:
-        return 'Booking an already occupied slot should display scheduling conflict error — $feature';
+        return 'Booking occupied slot — $feature';
       case ActionType.verify:
-        return 'Verification with expired or invalid OTP should fail with error message — $feature';
+        return 'Verification with expired OTP — $feature';
       case ActionType.send:
-        return 'API request with invalid payload should be rejected with validation error — $feature';
+        return 'API request with invalid payload — $feature';
       case ActionType.trigger:
-        return 'Webhook trigger with invalid signature should be rejected with 401 — $feature';
+        return 'Webhook with invalid signature — $feature';
       default:
-        return '$capAction $capEntity — verify error handling when $entity $actionName fails';
+        return '$capAction $capEntity — $entity $actionName fails — $feature';
     }
   }
 

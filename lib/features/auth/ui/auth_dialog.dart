@@ -17,6 +17,7 @@ String _friendlyAuthError(dynamic e) {
       case 'too-many-requests': return 'Please wait a moment and try again.';
       case 'invalid-credential': return 'Please try again.';
       case 'requires-recent-login': return 'Please sign out and sign in again.';
+      case 'permission-denied': return 'This Google account was recently deleted and cannot be used again for 24 hours. Please try a different account or come back later.';
       default: return 'Please try again.';
     }
   }
@@ -163,13 +164,7 @@ class _AuthDialogState extends State<AuthDialog> {
                     icon: _isLoading 
                       ? const SizedBox.shrink() 
                       : const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
-                    label: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.black),
-                          )
-                        : const Text(
+                    label: const Text(
                             'Continue with Google',
                             style: TextStyle(
                               fontSize: 16,
@@ -192,13 +187,7 @@ class _AuthDialogState extends State<AuthDialog> {
                     height: 50,
                     child: TextButton(
                       onPressed: _isLoading || _isGuestLoading ? null : _handleContinueAsGuest,
-                      child: _isGuestLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
-                            )
-                          : const Text(
+                      child: const Text(
                               'Continue as Guest',
                               style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
                             ),

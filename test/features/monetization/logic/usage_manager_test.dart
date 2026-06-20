@@ -127,8 +127,8 @@ void main() {
       expect(remaining, 15);
     });
 
-    test('canGiveFeedback returns true for user mode', () {
-      expect(UsageManager.canGiveFeedback, isTrue);
+    test('canGiveFeedback returns false when no authenticated user (guest)', () {
+      expect(UsageManager.canGiveFeedback, isFalse);
     });
   });
 }

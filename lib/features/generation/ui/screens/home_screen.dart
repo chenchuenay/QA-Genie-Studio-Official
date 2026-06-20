@@ -8,9 +8,10 @@ import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/data/dto/generation_dto.dart';
 import 'package:qa_genie/core/utils/device_utils.dart';
-import 'package:qa_genie/core/ui/network_ui_helper.dart';
 import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:qa_genie/core/error/exceptions.dart';
+import 'package:qa_genie/core/security/content_filter.dart';
+import 'package:qa_genie/core/ui/network_ui_helper.dart';
 import 'package:qa_genie/core/error/ui_error_service.dart';
 import 'package:qa_genie/core/state/generation_state.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
@@ -413,9 +414,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           child: Center(
             child: loading
-                ? const AnimatedDots(
+                ? AnimatedDots(
                     label: '⚡ Generating',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: Colors.black,
@@ -447,13 +448,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() => loading = true);
     GenerationState.isGenerating.value = true;
 
-    // Await the check and stop if not allowed
     if (!await NetworkUiHelper.ensureProductionOnline(context)) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           loading = false;
           GenerationState.isGenerating.value = false;
         });
+      }
       return;
     }
 
@@ -461,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final deviceId = await DeviceUtils.getUniqueId();
     String? adToken;
 
-    if (!isPro && !AppConfig.allowOfflineGeneration) {
+    if (!isPro) {
       final remaining = await UsageManager.rewardedGensRemaining();
       if (remaining <= 0) {
         if (mounted) {
@@ -496,13 +497,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
 
       debugPrint('🚀 _generate: Showing rewarded ad');
-      for (int adAttempt = 0; adAttempt < 2; adAttempt++) {
-        adToken = await AdManager().showRewardedAd();
-        if (adToken != null) break;
-        debugPrint('⚠️ _generate: Ad attempt $adAttempt failed, retrying...');
-      }
+      adToken = await AdManager().showRewardedAd();
       if (adToken == null) {
-        debugPrint('❌ _generate: Show ad failed after 2 attempts');
+        debugPrint('❌ _generate: Show ad failed');
         if (mounted)
           setState(() {
             loading = false;
@@ -543,6 +540,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final module = mCtrl.text.trim();
       final feature = fCtrl.text.trim();
       final notes = cCtrl.text.trim();
+
+      final moduleCheck = ContentFilter.check(module);
+      final featureCheck = ContentFilter.check(feature);
+      final notesCheck = notes.isNotEmpty ? ContentFilter.check(notes) : null;
+      if (!moduleCheck.isClean || !featureCheck.isClean || (notesCheck?.isClean == false)) {
+        debugPrint(
+          '⚠️ _generate: Content filter blocked - module:${!moduleCheck.isClean} '
+          'feature:${!featureCheck.isClean} notes:${notesCheck?.isClean == false}',
+        );
+        if (mounted) {
+          showBlurredDialog(
+            context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Input Guidelines', style: TextStyle(color: Colors.white)),
+              content: const Text(
+                'Please revise your input. Some content doesn\'t meet our guidelines.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
       final currentPro = isPro;
       final hardLimit = currentPro
           ? AppConfig.proCasesPerBatch
@@ -561,7 +590,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           adToken: adToken,
           deviceId: deviceId,
         ),
-      ).timeout(const Duration(seconds: 60));
+      );
 
       debugPrint(
         '🚀 _generate: AI Succeeded, Saving suite. Cases: ${session.testCases.length}',

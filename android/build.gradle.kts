@@ -32,6 +32,13 @@ subprojects {
             val android = project.extensions.getByName("android") as com.android.build.gradle.BaseExtension
             android.compileSdkVersion(36)
             android.buildToolsVersion("36.0.0")
+
+            if (project.name == "firebase_installations") {
+                @Suppress("UNCHECKED_CAST")
+                val fields = android.defaultConfig?.buildConfigFields as? MutableMap<String, Any>
+                fields?.clear()
+                android.buildFeatures.buildConfig = false
+            }
         }
     }
 }

@@ -32,7 +32,6 @@ void main() {
     test('allow flags are true in dev', () {
       expect(EnvironmentAuthority.allowDebugLogs, true);
       expect(EnvironmentAuthority.allowMockAds, true);
-      expect(EnvironmentAuthority.allowOfflineGeneration, true);
     });
   });
 }

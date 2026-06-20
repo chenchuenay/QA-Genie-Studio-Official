@@ -5,6 +5,14 @@ import 'package:qa_genie/app/theme/app_theme.dart';
 class QaGenieApp extends StatefulWidget {
   const QaGenieApp({super.key});
 
+  static List<Widget> _appBarActions = const [];
+
+  static void setAppBarActions(List<Widget> actions) {
+    _appBarActions = actions;
+  }
+
+  static List<Widget> get appBarActions => _appBarActions;
+
   static void restartApp(BuildContext context) {
     context.findAncestorStateOfType<_QaGenieAppState>()?.restart();
   }

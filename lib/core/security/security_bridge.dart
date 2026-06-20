@@ -198,7 +198,7 @@ class ProductionSecurityService implements ISecurityService {
 
   @override
   Future<void> trackGeneration() async {
-    await FunctionsService.trackGenerationUsage();
+    // No-op: generation tracking is handled server-side in 'generate'
   }
 
   // ============================================================

@@ -18,7 +18,6 @@ Account Identity:
 
 AI Generation:
 - When generating test cases, your selected module name, feature name, platform, and prompt notes are sent via our secure cloud function to DeepSeek (primary AI provider). The prompt is sanitized before transmission (HTML stripped, truncated to 12,000 chars).
-- In development builds only, a direct Gemini API call may be used as fallback.
 - The PII scrubber optionally redacts emails, phone numbers, URLs, IP addresses, credit cards, API keys, JWTs, and UUIDs from prompts before they leave your device.
 
 Usage Metrics:
@@ -37,16 +36,15 @@ AdMob:
 - Firebase (Google): Authentication, Firestore, Cloud Functions, Analytics, App Check, Installations
 - DeepSeek: AI test case generation (prompts sent server-side, not directly from client)
 - Google AdMob: Rewarded advertisements
-- Google Gemini API: AI fallback (development builds only)
 
 3. Local-Only Storage
 The following stays on your device in SQLite (qa_genie.db) and is never transmitted: generated test cases (full content), suite metadata, offline issue report queue, app preferences.
 
 4. Data Deletion
-Delete your account in-app via Account -> Delete Account. This removes your Firestore documents, Firebase Auth account, and guest mapping. Local SQLite data must be cleared via Android app settings or uninstall.
+Delete your account in-app: Open QA Genie → Account → tap **Delete Account**. You may also visit https://qa-genie-ai.web.app/ or email qagenieai@gmail.com with subject "Account Deletion Request". This removes your Firestore documents, Firebase Auth account, and guest mapping. Local SQLite data must be cleared via Android app settings or uninstall.
 
 5. Your Rights
-Access, portability (export test cases in Excel/CSV/JSON/PDF), deletion. Analytics may be opted out via FirebaseAnalytics APIs. Contact via Support -> Report an Issue.''';
+Access, portability (export test cases in Excel/CSV/JSON/PDF), deletion. Analytics may be opted out via FirebaseAnalytics APIs. Contact via Support -> Report an Issue or email qagenieai@gmail.com.''';
 
   static const String termsOfUse = '''
 Terms of Service

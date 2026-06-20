@@ -97,16 +97,7 @@ class _NoInternetScreenState extends State<NoInternetScreen> {
                 borderRadius: BorderRadius.circular(AppRadius.button),
               ),
             ),
-            child: _checking
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.black,
-                    ),
-                  )
-                : const Text(
+            child: const Text(
                     'Retry Connection',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),

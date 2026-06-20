@@ -15,10 +15,9 @@ void main() {
         category: 'positive',
       );
       final title = TitleGenerator.generate(scenario, 'Auth');
-      expect(title, contains('create'));
+      expect(title, contains('Create'));
       expect(title, contains('account'));
       expect(title, contains('Auth'));
-      expect(title, isNot(startsWith('Create account')));
     });
 
     test('generate returns negative category title', () {
@@ -31,7 +30,7 @@ void main() {
       final title = TitleGenerator.generate(scenario, 'Auth');
       expect(title, contains('Creating'));
       expect(title, contains('account'));
-      expect(title, contains('error'));
+      expect(title, contains('fails'));
     });
 
     test('generate returns validation category title', () {
@@ -91,8 +90,8 @@ void main() {
         category: 'unknown',
       );
       final title = TitleGenerator.generate(scenario, 'Auth');
-      expect(title, contains('login'));
-      expect(title, contains('account'));
+      expect(title.toLowerCase(), contains('login'));
+      expect(title, contains('Account'));
       expect(title, contains('Auth'));
     });
 
@@ -112,7 +111,7 @@ void main() {
         category: 'positive',
       );
       final title = TitleGenerator.generate(scenario, 'Cart');
-      expect(title, contains('add'));
+      expect(title, contains('Add'));
       expect(title, contains('account'));
     });
   });

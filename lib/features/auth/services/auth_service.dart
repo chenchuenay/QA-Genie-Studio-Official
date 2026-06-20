@@ -15,22 +15,28 @@ class AuthService {
   static User? get currentUser => _auth.currentUser;
   static bool get isAnonymous => currentUser?.isAnonymous ?? false;
   static bool get isGuest {
-    final user = _auth.currentUser;
-    if (user == null) return true;
-    // Linked with Google → user account, not guest
-    for (final info in user.providerData) {
-      if (info.providerId == 'google.com') return false;
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return true;
+      // Linked with Google → user account, not guest
+      for (final info in user.providerData) {
+        if (info.providerId == 'google.com') return false;
+      }
+      return user.uid.startsWith('guest_');
+    } catch (_) {
+      return true; // Firebase not initialized — safe default
     }
-    return user.uid.startsWith('guest_');
   }
 
   // "Continue as guest" – uses custom token (persistent per device)
-  static Future<UserCredential> signInAsGuest() async {
+  static Future<UserCredential> signInAsGuest({bool forceReturning = false}) async {
     debugPrint('🔐 AuthService: signInAsGuest start');
     try {
       final deviceId = await DeviceUtils.getUniqueId();
-      final token = await FunctionsService.getGuestToken(deviceId: deviceId);
+      final token = await FunctionsService.getGuestToken(deviceId: deviceId, forceReturning: forceReturning);
       final credential = await _auth.signInWithCustomToken(token);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_returning_guest', forceReturning);
       debugPrint('✅ Signed in as guest: ${credential.user?.uid}');
       return credential;
     } catch (e) {
@@ -43,6 +49,26 @@ class AuthService {
   static Future<UserCredential> linkWithGoogle() async {
     debugPrint('🔐 AuthService: linkWithGoogle start');
     try {
+      // Check email cooldown before proceeding with Google sign-in
+      final googleSignInAccount = await _googleSignIn.signIn();
+      if (googleSignInAccount == null) throw Exception('Google sign-in cancelled');
+      
+      try {
+        await FunctionsService.call(
+          functionName: 'checkEmailCooldown',
+          payload: {'email': googleSignInAccount.email},
+        );
+      } catch (e) {
+        final msg = e.toString();
+        if (msg.contains('cooldown') || msg.contains('permission-denied')) {
+          throw FirebaseAuthException(
+            code: 'permission-denied',
+            message: 'This Google account was recently deleted and cannot be used again for 24 hours.',
+          );
+        }
+        // Don't block on other errors — proceed
+      }
+
       // Attempt to ensure a guest user exists first, but don't fail if guest creation fails
       if (_auth.currentUser == null) {
         try {
@@ -51,12 +77,10 @@ class AuthService {
           debugPrint(
             '⚠️ AuthService: Guest sign-in failed during link preparation: $e',
           );
-          // We will proceed with a direct sign-in instead of a link if no user is present
         }
       }
 
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) throw Exception('Google sign-in cancelled');
+      final googleUser = googleSignInAccount!;
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -80,15 +104,7 @@ class AuthService {
             debugPrint(
               '🔄 Credential in use or already linked, switching accounts',
             );
-            // Capture old identity so we can migrate its data across
-            final oldIdentity = _auth.currentUser?.uid ?? 'guest_default';
             result = await _auth.signInWithCredential(credential);
-            final newIdentity = result.user!.uid;
-            // Switch DB to new identity first, then migrate old data in
-            await _reinitializeDb(newIdentity);
-            if (oldIdentity != newIdentity) {
-              await DatabaseService.migrateDataToCurrentDb(oldIdentity);
-            }
           } else {
             rethrow;
           }
@@ -145,15 +161,14 @@ class AuthService {
       debugPrint('🔐 AuthService: cache clear error: $e');
     }
     try {
-      await signInAsGuest();
+      await signInAsGuest(forceReturning: true);
     } catch (e, _) {
       debugPrint('🔐 AuthService: Guest sign-in error: $e');
     }
-    // Re-initialize database under new identity
+    // Re-initialize database under device-level identity (data persists across auth changes)
     try {
-      final newUser = _auth.currentUser;
-      final newIdentity = newUser?.uid ?? 'guest_default';
-      await _reinitializeDb(newIdentity);
+      final deviceId = await DeviceUtils.getUniqueId();
+      await _reinitializeDb(deviceId);
     } catch (e, _) {
       debugPrint('🔐 AuthService: DB re-init error: $e');
     }

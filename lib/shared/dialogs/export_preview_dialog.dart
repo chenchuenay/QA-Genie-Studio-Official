@@ -14,7 +14,6 @@ import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
-import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/shared/widgets/animated_dots.dart';
 
 class ExportPreviewDialog extends StatefulWidget {
@@ -351,11 +350,11 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     }
 
     final isPro = await UsageManager.isPro();
-    final skipAds = isPro || AppConfig.allowOfflineGeneration;
+    final skipAds = isPro;
 
     if (!skipAds) {
-      final shouldWatch = await showDialog<bool>(
-        context: context,
+      final shouldWatch = await showBlurredDialog<bool>(
+        context,
         barrierDismissible: false,
         builder: (ctx) => WatchAdDialog(featureName: 'Export Test Cases'),
       );
@@ -391,12 +390,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
 
     try {
       await widget.onShare(updatedCases, adToken);
-
-      await FunctionsService.trackExport(
-        summary: false,
-        target: widget.type,
-        extension: _extensionForType(widget.type),
-      );
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -423,13 +416,20 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       }
       return;
     } finally {
+      // Fire-and-forget tracking export — short timeout, never blocks success dialog
+      FunctionsService.trackExport(
+        summary: false,
+        target: widget.type,
+        extension: _extensionForType(widget.type),
+      ).timeout(const Duration(seconds: 5)).catchError((_) {});
+
       if (mounted) {
         setState(() {
           _isProcessing = false;
           _isSharing = false;
         });
-        // Brief delay so share sheet appears before we show success
-        await Future<void>.delayed(const Duration(milliseconds: 400));
+        // Brief delay so share sheet opens before we show success dialog
+        await Future<void>.delayed(const Duration(milliseconds: 200));
 
         // Now pop the preview dialog
         if (mounted) Navigator.of(context, rootNavigator: true).pop();
@@ -735,8 +735,8 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                       ),
                     ),
                     child: (_isProcessing || _isSharing)
-                        ? const AnimatedDots(
-                            label: '⚡ Processing',
+                        ? const Text(
+                            '⚡ Processing...',
                             style: TextStyle(
                               color: Colors.black,
                               fontWeight: FontWeight.bold,

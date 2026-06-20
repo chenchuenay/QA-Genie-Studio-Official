@@ -180,14 +180,11 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   }
 
   Future<void> _openExport() async {
-    if (!await NetworkUiHelper.ensureProductionOnline(context)) {
-      return;
-    }
     await _autoSave();
     if (!mounted) return;
-    await showModalBottomSheet<List<FinalizedTestCase>>(
-      context: context,
-      backgroundColor: Colors.transparent,
+    await showBlurredDialog<List<FinalizedTestCase>>(
+      context,
+      alignment: Alignment.bottomCenter,
       builder: (_) => ExportBottomSheet(
         cases: widget.session.testCases,
         moduleName: widget.moduleName,
@@ -595,7 +592,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Actual Result and Status are left empty — fill them during execution.',
+                        'Actual Result and Status are left empty by design — intended to be recorded during execution.',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
