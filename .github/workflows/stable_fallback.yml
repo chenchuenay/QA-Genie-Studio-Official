@@ -1,0 +1,47 @@
+name: stable_fallback
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Stable branch to build from"
+        required: true
+        default: "stable-1.2.35"
+        type: choice
+        options:
+          - stable-1.2.35
+
+jobs:
+  build_stable_aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          channel: "stable"
+
+      - name: decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_FILE_B64 }}" | base64 -d > /tmp/qa-genie-release.jks
+          echo "storeFile=/tmp/qa-genie-release.jks" > android/key.properties
+          echo "storePassword=${{ secrets.KEYSTORE_STORE_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEYSTORE_KEY_ALIAS }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.KEYSTORE_KEY_PASSWORD }}" >> android/key.properties
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: build prod AAB
+        run: flutter build appbundle --flavor prod -t lib/main.dart --dart-define=MODE=prod
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QA_Genie_stable_fallback.aab
+          path: build/app/outputs/bundle/prodRelease/*.aab
+          retention-days: 90
