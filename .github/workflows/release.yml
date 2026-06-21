@@ -23,7 +23,7 @@ jobs:
         run: firebase deploy --only functions --project qa-genie-ai --token "${{ secrets.FIREBASE_TOKEN }}"
         working-directory: functions
 
-  build_upload:
+  build_aab:
     needs: deploy_cf
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -55,11 +55,3 @@ jobs:
           name: QA_Genie_prod.aab
           path: build/app/outputs/bundle/prodRelease/*.aab
           retention-days: 90
-
-      - uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: com.enaykumar.qagenie
-          releaseFiles: build/app/outputs/bundle/prodRelease/*.aab
-          track: internal
-          status: completed
