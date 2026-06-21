@@ -26,16 +26,16 @@ Opens browser → sign in → copies token to clipboard.
 
 ## Step 4: Add secrets to GitHub
 
-Go to: **GitHub → QA_Genie → Settings → Secrets and variables → Actions**
+Go to: **GitHub → QA_Genie → Settings → Secrets and variables → Actions → Repository secrets** (not environment secrets)
 
-Add these **6 secrets**:
+Add these **6 repository secrets**:
 
 | Secret name | Value |
 |---|---|
 | `KEYSTORE_FILE_B64` | Paste from Step 1 (base64 of qa-genie-release.jks) |
-| `KEYSTORE_STORE_PASSWORD` | `android` |
+| `KEYSTORE_STORE_PASSWORD` | `Chenchu@QA@Lakshmi@G@` |
 | `KEYSTORE_KEY_ALIAS` | `my-key-alias` |
-| `KEYSTORE_KEY_PASSWORD` | `android` |
+| `KEYSTORE_KEY_PASSWORD` | `Chenchu@QA@Lakshmi@G@` |
 | `PLAY_SERVICE_ACCOUNT_JSON` | Paste the full JSON from Step 3 |
 | `FIREBASE_TOKEN` | Paste the token from Step 2 |
 
