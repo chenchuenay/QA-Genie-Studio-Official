@@ -113,6 +113,7 @@ public/
 *_collection_types_permissions*
 
 # Store assets (screenshots, feature graphic — not app code)
+store_assets/
 assets/store_assets/
 
 # Temp files
