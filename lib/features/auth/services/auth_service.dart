@@ -80,7 +80,7 @@ class AuthService {
         }
       }
 
-      final googleUser = googleSignInAccount!;
+      final googleUser = googleSignInAccount;
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;

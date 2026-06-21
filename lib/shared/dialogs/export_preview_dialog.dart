@@ -14,7 +14,6 @@ import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
-import 'package:qa_genie/shared/widgets/animated_dots.dart';
 
 class ExportPreviewDialog extends StatefulWidget {
   final String type; // 'excel', 'pdf', 'jira', 'xray'
