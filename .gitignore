@@ -3,23 +3,25 @@
 *.log
 *.pyc
 *.swp
-.DS_Store
-.atom/
-.buildlog/
-.history
-.svn/
 *.orig
 *.pid
+*.bak
+*~
+*.lock
 *.lock-wscript
 
+# macOS
+.DS_Store
+
 # IntelliJ / Android Studio
+.idea/
 *.iml
 *.ipr
 *.iws
-.idea/
 android/.idea/
 android/*.iml
 android/local.properties
+android/.kotlin/
 
 # VS Code
 .vscode/
@@ -33,20 +35,20 @@ android/local.properties
 .pub-cache/
 .pub/
 build/
-*.lock
 .flutter-devtools
 
-# Symbolication related
+# Symbolication
 app.*.symbols
 *.mSYM
 
-# Obfuscation related
+# Obfuscation
 app.*.map.json
 
-# Android Studio will place build artifacts here
+# Android build artifacts
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/app/build/
 
 # iOS
 ios/.generated/
@@ -59,83 +61,45 @@ ios/Flutter/ephemeral/
 ios/Flutter/flutter_export_environment.sh
 ios/ServiceDefinitions.json
 
-# Firebase emulators & debug logs
+# Firebase
 firebase-debug.log
 firebase-debug.*.log
 .firebase/
 .cache/
 
-# Project-specific temporary folders you accumulated
+# Project temp folders
 project_snapshot/
 backups/
+backup/
+
+# Environment files
+.env
+.env.dev
+.env.prod
+functions/.env.yaml
+
+# Node
+functions/node_modules/
 
 # Generated code & test artifacts
 *.g.dart
 *.freezed.dart
 test_results/
-.env
 
-# User's additional ignores
-.git.corrupt/
-android/build/
-android/gradle/.DS_Store
-lib/app/.DS_Store
+# Archives
+*.zip
+
+# Legacy / platform excludes
 lib/legacy/
 linux/
 macos/
 windows/
 
-# Environment files with API keys
-.env.dev
-.env.prod
-functions/.env.yaml
-
-# Other
-*.bak
-*.swp
-*~
-.DS_Store
-# macOS
-.DS_Store
-
-# Flutter
-build/
-
-# Node
-functions/node_modules/
-
-# Audit bundles
+# Forensics & audit
+qa_genie_forensics/
+FORENSIC_BAK/
 QA_Genie_Audit_Bundle*.zip
 audit_bundle*/
-
-# Temp files
-latest_run.json
-test_stdout.txt
-
-# Archives
-engine.zip
-gradle-*.zipandroid/key.properties
-android/app/upload-keystore.jks
-/FORENSIC_BAK/*
-/backup/*
-/backups/*
-functions/node_modules/
-
-build/
-.dart_tool/
-.idea/
-.DS_Store
-
-android/.kotlin/
-android/app/build/
-
-*.zip
-*.bak
-
-project_context_snapshot.dart
-Full_structure.txt
-
-qa_genie_forensics/
 
 # Generated analysis artifacts
 fallback_analysis_*.json
@@ -144,6 +108,29 @@ commands.txt
 gen_feature_graphic.py
 public/
 
-# Play store data safety exports
+# Play Store data safety exports
 *Data_safety*
 *_collection_types_permissions*
+
+# Store assets (screenshots, feature graphic — not app code)
+assets/store_assets/
+
+# Temp files
+latest_run.json
+test_stdout.txt
+project_context_snapshot.dart
+Full_structure.txt
+
+# Gradle
+gradle-*.zip
+android/key.properties
+android/app/upload-keystore.jks
+
+# Generated reports & drafts
+QA_Genie_Cost_Revenue_Report.xlsx
+QA_Genie_Firestore_Cost.csv
+firebase_sha_fix_steps.md
+invitation_email_draft.md
+
+# Corrupt / stray
+.git.corrupt/
