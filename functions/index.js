@@ -291,7 +291,20 @@ exports.generate = functions
           metrics.lifetimeGeneratedCases =
             (metrics.lifetimeGeneratedCases || 0) + caseCount;
           metrics.lastReset = nowStr;
-          t.set(uRef, { type: "user", metrics }, { merge: true });
+          t.set(uRef, {
+            type: "user",
+            metrics: {
+              ...metrics,
+              exportCount: uDoc.data()?.metrics?.exportCount ?? 0,
+              updateDismissals: uDoc.data()?.metrics?.updateDismissals ?? 0,
+            },
+            exports: uDoc.data()?.exports ?? {
+              lifetimeExports: 0,
+              exportTargets: {},
+              fileExtensions: {},
+            },
+            interests: uDoc.data()?.interests ?? { proInterestCount: 0 },
+          });
         } else {
           let devData = deviceDoc.exists
             ? deviceDoc.data()
@@ -305,7 +318,20 @@ exports.generate = functions
           guestMetrics.lifetimeGeneratedCases = lifetimeCases + caseCount;
           guestMetrics.rewardedGenCount = devData.rewardedGenCount;
           guestMetrics.lastReset = nowStr;
-          t.set(uRef, { type: "guest", metrics: guestMetrics }, { merge: true });
+          t.set(uRef, {
+            type: "guest",
+            metrics: {
+              ...guestMetrics,
+              exportCount: uDoc.data()?.metrics?.exportCount ?? 0,
+              updateDismissals: uDoc.data()?.metrics?.updateDismissals ?? 0,
+            },
+            exports: uDoc.data()?.exports ?? {
+              lifetimeExports: 0,
+              exportTargets: {},
+              fileExtensions: {},
+            },
+            interests: uDoc.data()?.interests ?? { proInterestCount: 0 },
+          });
           lifetimeCases += caseCount;
         }
 
@@ -322,13 +348,13 @@ exports.generate = functions
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
           response: { testCases: responseTestCases, usage: responseUsage },
         });
-        t.update(gRef, {
+        t.set(gRef, {
           totalGenerations: admin.firestore.FieldValue.increment(1),
           totalTestCaseGenerated:
             admin.firestore.FieldValue.increment(caseCount),
           [isPro ? "proGeneratedCases" : "coreGeneratedCases"]:
             admin.firestore.FieldValue.increment(caseCount),
-        });
+        }, { merge: true });
         return {
           isPro,
           caseCount,
@@ -418,7 +444,7 @@ exports.trackExport = functions.https.onCall(async (data, context) => {
   };
   if (summary)
     globalUpdate.totalSummaryExports = admin.firestore.FieldValue.increment(1);
-  await db.collection("analytics").doc("global").update(globalUpdate);
+  await db.collection("analytics").doc("global").set(globalUpdate, { merge: true });
   return { success: true };
 });
 
@@ -434,10 +460,10 @@ exports.trackRating = functions.https.onCall(async (data, context) => {
   await db
     .collection("analytics")
     .doc("global")
-    .update({
+    .set({
       totalRatings: admin.firestore.FieldValue.increment(1),
       [`ratingBreakdown.${rating}`]: admin.firestore.FieldValue.increment(1),
-    });
+    }, { merge: true });
   return { success: true };
 });
 
@@ -744,7 +770,7 @@ exports.trackProInterest = functions.https.onCall(async (data, context) => {
     if (isFirst)
       globalUpdate.uniqueProInterestedUsers =
         admin.firestore.FieldValue.increment(1);
-    t.update(globalRef, globalUpdate);
+    t.set(globalRef, globalUpdate, { merge: true });
   });
   return { success: true };
 });
