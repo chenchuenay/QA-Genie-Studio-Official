@@ -787,7 +787,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
         Widget content = AbsorbPointer(absorbing: fullLock, child: child!);
         if (_isSharing) {
           return BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
             child: content,
           );
         }

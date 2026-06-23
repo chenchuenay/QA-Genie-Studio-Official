@@ -279,7 +279,7 @@ class _SummaryReportPreviewScreenState
 
     if (_isSharing) {
       return BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: content,
       );
     }

@@ -195,7 +195,7 @@ class _AuthDialogState extends State<AuthDialog> {
         : (isNewMember ? 'Welcome to QAG' : 'Welcome back to QAG');
 
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
       child: Center(
         child: Material(
           color: Colors.transparent,
