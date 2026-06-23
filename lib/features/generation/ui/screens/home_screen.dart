@@ -232,7 +232,10 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ),
                           const SizedBox(height: 14),
-                          _constraints(fullLock),
+                          Container(
+                            key: HomeScreen.constraintsKey,
+                            child: _constraints(fullLock),
+                          ),
                           const SizedBox(height: 12),
                           Center(
                             child: Text(

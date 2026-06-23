@@ -193,9 +193,11 @@ class _AuthDialogState extends State<AuthDialog> {
         ? 'Welcome back, ${displayName.split(' ').first}'
         : (isNewMember ? 'Welcome to QA Genie' : 'Welcome back to QA Genie');
 
-    return Center(
-      child: Material(
-        color: Colors.transparent,
+    return PopScope(
+      canPop: false,
+      child: Center(
+        child: Material(
+          color: Colors.transparent,
         child: Container(
             width: MediaQuery.of(context).size.width * 0.85,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -259,38 +261,42 @@ class _AuthDialogState extends State<AuthDialog> {
                 SizedBox(
                   width: double.infinity,
                   height: 54,
-                  child: _isLoading
-                    ? ElevatedButton(
-                        onPressed: null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent.withOpacity(0.7),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: TweenAnimationBuilder<double>(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading || _isGuestLoading ? null : _handleContinueWithGoogle,
+                    icon: const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
+                    label: _isLoading
+                      ? TweenAnimationBuilder<double>(
                           tween: Tween(begin: 30, end: 0),
                           duration: const Duration(milliseconds: 600),
                           builder: (_, value, __) => Transform.translate(
                             offset: Offset(0, value),
                             child: Opacity(
                               opacity: 1 - (value / 30),
-                              child: Text(
-                                'Connecting with Google${'.' * _dotCount}',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Continue with Google',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${'.' * _dotCount}',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        ),
-                      )
-                    : ElevatedButton.icon(
-                        onPressed: _isGuestLoading ? null : _handleContinueWithGoogle,
-                        icon: const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
-                        label: const Text(
+                        )
+                      : const Text(
                           'Continue with Google',
                           style: TextStyle(
                             fontSize: 16,
@@ -298,12 +304,14 @@ class _AuthDialogState extends State<AuthDialog> {
                             color: Colors.black,
                           ),
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isLoading
+                          ? AppColors.accent.withOpacity(0.7)
+                          : AppColors.accent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                       ),
                 ),
                 if (widget.showGuestButton) ...[
@@ -353,6 +361,7 @@ class _AuthDialogState extends State<AuthDialog> {
             ),
           ),
         ),
+      ),
       );
   }
 }

@@ -165,15 +165,7 @@ class MainScreenState extends State<MainScreen> {
             IconButton(
               key: _starKey,
               icon: _isPro
-                  ? Container(
-                      width: 24,
-                      height: 24,
-                      decoration: const BoxDecoration(
-                        color: AppColors.accent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.star, size: 16, color: Colors.black),
-                    )
+                  ? const Icon(Icons.star, color: AppColors.accent, size: 22)
                   : const Icon(Icons.stars, color: AppColors.accent),
               tooltip: _isPro ? 'Pro' : 'Upgrade',
               onPressed: isGenerating

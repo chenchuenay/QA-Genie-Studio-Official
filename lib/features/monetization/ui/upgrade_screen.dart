@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:qa_genie/app/config/app_config.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
@@ -65,7 +66,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           "You're enjoying the full QA Genie experience (${AppConfig.proMonthlyPrice}/mo value).",
         ),
         const SizedBox(height: AppSpacing.md),
-        _benefitsGrid(isPro: true),
+        _benefitsGrid(),
         const SizedBox(height: AppSpacing.lg),
         _compactCompareCard(),
         const SizedBox(height: AppSpacing.xl),
@@ -83,7 +84,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           "Larger batches, unlimited exports, and an ad-free experience at ${AppConfig.proMonthlyPrice}/mo.",
         ),
         const SizedBox(height: AppSpacing.md),
-        _benefitsGrid(isPro: false),
+        _benefitsGrid(),
         const SizedBox(height: AppSpacing.lg),
         _compactCompareCard(),
         const SizedBox(height: AppSpacing.xl),
@@ -119,27 +120,27 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
     );
   }
 
-  Widget _benefitsGrid({required bool isPro}) {
+  Widget _benefitsGrid() {
     final items = [
       _BenefitItem(
         icon: Icons.flash_on,
         title: "Larger Suites",
-        description: isPro ? "Up to ${AppConfig.proCasesPerBatch} cases per run" : "Coming soon — bigger batches",
+        description: "Up to ${AppConfig.proCasesPerBatch} cases per run",
       ),
       _BenefitItem(
         icon: Icons.description,
         title: "Export Freely",
-        description: isPro ? "Unlimited exports" : "Coming soon — no limits",
+        description: "Unlimited exports",
       ),
       _BenefitItem(
         icon: Icons.bar_chart,
-        title: "Reports",
-        description: isPro ? "Unlimited summary reports" : "Coming soon — unlimited",
+        title: "Summary Reports",
+        description: "Unlimited summary reports",
       ),
       _BenefitItem(
         icon: Icons.block,
         title: "No Ads",
-        description: isPro ? "Ad-free experience" : "Coming soon — ad-free",
+        description: "Ad-free experience",
       ),
     ];
     return GridView.count(
@@ -177,16 +178,16 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           ),
           _CompareRow(
             feature: "Generations",
-            core: "Limited",
-            pro: "More",
+            core: "6",
+            pro: "15",
           ),
           _CompareRow(
-            feature: "Exports",
+            feature: "Suite Exports",
             core: "Limited",
             pro: "Unlimited",
           ),
           _CompareRow(
-            feature: "Reports",
+            feature: "Summary Reports",
             core: "Limited",
             pro: "Unlimited",
           ),
@@ -199,9 +200,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   Widget _pricingAndCta() {
     return Column(
       children: [
-        const SizedBox(height: 20),
+        const SizedBox(height: 8),
         Text(
-          'Just ${AppConfig.proMonthlyPrice}/mo',
+          '${AppConfig.proMonthlyPrice}/mo',
           style: const TextStyle(
             color: Colors.white,
             fontSize: 24,
@@ -214,11 +215,8 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
-            onPressed: _isTapping ? null : () async {
+            onPressed: _isTapping ? null : () {
               setState(() => _isTapping = true);
-              await UsageManager.trackProInterest('upgrade_screen_cta');
-              if (!context.mounted) return;
-              setState(() => _isTapping = false);
               showBlurredDialog(
                 context,
                 builder: (ctx) => AlertDialog(
@@ -254,6 +252,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                   ],
                 ),
               );
+              unawaited(UsageManager.trackProInterest('upgrade_screen_cta'));
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accent,

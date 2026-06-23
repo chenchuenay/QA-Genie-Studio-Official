@@ -27,7 +27,7 @@ class _AboutScreenState extends State<AboutScreen> {
   Future<void> _launchEmail() async {
     final uri = Uri(
       scheme: 'mailto',
-      path: 'qagenieai@gmail.com',
+      path: 'chenchuenay@qagenies.com',
       queryParameters: {'subject': 'QA Genie Feedback'},
     );
     if (await canLaunchUrl(uri)) await launchUrl(uri);
@@ -109,6 +109,18 @@ class _AboutScreenState extends State<AboutScreen> {
                   'Export Summaries',
                   'Share concise test-summary reports with your team.',
                 ),
+                _featureItem(
+                  'Cloud Sync (Members)',
+                  'Sign in with Google to sync your test suites across devices.',
+                ),
+                _featureItem(
+                  'Local Storage (Guests)',
+                  'Guest data stays on this device and is never uploaded.',
+                ),
+                _featureItem(
+                  'Check Cloud vs Sync',
+                  '"Check Cloud" pulls suites from server (one-way). Sync icon pushes local changes & pulls remote (two-way).',
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -146,26 +158,20 @@ class _AboutScreenState extends State<AboutScreen> {
                       ),
                       SizedBox(width: 6),
                       Text(
-                        'qagenieai@gmail.com',
+                        'chenchuenay@qagenies.com',
                         style: TextStyle(
                           fontSize: 14,
                           color: AppColors.accent,
-                          decoration: TextDecoration.underline,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Developer: Enay Kumar',
-                  style: TextStyle(fontSize: 13, color: AppColors.textHint),
-                ),
               ],
             ),
             const SizedBox(height: 28),
             const Text(
-              '© 2026 Enay Kumar',
+              '© 2026 QA Genie',
               style: TextStyle(fontSize: 12, color: AppColors.textHint),
             ),
             const SizedBox(height: 32),

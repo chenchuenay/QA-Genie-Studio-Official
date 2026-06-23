@@ -39,6 +39,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!firstLaunch) {
       await showBlurredDialog(
         context,
+        barrierDismissible: false,
         builder: (ctx) => const AuthDialog(showGuestButton: true),
       );
       if (!mounted) return;
@@ -67,6 +68,7 @@ class _SplashScreenState extends State<SplashScreen> {
       // No persisted auth session — show auth dialog instead of auto-creating a guest.
       await showBlurredDialog(
         context,
+        barrierDismissible: false,
         builder: (ctx) => const AuthDialog(showGuestButton: true),
       );
       if (!mounted) return;

@@ -1012,17 +1012,11 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
   } else if (cooldownDoc.exists) await cooldownRef.delete();
 
   // Clean up orphaned guest from credential-already-in-use scenario
+  // We keep deviceGuestMapping so the device is never eligible for first-time guest again.
   if (previousGuestUid && previousGuestUid !== uid) {
     console.log(`[linkGoogleAccount] cleaning orphaned guest | previousGuestUid=${previousGuestUid}`);
     try {
       await db.collection("guests").doc(previousGuestUid).delete();
-      // Clean up deviceGuestMapping entries pointing to the orphaned guest
-      const mappingSnap = await db.collection("deviceGuestMapping")
-        .where("guestUid", "==", previousGuestUid)
-        .get();
-      const batch = db.batch();
-      mappingSnap.forEach(doc => batch.delete(doc.ref));
-      await batch.commit();
       console.log(`[linkGoogleAccount] orphaned guest cleaned | previousGuestUid=${previousGuestUid}`);
     } catch (e) {
       console.warn(`[linkGoogleAccount] failed to clean orphaned guest: ${e.message}`);
