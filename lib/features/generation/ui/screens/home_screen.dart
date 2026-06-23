@@ -71,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen>
         _refreshStatus();
       }
     });
+    _refreshStatus();
   }
 
   @override

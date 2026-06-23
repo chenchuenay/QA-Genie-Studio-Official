@@ -16,7 +16,7 @@ Future<T?> showBlurredDialog<T>(
       return Align(
         alignment: alignment,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Material(
             color: Colors.transparent,
             child: Builder(builder: builder),

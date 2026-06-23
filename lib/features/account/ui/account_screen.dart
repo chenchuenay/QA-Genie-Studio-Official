@@ -44,47 +44,12 @@ class _AccountScreenState extends State<AccountScreen> {
     super.initState();
     _member = AuthService.currentMember;
     _loadVersion();
-    _loadCachedData();
     _loadData();
   }
 
   Future<void> _loadVersion() async {
     final packageInfo = await PackageInfo.fromPlatform();
     if (mounted) setState(() => _appVersion = packageInfo.version);
-  }
-
-  Future<void> _loadCachedData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final generations = prefs.getInt('stats_generations') ?? 0;
-    final exports = prefs.getInt('stats_exports') ?? 0;
-    final lastSync = prefs.getInt('stats_last_sync') ?? 0;
-    final cachedGuestName = prefs.getString('guest_display_name') ?? '';
-
-    if (mounted) {
-      setState(() {
-        _totalGenerations = generations;
-        _totalExports = exports;
-        _guestDisplayName = cachedGuestName;
-        if (lastSync > 0) {
-          final diff = DateTime.now().difference(
-            DateTime.fromMillisecondsSinceEpoch(lastSync),
-          );
-          if (diff.inMinutes < 1) {
-            _lastSyncedText = 'Sync just now';
-          } else if (diff.inMinutes < 60) {
-            _lastSyncedText = '${diff.inMinutes}m ago';
-          } else if (diff.inHours < 24) {
-            _lastSyncedText = '${diff.inHours}h ago';
-          } else if (diff.inDays < 30) {
-            _lastSyncedText = '${diff.inDays}d ago';
-          } else {
-            _lastSyncedText = '${(diff.inDays / 30).floor()}mo ago';
-          }
-        } else {
-          _lastSyncedText = 'Syncing...';
-        }
-      });
-    }
   }
 
   Future<void> _loadData() async {

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
@@ -192,14 +191,12 @@ class _AuthDialogState extends State<AuthDialog> {
     final displayName = member?.displayName ?? '';
     final welcomeText = !isNewMember && displayName.isNotEmpty
         ? 'Welcome back, ${displayName.split(' ').first}'
-        : (isNewMember ? 'Welcome to QAG' : 'Welcome back to QAG');
+        : (isNewMember ? 'Welcome to QA Genie' : 'Welcome back to QA Genie');
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-      child: Center(
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
             width: MediaQuery.of(context).size.width * 0.85,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             decoration: BoxDecoration(
@@ -356,7 +353,6 @@ class _AuthDialogState extends State<AuthDialog> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

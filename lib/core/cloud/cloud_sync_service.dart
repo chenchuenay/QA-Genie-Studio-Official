@@ -224,6 +224,25 @@ class CloudSyncService {
     };
   }
 
+  static Map<String, dynamic> _encodeCase(FinalizedTestCase tc) {
+    return {
+      'id': tc.id,
+      'title': tc.title,
+      'preconditions': tc.preconditions,
+      'testData': tc.testData,
+      'steps': tc.steps.map((s) => {'action': s.action, 'data': s.data, 'expected': s.expected}).toList(),
+      'expectedResult': tc.expectedResult,
+      'actualResult': tc.actualResult,
+      'priority': tc.priority,
+      'status': tc.status,
+      'type': tc.type,
+      'module': tc.module,
+      'feature': tc.feature,
+      'platform': tc.platform,
+      'source': tc.source.name,
+    };
+  }
+
   static Map<String, dynamic>? _parseSuiteDoc(String docId, Map<String, dynamic> data) {
     try {
       return {
@@ -275,25 +294,6 @@ class CloudSyncService {
         return null;
       }
     }).whereType<FinalizedTestCase>().toList();
-  }
-
-  static Map<String, dynamic> _encodeCase(FinalizedTestCase tc) {
-    return {
-      'id': tc.id,
-      'title': tc.title,
-      'preconditions': tc.preconditions,
-      'testData': tc.testData,
-      'steps': tc.steps.map((s) => {'action': s.action, 'data': s.data, 'expected': s.expected}).toList(),
-      'expectedResult': tc.expectedResult,
-      'actualResult': tc.actualResult,
-      'priority': tc.priority,
-      'status': tc.status,
-      'type': tc.type,
-      'module': tc.module,
-      'feature': tc.feature,
-      'platform': tc.platform,
-      'source': tc.source.name,
-    };
   }
 }
 

@@ -20,7 +20,12 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   @override
   void initState() {
     super.initState();
-    _isPro = false;
+    _loadProStatus();
+  }
+
+  Future<void> _loadProStatus() async {
+    final pro = await UsageManager.isPro();
+    if (mounted) setState(() => _isPro = pro);
   }
 
   @override

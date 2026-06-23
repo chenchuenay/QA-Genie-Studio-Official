@@ -9,7 +9,7 @@ class UsageManager {
   static Map<String, dynamic>? _dashboardCache;
   static DateTime? _dashboardCacheTime;
   static String? _dashboardCacheUid;
-  static const Duration _cacheDuration = Duration(seconds: 60);
+  static const Duration _cacheDuration = Duration(seconds: 10);
 
   static Future<SharedPreferences> _prefs() async => SharedPreferences.getInstance();
 
