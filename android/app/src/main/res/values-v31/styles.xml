@@ -1,37 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style
-        name="LaunchTheme"
-        parent="@android:style/Theme.Black.NoTitleBar">
-
-        <item name="android:windowSplashScreenBackground">
-            #272d38
-        </item>
-
-        <item name="android:windowSplashScreenAnimatedIcon">
-            @drawable/android12splash
-        </item>
-
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <!-- THIS reduces aggressive zoom -->
-        <item name="android:windowSplashScreenIconBackgroundColor">
-            @android:color/transparent
-        </item>
-
-        <item name="android:windowFullscreen">
-            true
-        </item>
-
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowSplashScreenBackground">#020409</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
     </style>
-
-    <style
-        name="NormalTheme"
-        parent="@android:style/Theme.Black.NoTitleBar">
-
-        <item name="android:windowBackground">
-            #272d38
-        </item>
-
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">#272d38</item>
     </style>
-
 </resources>

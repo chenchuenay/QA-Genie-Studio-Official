@@ -127,8 +127,17 @@ class PipelineOrchestrator {
     final acceptedAiCases = validationResult.validCases;
     final rejectedCount = validationResult.rejectedCount;
 
-    if (aiResult.hardErrorCode != null) {
-      debugPrint('PIPELINE: Hard error ${aiResult.hardErrorCode} — skipping fallback');
+    final effectiveHardError = aiResult.hardErrorCode ??
+        ((acceptedAiCases.isEmpty && aiResult.hasTransportError)
+            ? 'SERVICE_UNAVAILABLE'
+            : null);
+
+    if (effectiveHardError != null) {
+      if (aiResult.hardErrorCode == null) {
+        debugPrint('PIPELINE: Transport error with no valid cases — hard error SERVICE_UNAVAILABLE');
+      } else {
+        debugPrint('PIPELINE: Hard error ${aiResult.hardErrorCode} — skipping fallback');
+      }
       final auditReport = PipelineAuditReport(
         traceId: request.traceId,
         rejectedCases: validationResult.rejectedCases,
@@ -170,7 +179,7 @@ class PipelineOrchestrator {
         cases: const [],
         auditReport: auditReport,
         traceId: request.traceId,
-        hardErrorCode: aiResult.hardErrorCode,
+        hardErrorCode: effectiveHardError,
       );
     }
 

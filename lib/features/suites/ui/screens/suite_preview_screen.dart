@@ -345,6 +345,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     final casesToMove = indices.map((i) => widget.session.testCases[i]).toList();
     final deleteIds = casesToMove.map((tc) => tc.dbId).whereType<int>().toList();
     await DatabaseService.insertTestCases(suiteId: targetSuiteId, cases: casesToMove);
+    await DatabaseService.markSuiteDirty(targetSuiteId);
     if (deleteIds.isNotEmpty) await DatabaseService.batchDeleteTestCases(deleteIds);
     for (final i in indices) {
       widget.session.testCases.removeAt(i);

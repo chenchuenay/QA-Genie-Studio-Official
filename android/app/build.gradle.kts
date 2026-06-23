@@ -28,7 +28,7 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
+        versionCode = 4
         multiDexEnabled = true
     }
 
@@ -87,4 +87,6 @@ flutter {
 
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
+    implementation("com.unity3d.ads:unity-ads:4.18.0")
+    implementation("com.google.ads.mediation:unity:4.18.0.0")
 }

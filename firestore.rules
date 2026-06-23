@@ -26,5 +26,18 @@ service cloud.firestore {
     match /emailCooldown/{doc} { allow read, write: if false; }
     match /the_qag_registry/{doc} { allow read, write: if false; }
     match /processed_requests/{doc} { allow read, write: if false; }
+    // User synced suites – only owner
+    match /userSuites/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      match /suites/{suiteId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow delete: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+    // User session (active device tracking) – only owner
+    match /userSessions/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
   }
 }

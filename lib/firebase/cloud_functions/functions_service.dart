@@ -1,9 +1,6 @@
-import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
-import 'package:qa_genie/firebase/app_check/app_check_service.dart';
 
 class FunctionsService {
   const FunctionsService();
@@ -155,16 +152,6 @@ class FunctionsService {
   }) async {
     debugPrint('📡 FUNCTIONS_SERVICE: Calling $functionName');
 
-    // Non-blocking AppCheck diagnostic — does not delay the actual call
-    unawaited(AppCheckService.getToken().timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => null,
-    ).then((token) {
-      debugPrint('🛡️ AppCheck token present: ${token != null && token.isNotEmpty}');
-    }).catchError((e) {
-      debugPrint('🛡️ AppCheck diagnostic error: $e');
-    }));
-
     if (payload != null) {
       debugPrint('📦 FUNCTIONS_SERVICE: Payload keys: ${payload.keys.toList()}');
     }
@@ -224,10 +211,10 @@ class FunctionsService {
     );
   }
 
-  static Future<String> getGuestToken({required String deviceId, bool forceReturning = false}) async {
+  static Future<String> getGuestToken({required String deviceId, bool forceReturning = false, String caller = 'unknown', String? androidId}) async {
     final result = await call(
       functionName: 'getOrCreateGuestToken',
-      payload: {'deviceId': deviceId, 'forceReturning': forceReturning},
+      payload: {'deviceId': deviceId, 'forceReturning': forceReturning, 'caller': caller, 'androidId': androidId},
     );
     // Check for success flag or presence of token
     if (result.containsKey('token') && result['token'] is String) {
@@ -262,6 +249,40 @@ class FunctionsService {
         'deviceId': deviceId,
       },
     );
+  }
+
+  /// Push a suite to cloud.
+  static Future<bool> pushUserSuite({
+    required String suiteId,
+    required String date,
+    required Map<String, dynamic> suiteData,
+  }) async {
+    final result = await call(
+      functionName: 'pushUserSuite',
+      payload: {'suiteId': suiteId, 'date': date, 'suiteData': suiteData},
+    );
+    return result['success'] == true;
+  }
+
+  /// Get all suites from cloud. Returns list of suite maps.
+  static Future<List<Map<String, dynamic>>> getUserSuites() async {
+    final result = await call(functionName: 'getUserSuites');
+    if (result['success'] != true) {
+      debugPrint('⚠️ getUserSuites: cloud function returned failure');
+      return [];
+    }
+    final suites = result['suites'];
+    if (suites is! List) return [];
+    return suites.cast<Map<String, dynamic>>();
+  }
+
+  /// Delete a suite from cloud by its cloud_id ("date/id").
+  static Future<bool> deleteUserSuite(String cloudId) async {
+    final result = await call(
+      functionName: 'deleteUserSuite',
+      payload: {'suiteId': cloudId},
+    );
+    return result['success'] == true;
   }
 
   static Future<Map<String, dynamic>> submitIssueReport({

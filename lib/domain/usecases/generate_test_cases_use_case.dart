@@ -74,22 +74,28 @@ class GenerateTestCasesUseCase {
         request: request,
       );
 
-      // Check for Quota/Rate Limit block before any fallback can happen
-      if (result.hardErrorCode == 'LIMIT_REACHED' ||
-          result.auditReport.aiHttpStatusCode == 403 || 
-          result.auditReport.aiHttpStatusCode == 429) {
-        final errorMessage = result.auditReport.aiErrorMessage ?? 'Daily limit reached.';
-        int? resetTime;
-        if (errorMessage.contains('|')) {
-          final parts = errorMessage.split('|');
-          resetTime = int.tryParse(parts[1]);
+      // Check for hard errors before any fallback can happen
+      if (result.hardErrorCode != null) {
+        if (result.hardErrorCode == 'LIMIT_REACHED' ||
+            result.auditReport.aiHttpStatusCode == 403 || 
+            result.auditReport.aiHttpStatusCode == 429) {
+          final errorMessage = result.auditReport.aiErrorMessage ?? 'Daily limit reached.';
+          int? resetTime;
+          if (errorMessage.contains('|')) {
+            final parts = errorMessage.split('|');
+            resetTime = int.tryParse(parts[1]);
+          }
+          
+          throw QuotaExceededException(
+            errorMessage.split('|')[0],
+            isRateLimit: result.auditReport.aiHttpStatusCode == 429,
+            resetTimeMillis: resetTime,
+          );
         }
         
-        throw QuotaExceededException(
-          errorMessage.split('|')[0],
-          isRateLimit: result.auditReport.aiHttpStatusCode == 429,
-          resetTimeMillis: resetTime,
-        );
+        if (result.hardErrorCode == 'SERVICE_UNAVAILABLE') {
+          throw Exception('The AI generation service is temporarily unavailable. Your quota has not been consumed. Please try again later.');
+        }
       }
 
       final session = GenerationSession(

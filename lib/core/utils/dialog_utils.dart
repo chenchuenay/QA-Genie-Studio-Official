@@ -8,9 +8,9 @@ Future<T?> showBlurredDialog<T>(
   bool barrierDismissible = true,
   AlignmentGeometry alignment = Alignment.center,
 }) {
-  // Skip blur on Android < 31 (GPU host buffer OOM risk) and low-RAM devices
+  // Skip blur on Android < 12 (API 31, GPU host buffer OOM risk) and low-RAM devices
   final useBlur = !Platform.isAndroid ||
-      (Platform.isAndroid && _androidVersion() >= 31);
+      (Platform.isAndroid && _androidVersion() >= 12);
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,

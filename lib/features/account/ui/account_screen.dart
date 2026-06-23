@@ -392,7 +392,9 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
           const SizedBox(height: 14),
           Text(
-            'Joined ${_memberSince != null ? _formatDate(_memberSince!) : '...'} • ${_lastSyncedText ?? 'Syncing...'}',
+            _memberSince != null
+                ? 'Joined ${_formatDate(_memberSince!)} • ${_lastSyncedText ?? 'Syncing...'}'
+                : '${_lastSyncedText ?? 'N/A'}',
             style: const TextStyle(fontSize: 11, color: AppColors.textHint),
           ),
           if (isGuest) ...[

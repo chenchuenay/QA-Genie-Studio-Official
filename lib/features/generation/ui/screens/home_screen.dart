@@ -41,7 +41,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with TickerProviderStateMixin {
   final TextEditingController mCtrl = TextEditingController();
   final TextEditingController fCtrl = TextEditingController();
   final TextEditingController cCtrl = TextEditingController();
@@ -147,7 +148,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Column(
               children: [
                 Expanded(
-                  child: SingleChildScrollView(
+                  child: RefreshIndicator(
+                    onRefresh: _refreshStatus,
+                    color: AppColors.accent,
+                    backgroundColor: AppColors.surface,
+                    child: SingleChildScrollView(
                     physics: fullLock
                         ? const NeverScrollableScrollPhysics()
                         : const AlwaysScrollableScrollPhysics(),
@@ -238,6 +243,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
+                  ),
                   ),
                 ),
                 Padding(

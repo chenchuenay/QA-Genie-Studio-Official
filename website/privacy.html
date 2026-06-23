@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — QA Genie</title>
+    <meta name="description" content="QA Genie Privacy Policy — how we collect, use, and protect your data.">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --bg: #05060A; --surface: #0D1018; --card: #141922; --border: #232938; --accent: #3DDCFF; --text: #FFFFFF; --text-secondary: #B8C0CF; --text-tertiary: #72798A; --radius-card: 24px; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(5, 6, 10, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+        nav .container { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 18px; }
+        .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--accent); }
+        .page { padding: 120px 0 60px; }
+        h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+        .date { color: var(--text-tertiary); font-size: 14px; margin-bottom: 48px; }
+        h2 { font-size: 20px; font-weight: 700; margin: 40px 0 16px; color: var(--accent); }
+        h3 { font-size: 16px; font-weight: 600; margin: 24px 0 12px; color: var(--text); }
+        p { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; line-height: 1.8; }
+        ul, ol { color: var(--text-secondary); font-size: 14px; padding-left: 20px; margin-bottom: 16px; }
+        li { margin-bottom: 8px; line-height: 1.7; }
+        strong { color: var(--text); }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent); }
+        .divider { height: 1px; background: var(--border); max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        footer { border-top: 1px solid var(--border); padding: 40px 0; }
+        footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        footer .footer-links { display: flex; gap: 24px; align-items: center; }
+        footer a { color: var(--text-tertiary); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+        footer a:hover { color: var(--accent); }
+        footer p { color: var(--text-tertiary); font-size: 13px; margin-bottom: 0; }
+        @media (max-width: 768px) {
+            nav .container { height: 56px; }
+            .nav-links a { display: none; }
+            .page { padding: 100px 0 40px; }
+            h1 { font-size: 26px; }
+            footer .container { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="nav-logo">
+                <img src="assets/logo.png" alt="QA Genie">
+                QA Genie
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="privacy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="container">
+            <h1>Privacy Policy</h1>
+            <p class="date">Last updated: June 22, 2026</p>
+
+            <h2>1. Introduction</h2>
+            <p>QA Genie ("we," "our," or "us") provides a hybrid-powered test case generation tool for quality assurance professionals. We collect only what is necessary to deliver the service. This policy explains what data we collect and how it is handled.</p>
+
+            <h2>2. Data We Collect</h2>
+
+            <h3>Account Information</h3>
+            <p>When you sign in with Google, we receive your email address and display name through Firebase Authentication. We do not store your password. Guest accounts use an anonymous device identifier — no personal information is required.</p>
+
+            <h3>Generation Data</h3>
+            <p>When you generate test cases, your module name, feature name, platform selection, and prompt notes are sent to our server and then to our AI provider to produce test cases. Prompts are sanitized (HTML stripped, truncated) before transmission. An optional PII scrubber may redact emails, phone numbers, URLs, and other sensitive patterns from prompts before they leave your device.</p>
+
+            <h3>Usage Data</h3>
+            <p>We track generation and export counts to enforce daily quotas and improve the service. This includes basic metadata such as feature interactions and export format preferences. No test case content is included in usage tracking.</p>
+
+            <h3>Device Information</h3>
+            <p>Device model, app version, and platform (Android) are collected only when you submit an issue report. A device identifier (Firebase Installation ID) is used for guest identity and quota enforcement.</p>
+
+            <h3>Ad Interaction Data</h3>
+            <p>When you watch a rewarded ad, Google AdMob and its mediation partners (Unity Ads) may collect advertising identifiers, device information, and IP address in accordance with their privacy policies.</p>
+
+            <h2>3. Test Case Content & Sync</h2>
+            <p>When you are signed in with Google, your test suites and their test case content are securely transmitted to our cloud infrastructure (Google Cloud Storage + Firestore) to enable access across your devices. This data is encrypted in transit and at rest.</p>
+            <p>Guest accounts are local-only — test case content never leaves your device.</p>
+            <p>We never analyze, train on, or share your test case content with any third party beyond the cloud infrastructure required to operate the sync feature.</p>
+
+            <h2>4. Third-Party Services</h2>
+            <p>We use the following third-party services:</p>
+            <ul>
+                <li><strong>Firebase (Google):</strong> Authentication, Firestore database, Cloud Functions, Cloud Storage, App Check, Installations</li>
+                <li><strong>AI Provider:</strong> Test case generation (provider subject to change)</li>
+                <li><strong>Google AdMob:</strong> Rewarded video advertising, with Unity Ads as a mediated partner</li>
+            </ul>
+
+            <h2>5. Data Security</h2>
+            <p>All communications use HTTPS/TLS encryption. Data stored on our servers is encrypted at rest. Firebase App Check verifies app integrity. Access to your data is restricted by security rules — only you and our backend functions can access your information.</p>
+
+            <h2>6. Data Retention & Deletion</h2>
+            <p>You can delete your account at any time through the app settings (Account → Delete Account). This removes your profile, usage data, synced test cases, and authentication credentials from our servers. A 24-hour cooldown prevents immediate re-registration of the same Google account.</p>
+            <p>Local data on your device (SQLite database) must be cleared by uninstalling the app or clearing app data through Android settings.</p>
+
+            <h2>7. Your Rights</h2>
+            <ul>
+                <li><strong>Access:</strong> View your data through the Account screen</li>
+                <li><strong>Portability:</strong> Export test cases in Excel, CSV, JSON, or PDF</li>
+                <li><strong>Deletion:</strong> Delete your account as described above</li>
+                <li><strong>Ad opt-out:</strong> Disable ad personalization via Android Settings → Google → Ads</li>
+            </ul>
+
+            <h2>8. Children's Privacy</h2>
+            <p>QA Genie is not intended for children under 13. We do not knowingly collect personal information from children.</p>
+
+            <h2>9. Changes to This Policy</h2>
+            <p>We may update this policy from time to time. Continued use after changes constitutes acceptance of the updated policy.</p>
+
+            <h2>10. Contact</h2>
+            <p>For privacy questions or data deletion requests: <a href="mailto:hello@qagenies.com">hello@qagenies.com</a></p>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 QA Genie. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="mailto:hello@qagenies.com">Contact</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

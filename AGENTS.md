@@ -86,6 +86,8 @@
 16. **Fallback Quality**
     - The fallback generator must produce test cases that appear **at least 70% similar** to AI‑generated test cases.
 
+- 17.we never allow offline generations or exports
+
 ### Run Shortcuts (for agents)
 
 ##### VERY IMPORTANT

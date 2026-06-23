@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,8 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/features/legal/ui/terms_privacy_policy.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
+import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/firebase/analytics/analytics_service.dart';
 
 String _friendlyAuthError(dynamic e) {
   if (e is FirebaseAuthException) {
@@ -41,19 +44,92 @@ class _AuthDialogState extends State<AuthDialog> {
   String? _errorMessage;
 
   Future<void> _handleContinueWithGoogle() async {
-    if (_isLoading) return;
+    unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: ENTER'));
+    if (_isLoading) {
+      unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: SKIP already loading'));
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-    if (!await NetworkGuard.ensureProductionOnline(context)) return;
     try {
+      unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: calling linkWithGoogle'));
       await AuthService.linkWithGoogle();
+
+      // Pull remote suites (if any)
+      await AuthService.completePostLoginFlow();
+
+      if (!mounted) return;
+
+      // Welcome confirmation
+      final user = AuthService.currentUser;
+      String displayName = user?.displayName ?? '';
+      if (displayName.isEmpty && user != null) {
+        for (final info in user.providerData) {
+          if (info.providerId == 'google.com' && (info.displayName?.isNotEmpty == true)) {
+            displayName = info.displayName!;
+            break;
+          }
+        }
+      }
+      final greeting = displayName.isNotEmpty
+          ? 'Welcome, ${displayName.split(' ').first}!'
+          : 'Welcome!';
+      await showBlurredDialog(
+        context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.person, color: AppColors.accent, size: 40),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                greeting,
+                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'You\'re now signed in with Google.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text('Let\'s Go', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      );
+
       if (!mounted) return;
       Navigator.pop(context);
+      unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: SUCCESS auth dialog popped'));
     } catch (e) {
       if (!mounted) return;
+      unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: CAUGHT $e'));
       setState(() {
         _errorMessage = _friendlyAuthError(e);
         _isLoading = false;
@@ -62,7 +138,11 @@ class _AuthDialogState extends State<AuthDialog> {
   }
 
   Future<void> _handleContinueAsGuest() async {
-    if (_isGuestLoading) return;
+    unawaited(AnalyticsService.logDebug(message: 'handleContinueAsGuest: ENTER'));
+    if (_isGuestLoading) {
+      unawaited(AnalyticsService.logDebug(message: 'handleContinueAsGuest: SKIP already loading'));
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _isGuestLoading = true;
@@ -70,11 +150,14 @@ class _AuthDialogState extends State<AuthDialog> {
     });
     if (!await NetworkGuard.ensureProductionOnline(context)) return;
     try {
-      await AuthService.signInAsGuest();
+      unawaited(AnalyticsService.logDebug(message: 'handleContinueAsGuest: calling signInAsGuest'));
+      await AuthService.signInAsGuest(caller: 'guest_button');
       if (!mounted) return;
       Navigator.pop(context);
+      unawaited(AnalyticsService.logDebug(message: 'handleContinueAsGuest: SUCCESS'));
     } catch (e) {
       if (!mounted) return;
+      unawaited(AnalyticsService.logDebug(message: 'handleContinueAsGuest: CAUGHT $e'));
       setState(() {
         _errorMessage = _friendlyAuthError(e);
         _isGuestLoading = false;

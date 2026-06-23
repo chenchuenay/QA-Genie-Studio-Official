@@ -26,6 +26,7 @@ void main() {
   });
 
   setUp(() async {
+    await DatabaseService.reset();
     DatabaseService.invalidateSuitesCache();
     await DatabaseService.initDatabase('test_identity');
   });
