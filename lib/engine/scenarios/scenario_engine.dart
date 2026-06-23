@@ -50,7 +50,7 @@ class ScenarioEngine {
         } else {
           // Ultimate fallback: create a generic scenario
           final generic = Scenario(
-            entity: EntityType.user,
+            entity: EntityType.member,
             action: ActionType.login,
             targetState: StateType.active,
             category: category,
@@ -75,7 +75,7 @@ class ScenarioEngine {
     final totalNeeded = categoryCounts.values.fold(0, (a, b) => a + b);
     if (assignments.length < totalNeeded && totalNeeded > 0) {
       final generic = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.member,
         action: ActionType.login,
         targetState: StateType.active,
         category: 'positive',

@@ -22,6 +22,7 @@ import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
 import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
+import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
@@ -56,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen>
   String platform = 'Web';
   bool loading = false;
   bool _isPro = false;
-  int _rewardedRemaining = AppConfig.coreRewardedBatchesPerDay;
+  int _rewardedRemaining = 0;
   int _proRemaining = AppConfig.proFreeBatchesPerDay;
   DateTime? _resetTime;
   int _adAttempts = 0;
@@ -64,8 +65,8 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
-    _authSubscription = AuthService.authStateChanges.listen((user) {
-      if (user != null) {
+    _authSubscription = AuthService.authStateChanges.listen((member) {
+      if (member != null) {
         UsageManager.invalidateCache();
         _refreshStatus();
       }
@@ -177,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen>
                             key: HomeScreen.moduleKey,
                             child: _input(
                               'Module Name *',
-                              'e.g. User Authentication',
+                              'e.g. Member Authentication',
                               mCtrl,
                               maxLength: 40,
                               enabled: !fullLock,
@@ -542,6 +543,11 @@ class _HomeScreenState extends State<HomeScreen>
     }
     _adAttempts = 0;
 
+    // Silence cloud pull for members before generation
+    if (!AuthService.isGuest) {
+      await CloudSyncService.pullRemoteSuites();
+    }
+
     try {
       final module = mCtrl.text.trim();
       final feature = fCtrl.text.trim();
@@ -615,6 +621,16 @@ class _HomeScreenState extends State<HomeScreen>
         cases: session.testCases,
       );
       debugPrint('🚀 _generate: Suite saved');
+
+      // Push to cloud for members
+      if (!AuthService.isGuest) {
+        try {
+          await CloudSyncService.pushPendingSuites();
+          debugPrint('🚀 _generate: cloud push completed');
+        } catch (e) {
+          debugPrint('❌ _generate: cloud push failed: $e');
+        }
+      }
 
       debugPrint('🚀 _generate: Invalidating usage cache');
       UsageManager.invalidateCache();

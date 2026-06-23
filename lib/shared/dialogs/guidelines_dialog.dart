@@ -65,7 +65,7 @@ class _GuidelinesDialogState extends State<GuidelinesDialog> {
             child: SingleChildScrollView(
               controller: _scrollController,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                _tip(Icons.edit, "1. Clear module name", "Name it by its real function, like 'User Login' or 'Payment Gateway'."),
+                _tip(Icons.edit, "1. Clear module name", "Name it by its real function, like 'Member Login' or 'Payment Gateway'."),
                 _tip(Icons.list_alt, "2. Detailed feature", "Be specific: 'Login with Google OAuth' instead of just 'Login'."),
                 _tip(Icons.phone_iphone, "3. Pick your platform", "Mobile, Web, or API. Each gives very different test cases."),
                 _tip(Icons.lightbulb, "4. Use constraints", "Tell the AI about WCAG, SSO, session timeouts, or admin exclusions to create realistic cases."),
@@ -76,7 +76,7 @@ class _GuidelinesDialogState extends State<GuidelinesDialog> {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const Text("Example", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 13)),
                     const SizedBox(height: 8),
-                    const Text("Module: User Authentication\nFeature: Login with Google OAuth\nPlatform: Web\nConstraints: Must pass WCAG 2.1 AA, test in Chrome & Safari",
+                    const Text("Module: Member Authentication\nFeature: Login with Google OAuth\nPlatform: Web\nConstraints: Must pass WCAG 2.1 AA, test in Chrome & Safari",
                         style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.5)),
                   ]),
                 ),

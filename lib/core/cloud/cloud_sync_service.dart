@@ -16,7 +16,7 @@ class CloudSyncService {
   static bool _isPulling = false;
   static DateTime? _lastPullTime;
 
-  static bool get canSync => AuthService.currentUser != null;
+  static bool get canSync => AuthService.currentMember != null && !AuthService.isGuest;
   static bool get _canSync => canSync;
 
   static Future<int> getLastSyncMs() async {
@@ -42,7 +42,7 @@ class CloudSyncService {
 
   static Future<bool> shouldAutoSync() async {
     final ms = await getLastSyncMs();
-    if (ms == 0) return AuthService.currentUser != null;
+    if (ms == 0) return AuthService.currentMember != null && !AuthService.isGuest;
     final elapsed = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ms));
     return elapsed.inHours >= _syncIntervalHours;
   }
@@ -51,7 +51,6 @@ class CloudSyncService {
 
   static Future<int> pushPendingSuites() async {
     if (!_canSync) return 0;
-    if (!NetworkGuard.isOnline) return 0;
     if (_isPushing) return 0;
 
     _isPushing = true;
@@ -65,14 +64,14 @@ class CloudSyncService {
         final cloudId = suite['cloud_id'] as String?;
 
         String date;
-        String suiteIdForServer;
+        String? existingSerial;
         if (cloudId != null) {
           final parts = cloudId.split('/');
           date = parts[0];
-          suiteIdForServer = parts[1];
+          existingSerial = parts[1];
         } else {
           date = _formatDate(DateTime.parse(suite['created_at'] as String));
-          suiteIdForServer = suiteId.toString();
+          existingSerial = null;
         }
 
         try {
@@ -80,13 +79,14 @@ class CloudSyncService {
           final suiteData = _buildSuiteDoc(suite, cases);
           suiteData['date'] = date;
 
-          final ok = await FunctionsService.pushUserSuite(
-            suiteId: suiteIdForServer,
+          final result = await FunctionsService.pushMemberSuite(
+            serialNumber: existingSerial,
             date: date,
             suiteData: suiteData,
           );
-          if (ok) {
-            final actualCloudId = cloudId ?? '$date/$suiteIdForServer';
+          if (result['success'] == true) {
+            final actualSerial = result['serialNumber'] as String;
+            final actualCloudId = cloudId ?? '$date/$actualSerial';
             await DatabaseService.markSynced(suiteId, actualCloudId);
             uploaded++;
           } else {
@@ -109,13 +109,12 @@ class CloudSyncService {
 
   static Future<int> pullRemoteSuites() async {
     if (!_canSync) return 0;
-    if (!NetworkGuard.isOnline) return 0;
     if (_isPulling) return 0;
 
     _isPulling = true;
     _lastPullTime = DateTime.now();
     try {
-      final suites = await FunctionsService.getUserSuites();
+      final suites = await FunctionsService.getMemberSuites();
       int pulled = 0;
       for (final data in suites) {
         final suiteMap = _parseSuiteDoc(data['suiteId'] as String, data);
@@ -147,7 +146,7 @@ class CloudSyncService {
     try {
       final cloudId = await DatabaseService.getCloudIdForSuite(suiteId);
       if (cloudId == null) return;
-      await FunctionsService.deleteUserSuite(cloudId);
+      await FunctionsService.deleteMemberSuite(cloudId);
     } catch (e) {
       debugPrint('CloudSyncService: delete remote failed: $e');
     }
@@ -155,7 +154,6 @@ class CloudSyncService {
 
   static Future<void> processPendingDeletes() async {
     if (!_canSync) return;
-    if (!NetworkGuard.isOnline) return;
     try {
       final pendingIds = await DatabaseService.getPendingDeleteSuiteIds();
       for (final id in pendingIds) {
@@ -170,7 +168,6 @@ class CloudSyncService {
   static Future<void> tryAutoSync() async {
     if (!_canSync) return;
     if (!await shouldAutoSync()) return;
-    if (!NetworkGuard.isOnline) return;
 
     debugPrint('CloudSyncService: auto-sync triggered');
     await pushPendingSuites();
@@ -204,7 +201,6 @@ class CloudSyncService {
   }
 
   static Future<void> onAccountSwitch({required String oldUid, required String newUid}) async {
-    if (!NetworkGuard.isOnline) return;
     await pushPendingSuites();
     await pullRemoteSuites();
   }
@@ -222,8 +218,6 @@ class CloudSyncService {
     return {
       'moduleName': suite['moduleName'],
       'feature': suite['feature'],
-      'platform': suite['platform'],
-      'title': suite['moduleName'],
       'createdAt': suite['created_at'] ?? now,
       'updatedAt': now,
       'cases': cases.map((tc) => _encodeCase(tc)).toList(),

@@ -72,7 +72,7 @@ class _SplashScreenState extends State<SplashScreen> {
       if (!mounted) return;
     }
 
-    // Navigate immediately — splash should be invisible to the user.
+    // Navigate immediately — splash should be invisible to the member.
     if (!mounted) return;
     MainScreenState.shouldAutoStartTour = _showGuidelines;
     Navigator.of(context).pushReplacement(
@@ -91,10 +91,10 @@ class _SplashScreenState extends State<SplashScreen> {
     final identity = await DeviceUtils.getUniqueId();
     await DatabaseService.initDatabase(identity);
     // One-time migration from legacy UID-based identity to device-level identity
-    final oldUid = AuthService.currentUser?.uid ?? 'guest_default';
+    final oldUid = AuthService.currentMember?.uid ?? 'guest_default';
     await DatabaseService.migrateDataToCurrentDb(oldUid);
 
-    if (AuthService.currentUser != null && !AuthService.isGuest) {
+    if (AuthService.currentMember != null && !AuthService.isGuest) {
       unawaited(CloudSyncService.tryAutoSync().catchError((_) {}));
     }
   }

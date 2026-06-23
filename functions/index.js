@@ -19,7 +19,7 @@ const RETURNING_GUEST_BATCHES_PER_DAY = 1; // Returning guest on same device: 1
 const CORE_CASES_PER_BATCH = 10;
 const PRO_CASES_PER_BATCH = 20;
 
-const EXPORT_LIMIT_PER_DAY = 50; // 50 exports per day for all non-pro users
+const EXPORT_LIMIT_PER_DAY = 50; // 50 exports per day for all non-pro members
 const COOLDOWN_HOURS = 24; // 24h cooldown after Google account deletion
 
 function today() {
@@ -66,7 +66,7 @@ function checkRateLimit(key, maxPerMinute = 20) {
 // IN-MEMORY FUNCTION RESULT CACHE (60s TTL, per-instance)
 // ------------------------------------------------------------------
 const functionCache = new Map();
-const CACHE_TTL_MS = 60000;
+const CACHE_TTL_MS = 10000;
 
 setInterval(() => {
   const cutoff = Date.now() - CACHE_TTL_MS;
@@ -94,7 +94,7 @@ function sanitisePrompt(prompt) {
 }
 
 // ------------------------------------------------------------------
-// HELPER: Get or create registry counter (total users+guests ever)
+// HELPER: Get or create registry counter (total members+guests ever)
 // ------------------------------------------------------------------
 async function getNextRegistryNumber() {
   const globalRef = db.collection("analytics").doc("global");
@@ -113,6 +113,31 @@ function getResetISO() {
   const reset = new Date();
   reset.setUTCHours(24, 0, 0, 0);
   return reset.toISOString();
+}
+
+// --------------------------------------------------------------
+// HELPER: Look up memberProfiles doc by uid (email is the doc ID)
+// Returns { email, ref, data } or null.
+// --------------------------------------------------------------
+async function _getMemberProfileByUid(uid) {
+  const snap = await db
+    .collection("memberProfiles")
+    .where("uid", "==", uid)
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { email: doc.id, ref: doc.ref, data: doc.data() };
+}
+
+// --------------------------------------------------------------
+// Returns the tier ("core" or "pro") for a given uid.
+// Defaults to "core" if profile not found.
+// --------------------------------------------------------------
+async function _getMemberTier(uid) {
+  const profile = await _getMemberProfileByUid(uid);
+  if (!profile) return "core";
+  return profile.data.subscription?.planType === "pro" ? "pro" : "core";
 }
 
 // ------------------------------------------------------------------
@@ -155,11 +180,20 @@ exports.generate = functions
     const nowStr = today();
     const adPresent = !!(adToken || rewardToken);
 
+    // Resolve memberProfiles (email-based doc) before transaction
+    let memberProfileEmail = null;
+    try {
+      const profileResult = await _getMemberProfileByUid(uid);
+      if (profileResult) memberProfileEmail = profileResult.email;
+    } catch (_) {}
+
     try {
       const uRef = db.collection("usage").doc(uid);
       const gRef = db.collection("analytics").doc("global");
       const reqRef = db.collection("processed_requests").doc(requestId);
-      const userRef = db.collection("users").doc(uid);
+      const memberProfileRef = memberProfileEmail
+        ? db.collection("memberProfiles").doc(memberProfileEmail)
+        : db.collection("_void").doc(uid);
       const guestRef = db.collection("guests").doc(uid);
       const deviceRef = db.collection("deviceUsage").doc(deviceId);
 
@@ -192,11 +226,11 @@ exports.generate = functions
       }
 
       const generationData = await db.runTransaction(async (t) => {
-        const [uDoc, reqDoc, userDoc, guestDoc, deviceDoc] =
+        const [uDoc, reqDoc, memberProfileDoc, guestDoc, deviceDoc] =
           await Promise.all([
             t.get(uRef),
             t.get(reqRef),
-            t.get(userRef),
+            t.get(memberProfileRef),
             t.get(guestRef),
             t.get(deviceRef),
           ]);
@@ -229,8 +263,8 @@ exports.generate = functions
 
         let isPro = false,
           isGuest = false;
-        if (userDoc.exists)
-          isPro = userDoc.data()?.subscription?.planType === "pro";
+        if (memberProfileDoc.exists)
+          isPro = memberProfileDoc.data()?.subscription?.planType === "pro";
         else if (guestDoc.exists) {
           isGuest = true;
           if (deviceId && guestDoc.data()?.identity?.deviceId &&
@@ -295,7 +329,7 @@ exports.generate = functions
           metrics.lastReset = nowStr;
           t.set(uRef, {
             uid,
-            type: "user",
+            type: "member",
             metrics: {
               ...metrics,
               exportCount: uDoc.data()?.metrics?.exportCount ?? 0,
@@ -408,9 +442,8 @@ exports.trackExport = functions.https.onCall(async (data, context) => {
   const ext = extension || (target === "pdf" ? "pdf" : target);
   const nowStr = today();
 
-  const userDoc = await db.collection("users").doc(uid).get();
-  const isPro =
-    userDoc.exists && userDoc.data()?.subscription?.planType === "pro";
+  const profile = await _getMemberProfileByUid(uid);
+  const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
 
   if (!isPro) {
     // Non-pro (core + guest): check daily export limit
@@ -433,7 +466,7 @@ exports.trackExport = functions.https.onCall(async (data, context) => {
       [`fileExtensions.${ext}`]: admin.firestore.FieldValue.increment(1),
     },
   };
-  usageUpdate.type = userDoc.exists ? "user" : "guest";
+  usageUpdate.type = profile ? "member" : "guest";
   usageUpdate.uid = uid;
   if (!isPro) {
     usageUpdate.metrics = {
@@ -680,8 +713,8 @@ exports.checkExportQuota = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
   const { rewarded = false } = data;
-  const userDoc = await db.collection("users").doc(uid).get();
-  const isPro = userDoc.exists && userDoc.data()?.subscription?.planType === "pro";
+  const profile = await _getMemberProfileByUid(uid);
+  const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
   const nowStr = today();
   let allowed = false, remaining = 0;
 
@@ -689,7 +722,7 @@ exports.checkExportQuota = functions.https.onCall(async (data, context) => {
     allowed = true;
     remaining = 999;
   } else {
-    // Same 50/day limit for core users and guests
+    // Same 50/day limit for core members and guests
     const usageDoc = await db.collection("usage").doc(uid).get();
     let metrics = usageDoc.exists ? usageDoc.data().metrics : {};
     if (metrics.lastReset !== nowStr) metrics.exportCount = 0;
@@ -720,9 +753,9 @@ exports.resetDailyLimits = functions.https.onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// GET USER DASHBOARD
+// GET MEMBER DASHBOARD
 // ------------------------------------------------------------------
-exports.getUserDashboard = functions.https.onCall(async (data, context) => {
+exports.getMemberDashboard = functions.https.onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -731,23 +764,23 @@ exports.getUserDashboard = functions.https.onCall(async (data, context) => {
   if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
     return cached.data;
   }
-  const idDoc = await db.collection("users").doc(uid).get();
-  const isUser = idDoc.exists;
+  const profile = await _getMemberProfileByUid(uid);
+  const isMember = !!profile;
   const usageDoc = await db.collection("usage").doc(uid).get();
   let isGuest = false, guestDoc = null;
-  if (!isUser) {
+  if (!isMember) {
     guestDoc = await db.collection("guests").doc(uid).get();
     isGuest = guestDoc.exists;
   }
-  const planType = isUser ? idDoc.data().subscription?.planType : null;
+  const planType = profile ? profile.data.subscription?.planType : null;
   function toISO(val) {
     if (!val) return null;
     if (typeof val.toDate === "function") return val.toDate().toISOString();
     if (val instanceof Date) return val.toISOString();
     return val;
   }
-  const identity = isUser
-    ? { displayName: idDoc.data()?.identity?.displayName, email: idDoc.data()?.identity?.email, createdAt: toISO(idDoc.data()?.identity?.createdAt) }
+  const identity = isMember
+    ? { displayName: profile.data.displayName || "", email: profile.data.email || "", createdAt: toISO(profile.data.createdAt) }
     : isGuest
       ? { ...guestDoc.data().identity, createdAt: toISO(guestDoc.data().identity?.createdAt) }
       : null;
@@ -759,7 +792,7 @@ exports.getUserDashboard = functions.https.onCall(async (data, context) => {
   let proGensRemaining = 0;
   const isPro = planType === "pro";
 
-  if (isUser) {
+  if (isMember) {
     let rewarded = 0, proFree = 0;
     if (metrics.lastReset === nowStr) {
       rewarded = metrics.rewardedGenCount || 0;
@@ -799,16 +832,18 @@ exports.getUserDashboard = functions.https.onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// SET USER PRO
+// SET MEMBER PRO
 // ------------------------------------------------------------------
-exports.setUserPro = functions.https.onCall(async (data, context) => {
+exports.setMemberPro = functions.https.onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const { isPro } = data;
   const uid = context.auth.uid;
+  const profile = await _getMemberProfileByUid(uid);
+  if (!profile) throw new functions.https.HttpsError("not-found", "Member profile not found");
   await db
-    .collection("users")
-    .doc(uid)
+    .collection("memberProfiles")
+    .doc(profile.email)
     .set(
       {
         subscription: {
@@ -850,7 +885,7 @@ exports.trackProInterest = functions.https.onCall(async (data, context) => {
       ),
     };
     if (isFirst)
-      globalUpdate.uniqueProInterestedUsers =
+      globalUpdate.uniqueProInterestedMembers =
         admin.firestore.FieldValue.increment(1);
     t.set(globalRef, globalUpdate, { merge: true });
   });
@@ -878,16 +913,16 @@ exports.checkGenerationQuota = functions.https.onCall(async (data, context) => {
   if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
     return cached.data;
   }
-  const userDoc = await db.collection("users").doc(uid).get();
+  const profile = await _getMemberProfileByUid(uid);
   const guestDoc = await db.collection("guests").doc(uid).get();
-  const isUser = userDoc.exists;
+  const isMember = !!profile;
   const isGuest = guestDoc.exists;
-  const isPro = isUser && userDoc.data()?.subscription?.planType === "pro";
+  const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
   const nowStr = today();
   let allowed = false,
     remaining = 0;
 
-  if (isUser) {
+  if (isMember) {
     const usageDoc = await db.collection("usage").doc(uid).get();
     const metrics = usageDoc.exists ? usageDoc.data().metrics : {};
     let rewarded = 0,
@@ -963,7 +998,7 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
     console.log(`[linkGoogleAccount] RATE LIMITED`);
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
-  const { email, displayName, deviceId } = data;
+  const { email, displayName, deviceId, previousGuestUid } = data;
   const cooldownRef = db
     .collection("emailCooldown")
     .doc(email);
@@ -976,18 +1011,33 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
     );
   } else if (cooldownDoc.exists) await cooldownRef.delete();
 
+  // Clean up orphaned guest from credential-already-in-use scenario
+  if (previousGuestUid && previousGuestUid !== uid) {
+    console.log(`[linkGoogleAccount] cleaning orphaned guest | previousGuestUid=${previousGuestUid}`);
+    try {
+      await db.collection("guests").doc(previousGuestUid).delete();
+      // Clean up deviceGuestMapping entries pointing to the orphaned guest
+      const mappingSnap = await db.collection("deviceGuestMapping")
+        .where("guestUid", "==", previousGuestUid)
+        .get();
+      const batch = db.batch();
+      mappingSnap.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      console.log(`[linkGoogleAccount] orphaned guest cleaned | previousGuestUid=${previousGuestUid}`);
+    } catch (e) {
+      console.warn(`[linkGoogleAccount] failed to clean orphaned guest: ${e.message}`);
+    }
+  }
+
   const guestRef = db.collection("guests").doc(uid);
   const guestDoc = await guestRef.get();
   const usageRef = db.collection("usage").doc(uid);
-  const userRef = db.collection("users").doc(uid);
-  const userDoc = await userRef.get();
-
-  console.log(`[linkGoogleAccount] guestDoc.exists=${guestDoc.exists} | userDoc.exists=${userDoc.exists}`);
+  console.log(`[linkGoogleAccount] guestDoc.exists=${guestDoc.exists}`);
 
   let guestDisplayName = "";
 
   if (guestDoc.exists) {
-    console.log(`[linkGoogleAccount] GUEST EXISTS | upgrading to user`);
+    console.log(`[linkGoogleAccount] GUEST EXISTS | upgrading to member`);
     const guestData = guestDoc.data();
     guestDisplayName = guestData?.identity?.displayName || "";
     const guestTier = guestData?.guestTier || "first";
@@ -995,7 +1045,7 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
     if (guestTier === "returning") {
       // Returning guest upgrade → fresh start, reset usage
       await usageRef.set({
-        type: "user",
+        type: "member",
         metrics: {
           rewardedGenCount: 0,
           proFreeGenCount: 0,
@@ -1004,8 +1054,8 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
         },
       });
     } else {
-      // First-time guest upgrade — mark usage as user
-      await usageRef.set({ type: "user" }, { merge: true });
+      // First-time guest upgrade — mark usage as member
+      await usageRef.set({ type: "member" }, { merge: true });
     }
 
     // Delete guest doc
@@ -1013,10 +1063,10 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
     console.log(`[linkGoogleAccount] GUEST DELETED`);
   }
 
-  if (!guestDoc.exists && !userDoc.exists) {
-    console.log(`[linkGoogleAccount] FRESH USER | creating usage doc`);
+  if (!guestDoc.exists) {
+    console.log(`[linkGoogleAccount] FRESH MEMBER | creating usage doc`);
     await usageRef.set({
-      type: "user",
+      type: "member",
       metrics: {
         rewardedGenCount: 0,
         proFreeGenCount: 0,
@@ -1029,7 +1079,7 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
   // Ensure registry entry exists for ALL Google accounts (not just guest upgrades)
   await db.collection("the_qag_registry").doc(uid).set(
     {
-      type: "user",
+      type: "member",
       uid,
       displayName: displayName || guestDisplayName || "",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1038,39 +1088,35 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
   );
 
   // Create / update email → uid mapping for cross-reinstall identity resolution.
-  // Preserve the original uid so getUserSuites can redirect to the first-ever UID
+  // Preserve the original uid so getMemberSuites can redirect to the first-ever UID
   // after reinstall (when Firebase Auth issues a new UID).
+  let recoveredCreatedAt = null;
   if (email) {
-    const profileRef = db.collection("userProfiles").doc(email);
+    const profileRef = db.collection("memberProfiles").doc(email);
     const existingProfile = await profileRef.get();
     const originalUid = existingProfile.exists ? existingProfile.data().uid : uid;
-    await profileRef.set({
+    if (existingProfile.exists && existingProfile.data().createdAt) {
+      recoveredCreatedAt = existingProfile.data().createdAt;
+    }
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const profileData = {
       uid: originalUid,
       email,
       displayName: displayName || guestDisplayName || "",
-      type: "user",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+      type: "member",
+      deviceId: deviceId || "",
+      subscription: { planType: "core", updatedAt: now },
+      createdAt: recoveredCreatedAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: now,
+    };
+    // Store previousGuestUid so getMemberSuites can redirect and find orphaned suites
+    if (previousGuestUid && previousGuestUid !== uid) {
+      profileData.previousGuestUid = previousGuestUid;
+      console.log(`[linkGoogleAccount] storing previousGuestUid=${previousGuestUid} in memberProfiles for suite redirect`);
+    }
+    await profileRef.set(profileData, { merge: true });
   }
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
-  const identity = {
-    uid,
-    email,
-    displayName: displayName || guestDisplayName || "",
-    type: "user",
-    deviceId: deviceId || "",
-    createdAt: userDoc.exists
-      ? userDoc.data()?.identity?.createdAt || now
-      : now,
-  };
-  await userRef.set(
-    {
-      identity,
-      subscription: { planType: "core", updatedAt: now },
-    },
-    { merge: true },
-  );
   return { success: true };
 });
 
@@ -1086,10 +1132,9 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
   }
   const { deviceId, email } = data;
   const batch = db.batch();
-  const userDoc = await db.collection("users").doc(uid).get();
-  const isUser = userDoc.exists;
-  if (isUser) {
-    batch.delete(userDoc.ref);
+  const profile = await _getMemberProfileByUid(uid);
+  const isMember = !!profile;
+  if (isMember) {
     if (email) {
       const cooldownRef = db
         .collection("emailCooldown")
@@ -1102,11 +1147,12 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
         ),
         reason: "account_deleted",
       });
-      // Update userProfiles to mark deletion (preserves UID mapping for reinstall recovery)
-      batch.set(db.collection("userProfiles").doc(email), {
+      // Preserve original data in memberProfiles so re-registration recovers the join date
+      batch.set(db.collection("memberProfiles").doc(email), {
         uid,
         email,
-        type: "user",
+        type: "member",
+        createdAt: profile.data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
         deletedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
     }
@@ -1122,8 +1168,8 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
   }
   batch.delete(db.collection("usage").doc(uid));
   batch.delete(db.collection("the_qag_registry").doc(uid));
-  // userSessions cleanup
-  batch.delete(db.collection("userSessions").doc(uid));
+  // memberSessions cleanup
+  batch.delete(db.collection("memberSessions").doc(uid));
   // deviceUsage/{deviceId} is NOT deleted — it carries the device's daily quota
   // across account resets. This prevents quota abuse via delete-recreate.
   const reports = await db
@@ -1131,28 +1177,27 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
     .where("uid", "==", uid)
     .get();
   reports.forEach((doc) =>
-    batch.update(doc.ref, { uid: "deleted_user" }),
+    batch.update(doc.ref, { uid: "deleted_member" }),
   );
   await batch.commit();
 
-  // Clean up synced suites (Firestore items + GCS files)
+  // Clean up synced suites under memberData/{uid}/dates/{date}/suites/{serial}
   try {
-    const suitesSnapshot = await db
-      .collectionGroup("items")
-      .where("uid", "==", uid)
-      .get();
-    if (!suitesSnapshot.empty) {
-      const suiteBatch = db.batch();
-      const gcsPromises = [];
-      suitesSnapshot.forEach((doc) => {
-        suiteBatch.delete(doc.ref);
+    const dateColRef = db.collection("memberData").doc(uid).collection("dates");
+    const dateDocs = await dateColRef.get();
+    const gcsPromises = [];
+    for (const dateDoc of dateDocs.docs) {
+      const suitesSnap = await dateDoc.ref.collection("suites").get();
+      for (const suiteDoc of suitesSnap.docs) {
+        batch.delete(suiteDoc.ref);
         gcsPromises.push(
-          bucket.file(`suites/${uid}/${doc.id}.json`).delete().catch(() => {}),
+          bucket.file(`memberData/${uid}/dates/${dateDoc.id}/suites/${suiteDoc.id}.json`)
+            .delete().catch(() => {}),
         );
-      });
-      await suiteBatch.commit();
-      await Promise.all(gcsPromises);
+      }
     }
+    await batch.commit();
+    await Promise.all(gcsPromises);
   } catch (e) {
     log("warn", `deleteAccount: suite cleanup failed for ${uid}`, { error: e.message });
   }
@@ -1308,87 +1353,97 @@ async function callDeepSeek(prompt) {
   }
 }
 
-// Push a single suite: metadata → Firestore (cheap), cases → GCS (cheap).
-exports.pushUserSuite = functions.https.onCall(async (data, context) => {
+// --------------------------------------------------------------
+// Push a suite under memberData/{tier}/{uid}/{date}/suites/{serialNumber}
+// Cases go to GCS (best-effort), metadata always persists to Firestore.
+// --------------------------------------------------------------
+exports.pushMemberSuite = functions.https.onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
-  const { suiteId, date, suiteData } = data;
-  if (!suiteId || !suiteData || !date)
-    throw new functions.https.HttpsError("invalid-argument", "suiteId, date, and suiteData required");
+  const { suiteData, date, serialNumber } = data;
+  if (!suiteData || !date)
+    throw new functions.https.HttpsError("invalid-argument", "date and suiteData required");
   if (!checkRateLimit(`pushSuite_${uid}`, 30)) {
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
-  try {
-    const { cases, ...metadata } = suiteData;
-    metadata.uid = uid;
-    metadata.date = date;
 
-    // Write cases to GCS FIRST. If this fails, the entire push fails
-    // and Firestore is never touched (no orphaned metadata).
-    if (Array.isArray(cases) && cases.length > 0) {
+  const { cases, platform, title, ...metadata } = suiteData;
+  metadata.uid = uid;
+  metadata.date = date;
+
+  const tier = await _getMemberTier(uid);
+
+  // Determine serialNumber: if re-syncing, reuse existing; else atomically generate
+  let serialStr = serialNumber;
+  if (!serialStr) {
+    await db.runTransaction(async (t) => {
+      const counterRef = db
+        .collection("memberData").doc(tier)
+        .collection(uid).doc("_counter_suites");
+      const counterDoc = await t.get(counterRef);
+      const next = (counterDoc.exists ? counterDoc.data().value : 0) + 1;
+      t.set(counterRef, { value: next });
+      serialStr = String(next);
+    });
+  }
+
+  const dateRef = db
+    .collection("memberData").doc(tier)
+    .collection(uid).doc(date);
+  const suiteRef = dateRef.collection("suites").doc(serialStr);
+
+  // Write cases to GCS (best-effort — metadata always saves)
+  let gcsError = null;
+  if (Array.isArray(cases) && cases.length > 0) {
+    try {
       const gzipped = zlib.gzipSync(JSON.stringify(cases));
       await bucket
-        .file(`suites/${uid}/${suiteId}.json`)
+        .file(`memberData/${tier}/${uid}/${date}/suites/${serialStr}.json`)
         .save(gzipped, {
           metadata: { contentType: "application/json", contentEncoding: "gzip" },
         });
+    } catch (e) {
+      gcsError = e.message;
+      log("error", `pushMemberSuite: GCS write failed for ${uid}/${date}/${serialStr}`, { error: e.message });
     }
-
-    // Only write metadata to Firestore after GCS succeeds
-    await db
-      .collection("userSuites")
-      .doc(uid)
-      .collection("suites")
-      .doc(date)
-      .collection("items")
-      .doc(suiteId)
-      .set(metadata);
-
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
   }
+
+  // Write metadata to Firestore; also ensure the date doc exists for retrieval
+  await Promise.all([
+    suiteRef.set(metadata),
+    dateRef.set({ uid, date, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true }),
+  ]);
+  return { success: true, serialNumber: serialStr, gcsError };
 });
 
-// ═══════════════════════════════════════════════════════
-// Helper: get all item docs for a uid, with index-free fallback.
-// Tries collectionGroup first; if the index is missing / still building,
-// falls back to iterating date subcollections directly.
-// ═══════════════════════════════════════════════════════
-async function _getItemsByUid(uid) {
-  try {
-    const snapshot = await db
-      .collectionGroup("items")
-      .where("uid", "==", uid)
-      .orderBy("updatedAt", "desc")
-      .get();
-    if (!snapshot.empty) return snapshot.docs;
-    // Empty result — might still be a legit "no suites" case.
-    // Fall through to the fallback below.
-  } catch (_) {
-    // Collection-group index missing / still building.
-    // Fall through to direct-path fallback.
-  }
-
-  // Fallback: iterate date subcollections directly (no index needed).
-  const docs = [];
-  const datesSnap = await db
-    .collection("userSuites")
-    .doc(uid)
-    .collection("suites")
-    .listDocuments();
-  for (const dateDoc of datesSnap) {
-    const itemsSnap = await dateDoc.collection("items").get();
-    for (const itemDoc of itemsSnap.docs) {
-      docs.push(itemDoc);
+// --------------------------------------------------------------
+// Helper: read all suite docs under memberData/{tier}/{uid}
+// Iterates {date}/suites (no collectionGroup index needed).
+// --------------------------------------------------------------
+async function _getMemberSuites(uid, tier) {
+  const suites = [];
+  const uidColRef = db.collection("memberData").doc(tier).collection(uid);
+  const dateDocs = await uidColRef.get();
+  for (const dateDoc of dateDocs.docs) {
+    if (dateDoc.id.startsWith("_")) continue; // skip counter docs
+    const suitesSnap = await dateDoc.ref.collection("suites").get();
+    for (const suiteDoc of suitesSnap.docs) {
+      suites.push({
+        _date: dateDoc.id,
+        _serial: suiteDoc.id,
+        ...suiteDoc.data(),
+      });
     }
   }
-  return docs;
+  return suites;
 }
 
-// Get all synced suites: metadata from Firestore (nested under dates), cases from GCS.
-exports.getUserSuites = functions.https.onCall(async (data, context) => {
+// --------------------------------------------------------------
+// Get all synced suites: metadata from Firestore, cases from GCS.
+// Uses memberData/{tier}/{uid}/{date}/suites/{serialNumber}.
+// --------------------------------------------------------------
+exports.getMemberSuites = functions.https.onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -1397,47 +1452,60 @@ exports.getUserSuites = functions.https.onCall(async (data, context) => {
   }
   try {
     let effectiveUid = uid;
-    let docs = await _getItemsByUid(effectiveUid);
+    const initialTier = await _getMemberTier(effectiveUid);
+    let tier = initialTier;
+    let suites = await _getMemberSuites(effectiveUid, tier);
 
-    // If empty, try the userProfiles redirect (handles reinstall where
-    // the current uid doesn't match the one under which suites were stored).
-    if (docs.length === 0) {
+    // UID redirect via memberProfiles if no suites found (handles reinstall)
+    if (suites.length === 0) {
       const email = context.auth.token?.email || data?.email;
       if (email) {
-        const profileDoc = await db.collection("userProfiles").doc(email).get();
-        if (profileDoc.exists && profileDoc.data().uid !== uid) {
-          effectiveUid = profileDoc.data().uid;
-          log("info", `getUserSuites: redirecting from ${uid} to linked uid ${effectiveUid} (email ${email})`);
-          docs = await _getItemsByUid(effectiveUid);
+        const profileDoc = await db.collection("memberProfiles").doc(email).get();
+        if (profileDoc.exists) {
+          const profileData = profileDoc.data();
+          if (profileData.uid && profileData.uid !== uid) {
+            effectiveUid = profileData.uid;
+            tier = await _getMemberTier(effectiveUid);
+            log("info", `getMemberSuites: redirecting from ${uid} to profile uid ${effectiveUid} (email ${email})`);
+            suites = await _getMemberSuites(effectiveUid, tier);
+          }
+          if (suites.length === 0 && profileData.previousGuestUid && profileData.previousGuestUid !== effectiveUid) {
+            effectiveUid = profileData.previousGuestUid;
+            tier = await _getMemberTier(effectiveUid);
+            log("info", `getMemberSuites: redirecting from ${uid} to previousGuestUid ${effectiveUid} (email ${email})`);
+            suites = await _getMemberSuites(effectiveUid, tier);
+          }
         }
       }
     }
 
-    const suites = await Promise.all(docs.map(async (doc) => {
-      const metadata = doc.data();
+    const result = await Promise.all(suites.map(async (s) => {
       let cases = [];
-
-      // Read cases from GCS only (no Firestore fallback)
       try {
-        const [content] = await bucket.file(`suites/${effectiveUid}/${doc.id}.json`).download();
-        cases = JSON.parse(zlib.gunzipSync(content).toString());
-      } catch (_) {
-        log("warn", `GCS read failed for suite ${doc.id}`, { uid: effectiveUid });
+        const [content] = await bucket
+          .file(`memberData/${tier}/${effectiveUid}/${s._date}/suites/${s._serial}.json`)
+          .download();
+        const raw = content.toString();
+        // GCS auto-decompresses when contentEncoding:gzip is set
+        cases = JSON.parse(raw);
+      } catch (e) {
+        log("warn", `GCS read failed for suite ${s._serial}: ${e.message || e}`, { uid: effectiveUid, date: s._date });
       }
-
-      // Return suiteId as "date/suiteId" so client stores composite cloud_id
-      const suiteId = metadata.date ? `${metadata.date}/${doc.id}` : doc.id;
-      return { suiteId, ...metadata, cases };
+      const suiteId = `${s._date}/${s._serial}`;
+      return { suiteId, ...s, cases };
     }));
 
-    return { success: true, suites };
+    return { success: true, suites: result };
   } catch (e) {
     return { success: false, error: e.message, suites: [] };
   }
 });
 
-// Delete a single suite: Firestore metadata (under date subcollection) + GCS cases.
-exports.deleteUserSuite = functions.https.onCall(async (data, context) => {
+// --------------------------------------------------------------
+// Delete a suite: Firestore metadata + GCS cases.
+// suiteId format: "date/serialNumber"
+// --------------------------------------------------------------
+exports.deleteMemberSuite = functions.https.onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -1445,38 +1513,33 @@ exports.deleteUserSuite = functions.https.onCall(async (data, context) => {
   if (!suiteId)
     throw new functions.https.HttpsError("invalid-argument", "suiteId required");
   try {
-    // Parse suiteId as "date/id"
     const parts = suiteId.split('/');
     if (parts.length !== 2)
-      throw new functions.https.HttpsError("invalid-argument", "suiteId must be in format 'date/id'");
-    const [date, id] = parts;
+      throw new functions.https.HttpsError("invalid-argument", "suiteId must be in format 'date/serialNumber'");
+    const [date, serial] = parts;
 
-    // Resolve effective UID (handle reinstall mismatch)
+    // Resolve effectiveUid (try current uid, then redirect via memberProfiles)
     let effectiveUid = uid;
-    const suiteRef = db.collection("userSuites").doc(effectiveUid).collection("suites").doc(date).collection("items").doc(id);
-    let suiteDoc = await suiteRef.get();
-    if (!suiteDoc.exists) {
-      const email = context.auth.token?.email;
-      if (email) {
-        const profileDoc = await db.collection("userProfiles").doc(email).get();
-        if (profileDoc.exists && profileDoc.data().uid !== uid) {
-          effectiveUid = profileDoc.data().uid;
+    const email = context.auth.token?.email;
+    if (email) {
+      const profileDoc = await db.collection("memberProfiles").doc(email).get();
+      if (profileDoc.exists) {
+        const profileData = profileDoc.data();
+        if (profileData.uid && profileData.uid !== uid) {
+          effectiveUid = profileData.uid;
+        } else if (profileData.previousGuestUid && profileData.previousGuestUid !== uid) {
+          effectiveUid = profileData.previousGuestUid;
         }
       }
     }
 
-    await db
-      .collection("userSuites")
-      .doc(effectiveUid)
-      .collection("suites")
-      .doc(date)
-      .collection("items")
-      .doc(id)
-      .delete();
+    const tier = await _getMemberTier(effectiveUid);
+    const uidDocRef = db.collection("memberData").doc(tier).collection(effectiveUid);
 
-    // Delete GCS file (ignore if missing)
+    await uidDocRef.doc(date).collection("suites").doc(serial).delete();
+
     try {
-      await bucket.file(`suites/${effectiveUid}/${id}.json`).delete();
+      await bucket.file(`memberData/${tier}/${effectiveUid}/${date}/suites/${serial}.json`).delete();
     } catch (_) {}
 
     return { success: true };

@@ -90,7 +90,7 @@ class FlowGraphGenerator {
   static Map<String, String>? _conditionDataForStep(String action, String condition, String domain, String platform) {
     if (condition == 'sql_injection') {
       return {
-        'data': "Inject SQL payload at input field: ' OR 1=1; DROP TABLE users; --",
+        'data': "Inject SQL payload at input field: ' OR 1=1; DROP TABLE members; --",
         'expected': 'Server rejects input with 400 Bad Request; SQL error is not exposed',
       };
     }
@@ -114,7 +114,7 @@ class FlowGraphGenerator {
     }
     if (condition == 'masquerade') {
       return {
-        'data': 'Set X-User-ID header to admin@example.com from attacker session',
+        'data': 'Set X-Member-ID header to admin@example.com from attacker session',
         'expected': 'Server validates identity and returns 403 Forbidden — privilege escalation blocked',
       };
     }
@@ -139,7 +139,7 @@ class FlowGraphGenerator {
     if (condition == 'expired') {
       return {
         'data': 'Use expired session token: expired_token_abc123',
-        'expected': 'Server returns 401; user redirected to login page',
+        'expected': 'Server returns 401; member redirected to login page',
       };
     }
     if (condition == 'revoked') {
@@ -221,7 +221,7 @@ class FlowGraphGenerator {
       }
     }
     if (step.contains('Dashboard') || step.contains('Landing') || step.contains('Status') || step.contains('Status')) {
-      return 'Verify landing page loads with user profile and welcome message visible';
+      return 'Verify landing page loads with member profile and welcome message visible';
     }
     return _domainAwareData(domain, step, index);
   }
@@ -229,7 +229,7 @@ class FlowGraphGenerator {
   static String _domainAwareData(String domain, String step, int index) {
     if (domain == 'Identity') {
       if (step.contains('Forgot') || step.contains('Reset')) return 'registered@example.com / new password link';
-      return 'user@domain.com / auth payload prepared with credentials';
+      return 'member@domain.com / auth payload prepared with credentials';
     }
     if (domain == 'Commerce') {
       if (step.contains('Cart') || step.contains('Bag')) return 'Cart contains Wireless Headphones SKU-7755 — in stock, \$49.99';
@@ -247,7 +247,7 @@ class FlowGraphGenerator {
     if (step.startsWith('Verify') || step.startsWith('Check') || step.startsWith('Assert')) {
       if (step.contains('Status') || step.contains('Status')) return 'Build status shows "success" with matching version tag';
       if (step.contains('Badge') || step.contains('Count')) return 'Cart badge updates to show correct item count; UI reflects the change';
-      if (step.contains('Dashboard') || step.contains('Landing')) return 'Dashboard loads with user profile data, navigation menu, and recent activity';
+      if (step.contains('Dashboard') || step.contains('Landing')) return 'Dashboard loads with member profile data, navigation menu, and recent activity';
       return 'System displays accurate data matching source of truth — no discrepancies';
     }
     if (step.startsWith('Post') || step.startsWith('Send') || step.startsWith('Trigger')) {
@@ -261,7 +261,7 @@ class FlowGraphGenerator {
       return 'Validation error message appears inline; form does not submit; field borders turn red';
     }
     if (step.contains('Login') || step.contains('Sign') || step.contains('Auth')) {
-      return 'User is redirected to dashboard/home page with authenticated session and profile visible';
+      return 'Member is redirected to dashboard/home page with authenticated session and profile visible';
     }
     if (step.contains('OTP') || step.contains('Token') || step.contains('Verif')) {
       return 'System accepts OTP and proceeds to next step; error if expired or wrong';

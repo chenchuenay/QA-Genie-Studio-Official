@@ -10,6 +10,8 @@ import 'package:qa_genie/features/monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/features/suites/ui/screens/suites_screen.dart';
 import 'package:qa_genie/features/account/ui/account_screen.dart';
 import 'package:qa_genie/features/generation/ui/screens/home_screen.dart';
+import 'package:qa_genie/features/auth/services/auth_service.dart';
+import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/update/logic/update_manager.dart';
 import 'package:qa_genie/features/update/ui/update_required_screen.dart';
@@ -67,6 +69,10 @@ class MainScreenState extends State<MainScreen> {
 
   void _switchToGenerate() => setState(() => _currentIndex = 0);
 
+  Future<void> _triggerSync() async {
+    if (!AuthService.isGuest) _suitesKey.currentState?.triggerSync();
+  }
+
   void startWalkthrough() {
     WalkthroughOverlay.show(
       context: context,
@@ -75,7 +81,7 @@ class MainScreenState extends State<MainScreen> {
           key: HomeScreen.moduleKey,
           icon: Icons.edit,
           title: 'Module Name',
-          description: 'Start here — give your module a clear name, like \'User Authentication\'.',
+          description: 'Start here — give your module a clear name, like \'Member Authentication\'.',
         ),
         WalkthroughStep(
           key: HomeScreen.featureKey,
@@ -123,9 +129,9 @@ class MainScreenState extends State<MainScreen> {
         appBar: AppBar(
           backgroundColor: const Color(0xFF0D1018),
           elevation: 0,
-          title: const Text(
-            "QA Genie Studio",
-            style: TextStyle(
+          title: Text(
+            _currentIndex == 0 ? 'QA Genie Studio' : 'Suites',
+            style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
             ),
@@ -149,6 +155,12 @@ class MainScreenState extends State<MainScreen> {
                           onStartWalkthrough: startWalkthrough,
                         ),
                       ),
+              ),
+            if (_currentIndex == 1 && !AuthService.isGuest)
+              IconButton(
+                icon: const Icon(Icons.cloud_sync, color: Color(0xFFB6BDCC)),
+                tooltip: 'Sync Suites',
+                onPressed: isGenerating ? null : _triggerSync,
               ),
             IconButton(
               key: _starKey,

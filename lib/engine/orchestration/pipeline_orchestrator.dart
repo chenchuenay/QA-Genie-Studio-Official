@@ -432,7 +432,7 @@ class PipelineOrchestrator {
         // Only include data that looks like test input (email, password, etc.)
         if (data.contains('@') ||
             data.toLowerCase().contains('pass') ||
-            data.contains('user') ||
+            data.contains('member') ||
             data.length > 3) {
           if (buffer.isNotEmpty) buffer.write('&');
           buffer.write(data);

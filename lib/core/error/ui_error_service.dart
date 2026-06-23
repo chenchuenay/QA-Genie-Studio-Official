@@ -93,23 +93,23 @@ timestamp=${event.timestamp.toIso8601String()}
     required String screen,
     required ErrorStage stage,
     required ErrorSeverity severity,
-    required String userMessage,
+    required String memberMessage,
     Object? error,
     StackTrace? stack,
   }) {
     show(
       title: _titleFor(severity),
-      message: userMessage,
+      message: memberMessage,
       category: '${source.name}.${stage.name}.$screen',
       exception: error,
       stackTrace: stack,
       isFatal: severity == ErrorSeverity.fatal,
     );
 
-    // No longer showing SnackBar to user
+    // No longer showing SnackBar to member
   }
 
-  static String userFriendlyMessage(Object error) {
+  static String memberFriendlyMessage(Object error) {
     if (error is NetworkException) {
       return 'Network connection failed. Please check connectivity.';
     }

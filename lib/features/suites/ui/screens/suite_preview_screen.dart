@@ -137,7 +137,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         screen: 'SuitePreviewScreen',
         stage: ErrorStage.unknown,
         severity: ErrorSeverity.error,
-        userMessage: 'Save failed. Please try again.',
+        memberMessage: 'Save failed. Please try again.',
         error: e,
         stack: stack,
       );
@@ -169,7 +169,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         screen: 'SuitePreviewScreen',
         stage: ErrorStage.export,
         severity: ErrorSeverity.error,
-        userMessage: 'Export failed. Please try again.',
+        memberMessage: 'Export failed. Please try again.',
         error: e,
         stack: stackTrace,
       );

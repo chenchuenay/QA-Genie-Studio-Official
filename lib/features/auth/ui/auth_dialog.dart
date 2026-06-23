@@ -42,6 +42,23 @@ class _AuthDialogState extends State<AuthDialog> {
   bool _isLoading = false;
   bool _isGuestLoading = false;
   String? _errorMessage;
+  Timer? _dotTimer;
+  int _dotCount = 0;
+
+  @override
+  void dispose() {
+    _dotTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startConnectingAnimation() {
+    _dotCount = 0;
+    _dotTimer?.cancel();
+    _dotTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!mounted) return;
+      setState(() => _dotCount = (_dotCount + 1) % 4);
+    });
+  }
 
   Future<void> _handleContinueWithGoogle() async {
     unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: ENTER'));
@@ -54,6 +71,7 @@ class _AuthDialogState extends State<AuthDialog> {
       _isLoading = true;
       _errorMessage = null;
     });
+    _startConnectingAnimation();
     try {
       unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: calling linkWithGoogle'));
       await AuthService.linkWithGoogle();
@@ -62,12 +80,13 @@ class _AuthDialogState extends State<AuthDialog> {
       await AuthService.completePostLoginFlow();
 
       if (!mounted) return;
+      _dotTimer?.cancel();
 
       // Welcome confirmation
-      final user = AuthService.currentUser;
-      String displayName = user?.displayName ?? '';
-      if (displayName.isEmpty && user != null) {
-        for (final info in user.providerData) {
+      final member = AuthService.currentMember;
+      String displayName = member?.displayName ?? '';
+      if (displayName.isEmpty && member != null) {
+        for (final info in member.providerData) {
           if (info.providerId == 'google.com' && (info.displayName?.isNotEmpty == true)) {
             displayName = info.displayName!;
             break;
@@ -129,6 +148,7 @@ class _AuthDialogState extends State<AuthDialog> {
       unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: SUCCESS auth dialog popped'));
     } catch (e) {
       if (!mounted) return;
+      _dotTimer?.cancel();
       unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: CAUGHT $e'));
       setState(() {
         _errorMessage = _friendlyAuthError(e);
@@ -167,12 +187,12 @@ class _AuthDialogState extends State<AuthDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final user = AuthService.currentUser;
-    final isNewUser = user == null;
-    final displayName = user?.displayName ?? '';
-    final welcomeText = !isNewUser && displayName.isNotEmpty
+    final member = AuthService.currentMember;
+    final isNewMember = member == null;
+    final displayName = member?.displayName ?? '';
+    final welcomeText = !isNewMember && displayName.isNotEmpty
         ? 'Welcome back, ${displayName.split(' ').first}'
-        : (isNewUser ? 'Welcome to QAG' : 'Welcome back to QAG');
+        : (isNewMember ? 'Welcome to QAG' : 'Welcome back to QAG');
 
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
@@ -242,26 +262,52 @@ class _AuthDialogState extends State<AuthDialog> {
                 SizedBox(
                   width: double.infinity,
                   height: 54,
-                  child: ElevatedButton.icon(
-                    onPressed: _isLoading || _isGuestLoading ? null : _handleContinueWithGoogle,
-                    icon: _isLoading 
-                      ? const SizedBox.shrink() 
-                      : const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
-                    label: const Text(
-                            'Continue with Google',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
+                  child: _isLoading
+                    ? ElevatedButton(
+                        onPressed: null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent.withOpacity(0.7),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 30, end: 0),
+                          duration: const Duration(milliseconds: 600),
+                          builder: (_, value, __) => Transform.translate(
+                            offset: Offset(0, value),
+                            child: Opacity(
+                              opacity: 1 - (value / 30),
+                              child: Text(
+                                'Connecting with Google${'.' * _dotCount}',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
                             ),
                           ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: _isGuestLoading ? null : _handleContinueWithGoogle,
+                        icon: const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
+                        label: const Text(
+                          'Continue with Google',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
                 ),
                 if (widget.showGuestButton) ...[
                   const SizedBox(height: 12),

@@ -16,6 +16,7 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart'; // ✅ correct import
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
+import 'package:qa_genie/core/ui/network_ui_helper.dart';
 
 class SuitesScreen extends StatefulWidget {
   final VoidCallback? onGenerate;
@@ -57,6 +58,7 @@ class SuitesScreenState extends State<SuitesScreen> {
   }
 
   Future<void> _checkCloud() async {
+    if (!await NetworkUiHelper.ensureProductionOnline(context)) return;
     final pulled = await CloudSyncService.pullRemoteSuites();
     if (!mounted) return;
     if (pulled > 0) {
@@ -116,6 +118,10 @@ class SuitesScreenState extends State<SuitesScreen> {
 
   void refresh() {
     _refreshSuites();
+  }
+
+  Future<void> triggerSync() async {
+    await _syncAndReload();
   }
 
   Future<bool?> _confirmDelete(int id) async {
@@ -413,11 +419,12 @@ class SuitesScreenState extends State<SuitesScreen> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              TextButton.icon(
-                                onPressed: _checkCloud,
-                                icon: const Icon(Icons.cloud_sync, size: 18),
-                                label: const Text('Check cloud'),
-                              ),
+                              if (!AuthService.isGuest)
+                                TextButton.icon(
+                                  onPressed: _checkCloud,
+                                  icon: const Icon(Icons.cloud_sync, size: 18),
+                                  label: const Text('Check cloud'),
+                                ),
                             ],
                           ),
                         ),

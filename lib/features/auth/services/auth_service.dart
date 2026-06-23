@@ -10,6 +10,7 @@ import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qa_genie/firebase/analytics/analytics_service.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -29,17 +30,18 @@ class AuthService {
   }
 
   static Stream<User?> get authStateChanges => _auth.authStateChanges();
-  static User? get currentUser => _auth.currentUser;
-  static bool get isAnonymous => currentUser?.isAnonymous ?? false;
+  static User? get currentMember => _auth.currentUser;
+  static bool get isMember => currentMember != null && !isGuest;
+  static bool get isAnonymous => currentMember?.isAnonymous ?? false;
   static bool get isGuest {
     try {
-      final user = _auth.currentUser;
-      if (user == null) return true;
-      // Linked with Google → user account, not guest
-      for (final info in user.providerData) {
+      final member = _auth.currentUser;
+      if (member == null) return true;
+      // Linked with Google → this is a member, not a guest
+      for (final info in member.providerData) {
         if (info.providerId == 'google.com') return false;
       }
-      return user.uid.startsWith('guest_');
+      return member.uid.startsWith('guest_');
     } catch (_) {
       return true; // Firebase not initialized — safe default
     }
@@ -68,20 +70,25 @@ class AuthService {
         final info = await DeviceInfoPlugin().androidInfo;
         androidId = info.id;
       } catch (_) {}
-      final token = await FunctionsService.getGuestToken(
+      final tokenResult = await FunctionsService.getGuestToken(
         deviceId: deviceId,
         forceReturning: forceReturning,
         caller: caller,
         androidId: androidId,
       );
-      await _writeLog('signInAsGuest | got token from cloud function');
+      final token = tokenResult['token'] as String;
+      final guestTier = tokenResult['guestTier'] as String?;
+      await _writeLog('signInAsGuest | got token from cloud function | guestTier=$guestTier');
       final credential = await _auth.signInWithCustomToken(token);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_returning_guest', forceReturning);
+      await prefs.setBool('is_returning_guest', guestTier == 'returning');
 
       if (!everCreated) {
         await DeviceUtils.setGuestEverCreated();
       }
+
+      // Invalidate usage cache so next quota fetch reflects correct tier
+      UsageManager.invalidateCache();
 
       await _writeLog('signInAsGuest SUCCESS | uid=${credential.user?.uid}');
       return credential;
@@ -131,11 +138,12 @@ class AuthService {
       );
 
       final User? current = _auth.currentUser;
-      await _writeLog('linkWithGoogle | currentUser=${current?.uid} | isAnonymous=${current?.isAnonymous}');
+      final String? previousGuestUid = current != null && current.uid.startsWith('guest_') ? current.uid : null;
+      await _writeLog('linkWithGoogle | currentMember=${current?.uid} | previousGuestUid=$previousGuestUid');
       UserCredential result;
 
       if (current != null) {
-        await _writeLog('linkWithGoogle | linking credential to existing user');
+        await _writeLog('linkWithGoogle | linking credential to existing member');
         try {
           result = await current.linkWithCredential(credential);
           await _writeLog('linkWithGoogle | linked OK, uid=${result.user?.uid}');
@@ -150,19 +158,20 @@ class AuthService {
           }
         }
       } else {
-        await _writeLog('linkWithGoogle | no current user, fresh Google sign-in');
+        await _writeLog('linkWithGoogle | no current member, fresh Google sign-in');
         result = await _auth.signInWithCredential(credential);
       }
 
-      final user = result.user!;
-      await _writeLog('linkWithGoogle | result uid=${user.uid} | isAnonymous=${user.isAnonymous}');
+      final member = result.user!;
+      await _writeLog('linkWithGoogle | result uid=${member.uid} | isAnonymous=${member.isAnonymous}');
       final deviceId = await DeviceUtils.getUniqueId();
 
       try {
         await FunctionsService.linkGoogleAccount(
-          email: user.email ?? googleUser.email,
-          displayName: user.displayName ?? googleUser.displayName ?? '',
+          email: member.email ?? googleUser.email,
+          displayName: member.displayName ?? googleUser.displayName ?? '',
           deviceId: deviceId,
+          previousGuestUid: previousGuestUid,
         );
         await _writeLog('linkWithGoogle | linkGoogleAccount cloud function succeeded');
       } catch (e) {

@@ -35,13 +35,13 @@ exports.migrateDataToPods = functions.https.onCall(async (data, context) => {
     // Pro interest
     totalProInterest: 0,
     proTabClicks: 0,
-    uniqueProInterestedUsers: 0,
+    uniqueProInterestedMembers: 0,
     // Ratings
     totalRatings: 0,
     ratingBreakdown: { 2: 0, 3: 0, 4: 0, 5: 0 },
-    // User counters
+    // Member counters
     guestCounter: 0,
-    totalUsers: 0,
+    totalMembers: 0,
   };
 
   // Remove any old nested `users` field if present
@@ -66,17 +66,17 @@ exports.migrateDataToPods = functions.https.onCall(async (data, context) => {
       const usageData = doc.data();
       const isGuest = usageData.isGuest || false;
 
-      // ---- Identity pod (users or guests) ----
-      const podRef = db.collection(isGuest ? "guests" : "users").doc(uid);
+      // ---- Identity pod (members or guests) ----
+      const podRef = db.collection(isGuest ? "guests" : "members").doc(uid);
       const identity = {
         uid: uid,
-        type: isGuest ? "guest" : "user",
+        type: isGuest ? "guest" : "member",
         createdAt:
           usageData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
         displayName:
           usageData.displayName || (isGuest ? `Guest_${uid.substr(0, 6)}` : ""),
       };
-      // Only add email for non‑guest users
+      // Only add email for non‑guest members
       if (!isGuest && usageData.email) {
         identity.email = usageData.email;
       }
@@ -108,7 +108,7 @@ exports.migrateDataToPods = functions.https.onCall(async (data, context) => {
         .set(
           {
             uid: uid,
-            type: isGuest ? "guest" : "user",
+            type: isGuest ? "guest" : "member",
             displayName: identity.displayName,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           },
@@ -123,12 +123,12 @@ exports.migrateDataToPods = functions.https.onCall(async (data, context) => {
   }
 
   // ====================================================================
-  // 3. (OPTIONAL) RECOMPUTE guestCounter & totalUsers FROM EXISTING DOCS
+  // 3. (OPTIONAL) RECOMPUTE guestCounter & totalMembers FROM EXISTING DOCS
   // ====================================================================
-  const usersCount = (await db.collection("users").get()).size;
+  const membersCount = (await db.collection("members").get()).size;
   const guestsCount = (await db.collection("guests").get()).size;
   await globalRef.update({
-    totalUsers: usersCount + guestsCount,
+    totalMembers: membersCount + guestsCount,
     guestCounter: guestsCount,
   });
 
@@ -136,13 +136,13 @@ exports.migrateDataToPods = functions.https.onCall(async (data, context) => {
     `✅ Migration completed: ${migrated} succeeded, ${errors} errors`,
   );
   console.log(
-    `   totalUsers=${usersCount + guestsCount}, guestCounter=${guestsCount}`,
+    `   totalMembers=${membersCount + guestsCount}, guestCounter=${guestsCount}`,
   );
 
   return {
     migrated,
     errors,
-    totalUsers: usersCount + guestsCount,
+    totalMembers: membersCount + guestsCount,
     guestCounter: guestsCount,
   };
 });

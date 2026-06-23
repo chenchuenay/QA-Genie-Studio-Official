@@ -401,7 +401,7 @@ class QaHeuristicsEngine {
       'outcome is correct',
       'system responds correctly',
       'appropriate response',
-      'user can proceed',
+      'member can proceed',
       'everything is fine',
       'no errors occur',
       'system is stable',
@@ -416,18 +416,18 @@ class QaHeuristicsEngine {
     String title,
   ) {
     if (category == 'security')
-      return 'The browser prevents the unsafe operation, displays a secure validation message, maintains the current session security, and ensures no sensitive system details or debug information are visible to the user.';
+      return 'The browser prevents the unsafe operation, displays a secure validation message, maintains the current session security, and ensures no sensitive system details or debug information are visible to the member.';
     if (category == 'negative' || category == 'validation')
-      return 'The application blocks the form submission, highlights the invalid fields with an error state, maintains all other user-entered data, and displays a specific, actionable error message (e.g., "Invalid email format") near the affected input.';
+      return 'The application blocks the form submission, highlights the invalid fields with an error state, maintains all other member-entered data, and displays a specific, actionable error message (e.g., "Invalid email format") near the affected input.';
     if (category == 'boundary')
       return 'The input field enforces the character limit, prevents further typing once the limit is reached, and displays a "limit reached" indicator or character counter that matches the requirement.';
     if (category == 'session') {
       final text = '$subject $title'.toLowerCase();
       if (_hasAny(text, ['refresh', 'persist']))
-        return 'The authenticated session remains active after the browser refresh, the user stays on the protected page, and no duplicate login prompt or lost form state appears.';
+        return 'The authenticated session remains active after the browser refresh, the member stays on the protected page, and no duplicate login prompt or lost form state appears.';
       if (_hasAny(text, ['concurrent', 'leakage']))
         return 'Each browser session keeps its own authenticated state, account data from one session never appears in the other session, and logging out from one session does not expose protected data.';
-      return 'The application redirects the user to the login page upon session expiry, ensures all local session data is cleared, and verifies that restricted pages are no longer accessible without re-authentication.';
+      return 'The application redirects the member to the login page upon session expiry, ensures all local session data is cleared, and verifies that restricted pages are no longer accessible without re-authentication.';
     }
     if (domain == 'payment')
       return 'The checkout page displays a unique transaction reference, updates the history view with the appropriate status, and ensures the payment action is disabled to prevent duplicate processing.';
@@ -446,10 +446,10 @@ class QaHeuristicsEngine {
     if (category == 'boundary')
       return 'The app enforces the input constraint without performance lag, ensuring that long inputs are handled gracefully (e.g., truncated or wrapped) within the mobile screen boundaries.';
     if (category == 'session')
-      return 'The application session is updated in secure storage, the app transitions smoothly between foreground and background without data loss, and the user is routed to the appropriate start screen if the session is invalid.';
+      return 'The application session is updated in secure storage, the app transitions smoothly between foreground and background without data loss, and the member is routed to the appropriate start screen if the session is invalid.';
     if (domain == 'payment')
       return 'The app displays the final payment status screen, provides a shareable transaction reference, and updates the local view to reflect the new account or subscription status.';
-    return 'The $subject screen accepts the user gesture, performs a smooth visual transition to the success state, and displays a unique reference number for the completed operation.';
+    return 'The $subject screen accepts the member gesture, performs a smooth visual transition to the success state, and displays a unique reference number for the completed operation.';
   }
 
   static String _apiExpected(String category, String domain, String subject) {

@@ -13,7 +13,7 @@ class IdentityDomain {
       EntityType.credential,
       EntityType.session,
       EntityType.token,
-      EntityType.user,
+      EntityType.member,
       EntityType.profile,
       EntityType.role,
       EntityType.permission,

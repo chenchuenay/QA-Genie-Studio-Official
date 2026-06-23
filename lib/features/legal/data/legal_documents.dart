@@ -12,8 +12,8 @@ Last updated: June 18, 2026
 1. Data We Collect
 
 Account Identity:
-- Guest users: A persistent device identifier (Firebase Installation ID) is used to create a temporary guest token and associate usage with your device. Guest UIDs follow the format guest_{timestamp}_{random}.
-- Google Sign-In users: We receive your Firebase UID, email address, and display name from Google. We do not store your password.
+- Guest members: A persistent device identifier (Firebase Installation ID) is used to create a temporary guest token and associate usage with your device. Guest UIDs follow the format guest_{timestamp}_{random}.
+- Google Sign-In members: We receive your Firebase UID, email address, and display name from Google. We do not store your password.
 - Device ID: Generated from Firebase Installations and cached locally in SharedPreferences. Sent with generation requests for quota enforcement and account operations.
 
 AI Generation:
@@ -30,7 +30,7 @@ Analytics:
 - Firebase Analytics tracks: app opens, screen views, generation events (started/completed/failed), exports, rewarded ad completions, upgrade interest, and bug report submissions. Parameters include platform, mode, counts, durations, and categories.
 
 AdMob:
-- Rewarded ads (user-initiated only) may involve collection of advertising identifiers by the Google AdMob SDK per their policy.
+- Rewarded ads (member-initiated only) may involve collection of advertising identifiers by the Google AdMob SDK per their policy.
 
 2. Third-Party Services
 - Firebase (Google): Authentication, Firestore, Cloud Functions, Analytics, App Check, Installations
@@ -127,8 +127,8 @@ Last updated: June 18, 2026
 QA Genie operates on a freemium model. Some features require watching a rewarded advertisement.
 
 1. Rewarded Ads (Opt-In)
-- Free-tier users may unlock additional generation and export capacity by watching rewarded video ads through Google AdMob.
-- Ads are user-initiated only — you choose when to watch an ad.
+- Free-tier members may unlock additional generation and export capacity by watching rewarded video ads through Google AdMob.
+- Ads are member-initiated only — you choose when to watch an ad.
 - A transaction token is generated upon ad completion and sent to our backend for verification.
 
 2. Data & AdMob
@@ -137,7 +137,7 @@ QA Genie operates on a freemium model. Some features require watching a rewarded
 - You can opt out of ad personalization via Android Settings → Google → Ads → Opt out of Ads Personalization.
 
 3. Ad-Free Pro Tier
-- Pro tier users experience no ads and bypass all ad-supported limitations.
+- Pro tier members experience no ads and bypass all ad-supported limitations.
 - Pro status is managed via internal subscription verification logic.
 
 4. No Intrusive Ads

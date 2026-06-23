@@ -48,7 +48,7 @@ class CoveragePlanner {
       }
     }
 
-    // Default category distribution according to user specification
+    // Default category distribution according to member specification
     return _defaultPlan();
   }
 
