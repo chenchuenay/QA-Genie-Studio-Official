@@ -110,10 +110,20 @@ class _AuthDialogState extends State<AuthDialog> {
 
       // Step 3: Check session conflict BEFORE linking
       final deviceId = await DeviceUtils.getUniqueId();
-      final sessionCheck = await FunctionsService.checkSessionByEmail(
-        email: googleAccount.email,
-        deviceId: deviceId,
-      );
+      Map<String, dynamic> sessionCheck;
+      try {
+        sessionCheck = await FunctionsService.checkSessionByEmail(
+          email: googleAccount.email,
+          deviceId: deviceId,
+        );
+      } catch (e) {
+        debugPrint('⚠️ Auth: checkSessionByEmail threw — $e');
+        sessionCheck = {'conflict': false};
+      }
+      if (sessionCheck['error'] != null) {
+        debugPrint('⚠️ Auth: checkSessionByEmail error — ${sessionCheck['error']}');
+        sessionCheck = {'conflict': false};
+      }
 
       if (sessionCheck['conflict'] == true) {
         if (!mounted) return;
@@ -359,36 +369,26 @@ class _AuthDialogState extends State<AuthDialog> {
                     onPressed: _isLoading || _isGuestLoading ? null : _handleContinueWithGoogle,
                     icon: const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
                     label: _isLoading
-                      ? TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 30, end: 0),
-                          duration: const Duration(milliseconds: 600),
-                          builder: (_, value, __) => Transform.translate(
-                            offset: Offset(0, value),
-                            child: Opacity(
-                              opacity: 1 - (value / 30),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text(
-                                    'Continue with Google',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${'.' * _dotCount}',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black,
-                                    ),
-                                  ),
-                                ],
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Connecting to Google',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
                               ),
                             ),
-                          ),
+                            Text(
+                              '${'.' * _dotCount}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ],
                         )
                       : const Text(
                           'Continue with Google',

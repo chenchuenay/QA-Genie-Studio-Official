@@ -622,7 +622,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
               ),
             ),
             const Padding(
-              padding: EdgeInsets.only(bottom: 4),
+              padding: EdgeInsets.zero,
               child: Text(
                 'Hybrid-logic generation orchestrated. Please review/adjust before export.',
                 textAlign: TextAlign.center,
@@ -634,10 +634,9 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
               ),
             ),
 
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: SizedBox(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
@@ -654,7 +653,6 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                       ),
                     ),
                   ),
-                ),
               ),
             ),
           ],

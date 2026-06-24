@@ -85,7 +85,11 @@ class _SplashScreenState extends State<SplashScreen> {
           force: false,
         );
       } catch (e) {
-        debugPrint('⚠️ Splash: registerSession failed — $e');
+        debugPrint('⚠️ Splash: registerSession threw — $e');
+      }
+      if (sessionResult['error'] != null) {
+        debugPrint('⚠️ Splash: registerSession error — ${sessionResult['error']}');
+        sessionResult = {'conflict': false};
       }
       if (sessionResult['conflict'] == true) {
         if (!mounted) return;

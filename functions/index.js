@@ -97,32 +97,45 @@ function sanitisePrompt(prompt) {
 // CHECK SESSION BY EMAIL (before linking, auth dialog)
 // --------------------------------------------------------------
 exports.checkSessionByEmail = functions.https.onCall(async (data, context) => {
-  if (!context.auth)
-    throw new functions.https.HttpsError("unauthenticated", "Auth required");
-  if (!checkRateLimit(`checkSession_${context.auth.uid}`, 10)) {
-    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
-  }
+  // No auth required — called before the user is signed in (auth dialog flow).
   const { email, deviceId } = data;
   if (!email || !deviceId)
     throw new functions.https.HttpsError("invalid-argument", "email and deviceId required");
+  // Rate limit by email since no auth uid is available
+  if (!checkRateLimit(`checkSession_${email}`, 10)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+
+  log("info", `checkSessionByEmail: email=${email} deviceId=${deviceId}`);
 
   const profileDoc = await db.collection("memberProfiles").doc(email).get();
-  if (!profileDoc.exists) return { conflict: false };
+  if (!profileDoc.exists) {
+    log("info", "checkSessionByEmail: no profile found");
+    return { conflict: false };
+  }
 
   const profileData = profileDoc.data();
   const uid = profileData.uid;
   const tier = profileData.subscription?.planType === "pro" ? "pro" : "core";
+  log("info", `checkSessionByEmail: profile uid=${uid} tier=${tier}`);
 
   const sessionRef = db.collection("memberData").doc(tier).collection(uid).doc("_session");
   const session = await sessionRef.get();
-  if (!session.exists) return { conflict: false, uid, tier };
-  if (session.data().deviceId === deviceId) return { conflict: false, uid, tier };
+  if (!session.exists) {
+    log("info", "checkSessionByEmail: no session doc found");
+    return { conflict: false, uid, tier };
+  }
+  const storedDeviceId = session.data().deviceId;
+  log("info", `checkSessionByEmail: session deviceId=${storedDeviceId} vs incoming=${deviceId}`);
+  if (storedDeviceId === deviceId) return { conflict: false, uid, tier };
 
   return { conflict: true, uid, tier };
 });
 
 // --------------------------------------------------------------
 // REGISTER SESSION (after linking or cold start)
+// Uses profile uid (not auth uid) for session path to handle
+// uid changes after reinstall.
 // --------------------------------------------------------------
 exports.registerSession = functions.https.onCall(async (data, context) => {
   if (!context.auth)
@@ -130,27 +143,43 @@ exports.registerSession = functions.https.onCall(async (data, context) => {
   if (!checkRateLimit(`registerSession_${context.auth.uid}`, 20)) {
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
-  const uid = context.auth.uid;
+  const authUid = context.auth.uid;
   const { deviceId, force } = data;
   if (!deviceId)
     throw new functions.https.HttpsError("invalid-argument", "deviceId required");
 
-  const profile = await _getMemberProfileByUid(uid);
+  log("info", `registerSession: authUid=${authUid} deviceId=${deviceId} force=${force}`);
+
+  // Try uid lookup first, fall back to email (handles reinstall uid change)
+  let profile = await _getMemberProfileByUid(authUid);
+  if (!profile && context.auth.token?.email) {
+    log("info", `registerSession: uid lookup failed, trying email ${context.auth.token.email}`);
+    const doc = await db.collection("memberProfiles").doc(context.auth.token.email).get();
+    if (doc.exists) {
+      profile = { email: doc.id, ref: doc.ref, data: doc.data() };
+    }
+  }
   if (!profile) {
-    // No profile yet (mid sign-up) — allow but don't persist
+    log("info", "registerSession: no profile found at all");
     return { conflict: false, tier: "core" };
   }
-  const tier = profile.data.subscription?.planType === "pro" ? "pro" : "core";
 
-  const sessionRef = db.collection("memberData").doc(tier).collection(uid).doc("_session");
+  // Use profile uid for session path — this is what checkSessionByEmail also uses
+  const profileUid = profile.data.uid;
+  const tier = profile.data.subscription?.planType === "pro" ? "pro" : "core";
+  log("info", `registerSession: resolved profileUid=${profileUid} tier=${tier}`);
+
+  const sessionRef = db.collection("memberData").doc(tier).collection(profileUid).doc("_session");
   const existing = await sessionRef.get();
   if (existing.exists && existing.data().deviceId !== deviceId && !force) {
+    log("info", "registerSession: conflict detected");
     return { conflict: true, tier };
   }
   await sessionRef.set({
     deviceId,
     lastActive: admin.firestore.FieldValue.serverTimestamp(),
   });
+  log("info", "registerSession: session saved");
   return { conflict: false, tier };
 });
 
@@ -258,11 +287,9 @@ exports.generate = functions
       const guestRef = db.collection("guests").doc(uid);
       const deviceRef = db.collection("deviceUsage").doc(deviceId);
 
-      // Dedup check BEFORE calling DeepSeek — prevents wasted API calls on retries
+      // Dedup check BEFORE calling DeepSeek — prevents double charges
       const reqSnap = await reqRef.get();
       if (reqSnap.exists) {
-        const cached = reqSnap.data()?.response;
-        if (cached) return { success: true, data: cached };
         return { success: false, error: { code: "ALREADY_PROCESSED" } };
       }
 
@@ -446,7 +473,7 @@ exports.generate = functions
         t.set(reqRef, {
           uid,
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
-          response: { testCases: responseTestCases, usage: responseUsage },
+          // No response field — never store test case content per data policy
         });
         t.set(gRef, {
           totalGenerations: admin.firestore.FieldValue.increment(1),
