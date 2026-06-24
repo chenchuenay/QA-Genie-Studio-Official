@@ -93,6 +93,67 @@ function sanitisePrompt(prompt) {
   return prompt.replace(/<[^>]*>/g, "").replace(/[<>]/g, "").slice(0, 12000);
 }
 
+// --------------------------------------------------------------
+// CHECK SESSION BY EMAIL (before linking, auth dialog)
+// --------------------------------------------------------------
+exports.checkSessionByEmail = functions.https.onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  if (!checkRateLimit(`checkSession_${context.auth.uid}`, 10)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+  const { email, deviceId } = data;
+  if (!email || !deviceId)
+    throw new functions.https.HttpsError("invalid-argument", "email and deviceId required");
+
+  const profileDoc = await db.collection("memberProfiles").doc(email).get();
+  if (!profileDoc.exists) return { conflict: false };
+
+  const profileData = profileDoc.data();
+  const uid = profileData.uid;
+  const tier = profileData.subscription?.planType === "pro" ? "pro" : "core";
+
+  const sessionRef = db.collection("memberData").doc(tier).collection(uid).doc("_session");
+  const session = await sessionRef.get();
+  if (!session.exists) return { conflict: false, uid, tier };
+  if (session.data().deviceId === deviceId) return { conflict: false, uid, tier };
+
+  return { conflict: true, uid, tier };
+});
+
+// --------------------------------------------------------------
+// REGISTER SESSION (after linking or cold start)
+// --------------------------------------------------------------
+exports.registerSession = functions.https.onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  if (!checkRateLimit(`registerSession_${context.auth.uid}`, 20)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+  const uid = context.auth.uid;
+  const { deviceId, force } = data;
+  if (!deviceId)
+    throw new functions.https.HttpsError("invalid-argument", "deviceId required");
+
+  const profile = await _getMemberProfileByUid(uid);
+  if (!profile) {
+    // No profile yet (mid sign-up) — allow but don't persist
+    return { conflict: false, tier: "core" };
+  }
+  const tier = profile.data.subscription?.planType === "pro" ? "pro" : "core";
+
+  const sessionRef = db.collection("memberData").doc(tier).collection(uid).doc("_session");
+  const existing = await sessionRef.get();
+  if (existing.exists && existing.data().deviceId !== deviceId && !force) {
+    return { conflict: true, tier };
+  }
+  await sessionRef.set({
+    deviceId,
+    lastActive: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { conflict: false, tier };
+});
+
 // ------------------------------------------------------------------
 // HELPER: Get or create registry counter (total members+guests ever)
 // ------------------------------------------------------------------
@@ -1058,16 +1119,23 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
   }
 
   if (!guestDoc.exists) {
-    console.log(`[linkGoogleAccount] FRESH MEMBER | creating usage doc`);
-    await usageRef.set({
-      type: "member",
-      metrics: {
-        rewardedGenCount: 0,
-        proFreeGenCount: 0,
-        lifetimeGeneratedCases: 0,
-        lastReset: today(),
-      },
-    });
+    const existingUsage = await usageRef.get();
+    if (existingUsage.exists) {
+      // Returning member — preserve existing metrics, don't nuke quota
+      console.log(`[linkGoogleAccount] RETURNING MEMBER | preserving usage metrics`);
+      await usageRef.set({ type: "member" }, { merge: true });
+    } else {
+      console.log(`[linkGoogleAccount] FRESH MEMBER | creating usage doc`);
+      await usageRef.set({
+        type: "member",
+        metrics: {
+          rewardedGenCount: 0,
+          proFreeGenCount: 0,
+          lifetimeGeneratedCases: 0,
+          lastReset: today(),
+        },
+      });
+    }
   }
 
   // Ensure registry entry exists for ALL Google accounts (not just guest upgrades)
@@ -1109,6 +1177,19 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
       console.log(`[linkGoogleAccount] storing previousGuestUid=${previousGuestUid} in memberProfiles for suite redirect`);
     }
     await profileRef.set(profileData, { merge: true });
+
+    // Create session doc so multi-device conflict detection works immediately
+    try {
+      const sessionRef = db
+        .collection("memberData").doc("core")
+        .collection(originalUid).doc("_session");
+      await sessionRef.set({
+        deviceId: deviceId || "",
+        lastActive: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      log("warn", `linkGoogleAccount: failed to create _session for ${originalUid}`, { error: e.message });
+    }
   }
 
   return { success: true };

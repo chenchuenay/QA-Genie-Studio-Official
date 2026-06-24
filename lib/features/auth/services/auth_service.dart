@@ -99,12 +99,14 @@ class AuthService {
   }
 
   // Link existing guest to Google account (upgrade)
-  static Future<UserCredential> linkWithGoogle() async {
+  // Accept an optional preSignedInAccount to avoid double Google sign-in
+  // when the caller already obtained the account for session checking.
+  static Future<UserCredential> linkWithGoogle({GoogleSignInAccount? preSignedInAccount}) async {
     _googleAuthInProgress = true;
     await AnalyticsService.logDebug(message: 'linkWithGoogle: ENTER');
     await _writeLog('linkWithGoogle CALLED');
     try {
-      final googleSignInAccount = await _googleSignIn.signIn();
+      final googleSignInAccount = preSignedInAccount ?? await _googleSignIn.signIn();
       if (googleSignInAccount == null) {
         await _writeLog('linkWithGoogle | Google sign-in cancelled');
         throw Exception('Google sign-in cancelled');

@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
-import 'package:qa_genie/features/legal/ui/terms_privacy_policy.dart';
+import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/firebase/analytics/analytics_service.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
+import 'package:qa_genie/features/legal/data/legal_documents.dart';
 
 String _friendlyAuthError(dynamic e) {
   if (e is FirebaseAuthException) {
@@ -40,9 +44,11 @@ class AuthDialog extends StatefulWidget {
 class _AuthDialogState extends State<AuthDialog> {
   bool _isLoading = false;
   bool _isGuestLoading = false;
+  bool _forceGoogleOnly = false;
   String? _errorMessage;
   Timer? _dotTimer;
   int _dotCount = 0;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   @override
   void dispose() {
@@ -59,6 +65,13 @@ class _AuthDialogState extends State<AuthDialog> {
     });
   }
 
+  void _resetForceGoogleOnly() {
+    setState(() {
+      _forceGoogleOnly = false;
+      _errorMessage = null;
+    });
+  }
+
   Future<void> _handleContinueWithGoogle() async {
     unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: ENTER'));
     if (_isLoading) {
@@ -72,8 +85,89 @@ class _AuthDialogState extends State<AuthDialog> {
     });
     _startConnectingAnimation();
     try {
-      unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: calling linkWithGoogle'));
-      await AuthService.linkWithGoogle();
+      // Step 1: Google sign-in (manual, to get email before linking)
+      final googleAccount = await _googleSignIn.signIn();
+      if (googleAccount == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Step 2: Check email cooldown
+      try {
+        await FunctionsService.call(
+          functionName: 'checkEmailCooldown',
+          payload: {'email': googleAccount.email},
+        );
+      } catch (e) {
+        final msg = e.toString();
+        if (msg.contains('cooldown') || msg.contains('permission-denied')) {
+          throw FirebaseAuthException(
+            code: 'permission-denied',
+            message: 'This Google account was recently deleted and cannot be used again for 24 hours.',
+          );
+        }
+      }
+
+      // Step 3: Check session conflict BEFORE linking
+      final deviceId = await DeviceUtils.getUniqueId();
+      final sessionCheck = await FunctionsService.checkSessionByEmail(
+        email: googleAccount.email,
+        deviceId: deviceId,
+      );
+
+      if (sessionCheck['conflict'] == true) {
+        if (!mounted) return;
+        final choice = await showBlurredDialog<String>(
+          context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text(
+              'Already Signed In',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              'Signing in here logs out the other device.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 'no'),
+                child: const Text('No', style: TextStyle(color: AppColors.textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, 'okay'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Okay'),
+              ),
+            ],
+          ),
+        );
+
+        if (choice == 'no') {
+          await _googleSignIn.signOut();
+          setState(() {
+            _forceGoogleOnly = true;
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+
+      // Step 4: Full Google link (pass pre-signed-in account)
+      await AuthService.linkWithGoogle(preSignedInAccount: googleAccount);
+
+      // Step 5: Register session
+      final hadConflict = sessionCheck['conflict'] == true;
+      await FunctionsService.registerSession(
+        deviceId: deviceId,
+        force: hadConflict,
+      );
 
       // Pull remote suites (if any)
       await AuthService.completePostLoginFlow();
@@ -314,7 +408,7 @@ class _AuthDialogState extends State<AuthDialog> {
                     ),
                       ),
                 ),
-                if (widget.showGuestButton) ...[
+                if (widget.showGuestButton && !_forceGoogleOnly) ...[
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
@@ -327,15 +421,17 @@ class _AuthDialogState extends State<AuthDialog> {
                             ),
                     ),
                   ),
+                ] else if (_forceGoogleOnly) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Use a different Google account to continue.',
+                    style: TextStyle(color: AppColors.textHint, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
                 const SizedBox(height: 24),
                 GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const TermsPrivacyPolicyScreen()),
-                    );
-                  },
+                  onTap: () => launchUrl(Uri.parse(LegalDocuments.privacyPolicyUrl)),
                   child: RichText(
                     textAlign: TextAlign.center,
                     text: const TextSpan(
@@ -346,11 +442,11 @@ class _AuthDialogState extends State<AuthDialog> {
                           style: TextStyle(color: AppColors.textHint),
                         ),
                         TextSpan(
-                          text: 'Terms & Privacy Policy',
+                          text: 'Privacy Policy',
                           style: TextStyle(
                             color: AppColors.accent,
                             fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.none, // Explicitly no underline
+                            decoration: TextDecoration.none,
                           ),
                         ),
                       ],

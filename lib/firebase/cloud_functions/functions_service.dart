@@ -290,6 +290,26 @@ class FunctionsService {
     return result['success'] == true;
   }
 
+  static Future<Map<String, dynamic>> checkSessionByEmail({
+    required String email,
+    required String deviceId,
+  }) async {
+    return call(
+      functionName: 'checkSessionByEmail',
+      payload: {'email': email, 'deviceId': deviceId},
+    );
+  }
+
+  static Future<Map<String, dynamic>> registerSession({
+    required String deviceId,
+    required bool force,
+  }) async {
+    return call(
+      functionName: 'registerSession',
+      payload: {'deviceId': deviceId, 'force': force},
+    );
+  }
+
   static Future<Map<String, dynamic>> submitIssueReport({
     String? type,
     String? title,
