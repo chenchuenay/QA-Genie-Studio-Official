@@ -446,11 +446,10 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                         _selectionMode ? '${_selectedIndices.length} selected' : 'Suite',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 16),
                       if (_selectionMode) ...[
                         _selIcon(Icons.content_copy, 'Copy', _batchCopy),
                         const SizedBox(width: 2),

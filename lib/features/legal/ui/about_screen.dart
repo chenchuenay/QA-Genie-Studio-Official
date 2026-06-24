@@ -54,7 +54,7 @@ class _AboutScreenState extends State<AboutScreen> {
             Image.asset('assets/logo.png', width: 72, height: 72),
             const SizedBox(height: 12),
             const Text(
-              'QA Genie . Enay Kumar',
+              'QA Genie · Enay Kumar',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
