@@ -182,6 +182,7 @@ class SuitesScreenState extends State<SuitesScreen> {
         ),
         content: TextField(
           controller: ctrl,
+          maxLength: 40,
           style: const TextStyle(color: Colors.white),
         ),
         actions: [

@@ -11,7 +11,6 @@ import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/account/ui/account_screen.dart';
-import 'package:qa_genie/features/support/ui/report_issue_screen.dart';
 import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
@@ -447,11 +446,10 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                         _selectionMode ? '${_selectedIndices.length} selected' : 'Suite',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 16),
                       if (_selectionMode) ...[
                         _selIcon(Icons.content_copy, 'Copy', _batchCopy),
                         const SizedBox(width: 2),
@@ -491,16 +489,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.flag_outlined, color: AppColors.textSecondary, size: 20),
-                          tooltip: 'Report Issue',
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ReportIssueScreen()),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 12),
                         OutlinedButton(
                           onPressed: _toggleEdit,
                           style: OutlinedButton.styleFrom(

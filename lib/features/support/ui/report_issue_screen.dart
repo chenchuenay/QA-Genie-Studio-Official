@@ -115,6 +115,7 @@ class _MyFeedbacksView extends StatefulWidget {
 class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
   List<Map<String, dynamic>> _feedbacks = [];
   DateTime? _lastSync;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -122,13 +123,13 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
     _loadFeedbacks();
   }
 
-  Future<void> _loadFeedbacks() async {
+  Future<void> _loadFeedbacks({bool forceSync = false}) async {
+    setState(() => _isLoading = true);
     final db = await DatabaseService.db;
     final data = await db.query('reported_issues', orderBy: 'createdAt DESC');
 
-    // Only sync status from cloud once per 7 days (Rule 13)
-    if (_lastSync != null && DateTime.now().difference(_lastSync!).inDays < 7) {
-      if (mounted) setState(() => _feedbacks = List.from(data));
+    if (!forceSync && _lastSync != null && DateTime.now().difference(_lastSync!).inDays < 7) {
+      if (mounted) setState(() { _feedbacks = List.from(data); _isLoading = false; });
       return;
     }
 
@@ -142,12 +143,32 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
         if (remote is Map) {
           final remoteId = remote['id'] as String?;
           final remoteStatus = remote['status'] as String? ?? 'open';
+          final remoteTitle = remote['title'] as String?;
+          final remoteType = remote['issueType'] as String?;
           for (int i = 0; i < updatedData.length; i++) {
             if (updatedData[i]['firestoreId'] == remoteId) {
               final ts = DateTime.now().toIso8601String();
               await DatabaseService.updateIssueStatus(
                 updatedData[i]['id'], remoteStatus, ts,
               );
+              if (remoteTitle != null) {
+                await db.update(
+                  'reported_issues',
+                  { 'title': remoteTitle },
+                  where: 'id = ?',
+                  whereArgs: [updatedData[i]['id']],
+                );
+                updatedData[i]['title'] = remoteTitle;
+              }
+              if (remoteType != null) {
+                await db.update(
+                  'reported_issues',
+                  { 'issueType': remoteType },
+                  where: 'id = ?',
+                  whereArgs: [updatedData[i]['id']],
+                );
+                updatedData[i]['issueType'] = remoteType;
+              }
               updatedData[i]['status'] = remoteStatus;
               break;
             }
@@ -159,12 +180,12 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
       debugPrint('Sync failed: $e');
     }
 
-    if (mounted) setState(() => _feedbacks = updatedData);
+    if (mounted) setState(() { _feedbacks = updatedData; _isLoading = false; });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_feedbacks.isEmpty) {
+    if (_feedbacks.isEmpty && !_isLoading) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -191,26 +212,29 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
         ),
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      itemCount: _feedbacks.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final item = _feedbacks[index];
-        return Card(
-          color: AppColors.surface,
-          child: ListTile(
-            title: Text(
-              item['title'],
-              style: const TextStyle(color: Colors.white),
+    return RefreshIndicator(
+      onRefresh: () => _loadFeedbacks(forceSync: true),
+      child: ListView.separated(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        itemCount: _feedbacks.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final item = _feedbacks[index];
+          return Card(
+            color: AppColors.surface,
+            child: ListTile(
+              title: Text(
+                item['title'] ?? '',
+                style: const TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                '${item['issueType']} • Status: ${item['status']}',
+                style: const TextStyle(color: AppColors.textHint),
+              ),
             ),
-            subtitle: Text(
-              '${item['issueType']} • Status: ${item['status']}',
-              style: const TextStyle(color: AppColors.textHint),
-            ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -418,7 +442,7 @@ class _ReportFormViewState extends State<_ReportFormView> {
             TextFormField(
               controller: _descriptionController,
               maxLines: 5,
-              maxLength: 200,
+              maxLength: 100,
               decoration: InputDecoration(
                 hintText:
                     'Describe what happened, steps to reproduce, etc. (optional)',

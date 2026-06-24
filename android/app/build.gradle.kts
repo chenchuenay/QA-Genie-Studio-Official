@@ -28,7 +28,7 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
+        versionCode = 6
         multiDexEnabled = true
     }
 
@@ -77,6 +77,25 @@ android {
     tasks.whenTaskAdded {
         if (name == "extractDeepLinksProdRelease") {
             mustRunAfter("processProdReleaseGoogleServices")
+        }
+    }
+
+    tasks.whenTaskAdded {
+        if (name == "bundleProdRelease") {
+            doLast {
+                val dir = file("${project.buildDir}/outputs/bundle/prodRelease")
+                val src = dir.resolve("app-prod-release.aab")
+                val dst = dir.resolve("QA-Genie_release-v${flutter.versionName}.aab")
+                if (src.exists()) { src.renameTo(dst) }
+            }
+        }
+        if (name == "assembleProdRelease") {
+            doLast {
+                val dir = file("${project.buildDir}/outputs/flutter-apk")
+                val src = dir.resolve("app-prod-release.apk")
+                val dst = dir.resolve("QA-Genie_release-v${flutter.versionName}.apk")
+                if (src.exists()) { src.renameTo(dst) }
+            }
         }
     }
 }
