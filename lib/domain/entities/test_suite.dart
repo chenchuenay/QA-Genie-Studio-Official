@@ -17,7 +17,7 @@ class TestSuite {
   /// CORE / PRO
   final String generationMode;
 
-  /// User custom instructions
+  /// Member custom instructions
   final String? constraints;
 
   /// Pipeline forensic id

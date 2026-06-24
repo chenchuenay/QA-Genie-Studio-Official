@@ -17,14 +17,14 @@ void main() {
       expect(result, isNotEmpty);
     });
 
-    test('compose includes system prompt', () {
+    test('compose includes return instruction', () {
       final result = PromptComposer.compose(
         module: 'Login',
         feature: 'User Auth',
         platform: 'WEB',
         skeletons: [],
       );
-      expect(result, contains('QA Genie'));
+      expect(result, contains('Return ONLY valid JSON'));
     });
 
     test('compose includes context block', () {

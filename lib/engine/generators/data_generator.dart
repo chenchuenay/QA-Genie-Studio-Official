@@ -127,8 +127,8 @@ class DataGenerator {
           data['token_type'] = 'forged_jwt';
           data['expected_response'] = '401';
         case 'masquerade':
-          data['user_id'] = 'attacker_user';
-          data['impersonated_user'] = 'admin@example.com';
+          data['member_id'] = 'attacker_member';
+          data['impersonated_member'] = 'admin@example.com';
           data['expected_response'] = '403';
         default:
           data['malicious_input'] = '${condition}_payload';

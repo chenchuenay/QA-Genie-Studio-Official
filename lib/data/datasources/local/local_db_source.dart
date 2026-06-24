@@ -16,27 +16,34 @@ class LocalDbSource {
   Future<void> insertTestCases({required int suiteId, required List<FinalizedTestCase> cases}) async =>
     DatabaseService.insertTestCases(suiteId: suiteId, cases: cases);
 
-  Future<void> updateSuiteCases({required int suiteId, required List<FinalizedTestCase> cases}) async =>
-    DatabaseService.replaceAllTestCases(suiteId: suiteId, cases: cases);
+  Future<void> updateSuiteCases({required int suiteId, required List<FinalizedTestCase> cases}) async {
+    await DatabaseService.replaceAllTestCases(suiteId: suiteId, cases: cases);
+    await DatabaseService.markSuiteDirty(suiteId);
+  }
 
-  Future<void> insertSingleCase({required int suiteId, required FinalizedTestCase testCase}) async =>
-    DatabaseService.insertTestCases(suiteId: suiteId, cases: [testCase]);
+  Future<void> insertSingleCase({required int suiteId, required FinalizedTestCase testCase}) async {
+    await DatabaseService.insertTestCases(suiteId: suiteId, cases: [testCase]);
+    await DatabaseService.markSuiteDirty(suiteId);
+  }
 
   Future<void> deleteTestCase(int dbId) async => DatabaseService.deleteTestCase(dbId);
 
   Future<void> copyTestCase({required int targetSuiteId, required FinalizedTestCase testCase}) async {
     final cloned = testCase.copyWith(dbId: null);
     await DatabaseService.insertTestCases(suiteId: targetSuiteId, cases: [cloned]);
+    await DatabaseService.markSuiteDirty(targetSuiteId);
   }
 
   Future<void> moveTestCase({required int sourceSuiteId, required int targetSuiteId, required FinalizedTestCase testCase}) async {
     await copyTestCase(targetSuiteId: targetSuiteId, testCase: testCase);
     if (testCase.dbId != null) await DatabaseService.deleteTestCase(testCase.dbId!);
+    await DatabaseService.markSuiteDirty(sourceSuiteId);
   }
 
   Future<void> replaceSingleCase({required int suiteId, required FinalizedTestCase updatedCase}) async {
     if (updatedCase.dbId != null) {
       await DatabaseService.updateSingleCase(dbId: updatedCase.dbId!, tc: updatedCase);
+      await DatabaseService.markSuiteDirty(suiteId);
     }
   }
 }

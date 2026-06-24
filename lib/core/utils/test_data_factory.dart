@@ -16,15 +16,15 @@ class TestDataFactory {
     'qa.com',
   ];
 
-  // Safe username prefixes
-  static const _safeUsers = ['user', 'tester', 'qa', 'admin', 'guest'];
+  // Safe member name prefixes
+  static const _safeMembers = ['member', 'tester', 'qa', 'admin', 'guest'];
 
   // ==========================================================
   // EMAILS (max 25 chars total)
   // ==========================================================
   static String validEmail([String seed = 'default']) {
     final name =
-        _safeUsers[StableHash.forText('name-$seed', _safeUsers.length)];
+        _safeMembers[StableHash.forText('name-$seed', _safeMembers.length)];
     final domain =
         _safeDomains[StableHash.forText('domain-$seed', _safeDomains.length)];
     final result = '$name@$domain';

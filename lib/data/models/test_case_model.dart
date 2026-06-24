@@ -25,7 +25,7 @@ class TestCaseModel {
   TestCaseOrigin forensicOrigin = TestCaseOrigin.ai;
   List<String> repairOperations = [];
   List<String> realismOperations = [];
-  bool visibleToUser = true;
+  bool visibleToMember = true;
 
   TestCaseModel({
     this.source = CaseSource.ai,

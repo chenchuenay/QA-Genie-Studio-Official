@@ -29,7 +29,7 @@ class AdManager {
 
   bool get isAdReady => _rewardedAd != null;
 
-  /// INVESTOR: Smart pre-loading ensures we are "one step ahead" of the user.
+  /// INVESTOR: Smart pre-loading ensures we are "one step ahead" of the member.
   /// If [adUnitId] is null, it defaults to the Generation unit (highest volume).
   Future<void> loadRewardedAd({String? adUnitId}) async {
     final targetUnit = adUnitId ?? AdUnits.rewardedTcGeneration;
@@ -150,7 +150,7 @@ class AdManager {
       return 'mock_ad_token_${DateTime.now().millisecondsSinceEpoch}';
     }
 
-    // EMERGENCY LOAD: If the user is faster than our pre-loader
+    // EMERGENCY LOAD: If the member is faster than our pre-loader
     if (!isAdReady || _loadedAdUnitId != targetUnit) {
       debugPrint(
         '⚠️ AdManager: [RECOVERY] Correct unit not ready. Forcing load...',

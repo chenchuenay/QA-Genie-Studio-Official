@@ -64,7 +64,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Only signed-in users can submit a report. '
+                  'Only signed-in members can submit a report. '
                   'Sign in with Google to share your feedback and track its status.',
                   style: TextStyle(
                     color: AppColors.textSecondary,
@@ -259,7 +259,7 @@ class _ReportFormViewState extends State<_ReportFormView> {
             backgroundColor: AppColors.surface,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Feedback Unavailable', style: TextStyle(color: Colors.white)),
-            content: const Text('Feedback submission is limited to signed-in users. Sign in with Google to share your thoughts.', style: TextStyle(color: AppColors.textSecondary)),
+            content: const Text('Feedback submission is limited to signed-in members. Sign in with Google to share your thoughts.', style: TextStyle(color: AppColors.textSecondary)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -277,8 +277,8 @@ class _ReportFormViewState extends State<_ReportFormView> {
     if (!await NetworkGuard.ensureProductionOnline(context)) return;
 
     try {
-      final user = AuthService.currentUser;
-      final uid = user?.uid ?? 'unknown';
+      final member = AuthService.currentMember;
+      final uid = member?.uid ?? 'unknown';
 
       String? platform, deviceModel, appVersion;
       if (_includeDeviceInfo) {

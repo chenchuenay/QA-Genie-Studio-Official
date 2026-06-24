@@ -34,3 +34,40 @@ Complete the instructions in the Google Mobile Ads SDK guide using this app ID:
 QA Genieca-app-pub-5950082050771694~6664703624
 Follow the native advanced implementation guide to integrate the SDK. You'll specify ad type, size and placement when you integrate the code using this ad unit ID:
 suites_native_sponsoredca-app-pub-5950082050771694/9143895834
+
+### AD MEDIATION
+
+#### Native Dependencies (`android/app/build.gradle.kts`)
+
+```kotlin
+dependencies {
+    // ...
+    implementation("com.unity3d.ads:unity-ads:4.18.0")
+    implementation("com.google.ads.mediation:unity:4.18.0.0")
+    // AppLovin (TODO)
+    // Mintegral (TODO)
+    // InMobi (TODO)
+}
+```
+
+#### UNITY ADS
+
+APP ID (Game ID): `800077172`
+
+Placement       | ID
+----------------|--------------------------
+Rewarded        | Rewarded_Android
+Banner          | Banner_Android
+Interstitial    | Interstitial_Android
+
+**AdMob Mediation setup (per ad unit):**
+1. Go to AdMob → Mediation → Create mediation group
+2. Add ad unit IDs for rewarded_tc_generation, rewarded_tc_export, rewarded_summary_export
+3. Add Unity Ads as ad source → enter App ID `800077172`, Placement ID `Rewarded_Android`
+4. Repeat for banner/suites_native_sponsored → use `Banner_Android`
+5. Repeat for interstitial_general → use `Interstitial_Android`
+
+#### NETWORKS TO ADD (TODO — after account creation & placement IDs)
+- AppLovin — add `build.gradle.kts` dependency + AdMob Mediation source
+- Mintegral — add `build.gradle.kts` dependency + AdMob Mediation source
+- InMobi — add `build.gradle.kts` dependency + AdMob Mediation source

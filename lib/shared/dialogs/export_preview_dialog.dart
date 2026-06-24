@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
@@ -784,14 +783,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       valueListenable: AdManager().isAdLoading,
       builder: (context, isAdLoading, child) {
         final fullLock = _isProcessing || isAdLoading || _isSharing;
-        Widget content = AbsorbPointer(absorbing: fullLock, child: child!);
-        if (_isSharing) {
-          return BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: content,
-          );
-        }
-        return content;
+        return AbsorbPointer(absorbing: fullLock, child: child!);
       },
       child: dialogBody,
     );

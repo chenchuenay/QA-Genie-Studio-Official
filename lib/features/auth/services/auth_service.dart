@@ -1,81 +1,131 @@
-import 'dart:async';
+import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:qa_genie/firebase/analytics/analytics_service.dart';
+import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final GoogleSignIn _googleSignIn = GoogleSignIn();
+  static bool _googleAuthInProgress = false;
+  static bool get isGoogleAuthInProgress => _googleAuthInProgress;
+
+  static Future<void> _writeLog(String message) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/auth_debug.log');
+      await file.writeAsString(
+        '${DateTime.now().toIso8601String()} | $message\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {}
+  }
 
   static Stream<User?> get authStateChanges => _auth.authStateChanges();
-  static User? get currentUser => _auth.currentUser;
-  static bool get isAnonymous => currentUser?.isAnonymous ?? false;
+  static User? get currentMember => _auth.currentUser;
+  static bool get isMember => currentMember != null && !isGuest;
+  static bool get isAnonymous => currentMember?.isAnonymous ?? false;
   static bool get isGuest {
     try {
-      final user = _auth.currentUser;
-      if (user == null) return true;
-      // Linked with Google → user account, not guest
-      for (final info in user.providerData) {
+      final member = _auth.currentUser;
+      if (member == null) return true;
+      // Linked with Google → this is a member, not a guest
+      for (final info in member.providerData) {
         if (info.providerId == 'google.com') return false;
       }
-      return user.uid.startsWith('guest_');
+      return member.uid.startsWith('guest_');
     } catch (_) {
       return true; // Firebase not initialized — safe default
     }
   }
 
   // "Continue as guest" – uses custom token (persistent per device)
-  static Future<UserCredential> signInAsGuest({bool forceReturning = false}) async {
-    debugPrint('🔐 AuthService: signInAsGuest start');
+  static Future<UserCredential> signInAsGuest({bool forceReturning = false, String caller = 'signInAsGuest'}) async {
+    await _writeLog('signInAsGuest CALLED | caller=$caller | forceReturning=$forceReturning');
+    if (_googleAuthInProgress) {
+      await _writeLog('BLOCKED: googleAuthInProgress | caller=$caller');
+      throw Exception(
+        'GUARD_BLOCK: signInAsGuest called while googleAuthInProgress=true | caller=$caller',
+      );
+    }
     try {
+      final everCreated = await DeviceUtils.guestEverCreated();
+      if (everCreated && !forceReturning) {
+        forceReturning = true;
+      }
+
       final deviceId = await DeviceUtils.getUniqueId();
-      final token = await FunctionsService.getGuestToken(deviceId: deviceId, forceReturning: forceReturning);
+      await _writeLog('signInAsGuest | deviceId=$deviceId | forceReturning=$forceReturning | everCreated=$everCreated');
+      // Get ANDROID_ID for cross-reference (survives data clear)
+      String? androidId;
+      try {
+        final info = await DeviceInfoPlugin().androidInfo;
+        androidId = info.id;
+      } catch (_) {}
+      final tokenResult = await FunctionsService.getGuestToken(
+        deviceId: deviceId,
+        forceReturning: forceReturning,
+        caller: caller,
+        androidId: androidId,
+      );
+      final token = tokenResult['token'] as String;
+      final guestTier = tokenResult['guestTier'] as String?;
+      await _writeLog('signInAsGuest | got token from cloud function | guestTier=$guestTier');
       final credential = await _auth.signInWithCustomToken(token);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_returning_guest', forceReturning);
-      debugPrint('✅ Signed in as guest: ${credential.user?.uid}');
+      await prefs.setBool('is_returning_guest', guestTier == 'returning');
+
+      if (!everCreated) {
+        await DeviceUtils.setGuestEverCreated();
+      }
+
+      // Invalidate usage cache so next quota fetch reflects correct tier
+      UsageManager.invalidateCache();
+
+      await _writeLog('signInAsGuest SUCCESS | uid=${credential.user?.uid}');
       return credential;
     } catch (e) {
-      debugPrint('❌ Guest sign-in failed: $e');
+      await _writeLog('signInAsGuest FAILED | $e');
       rethrow;
     }
   }
 
   // Link existing guest to Google account (upgrade)
-  static Future<UserCredential> linkWithGoogle() async {
-    debugPrint('🔐 AuthService: linkWithGoogle start');
+  // Accept an optional preSignedInAccount to avoid double Google sign-in
+  // when the caller already obtained the account for session checking.
+  static Future<UserCredential> linkWithGoogle({GoogleSignInAccount? preSignedInAccount}) async {
+    _googleAuthInProgress = true;
+    await AnalyticsService.logDebug(message: 'linkWithGoogle: ENTER');
+    await _writeLog('linkWithGoogle CALLED');
     try {
-      // Check email cooldown before proceeding with Google sign-in
-      final googleSignInAccount = await _googleSignIn.signIn();
-      if (googleSignInAccount == null) throw Exception('Google sign-in cancelled');
-      
+      final googleSignInAccount = preSignedInAccount ?? await _googleSignIn.signIn();
+      if (googleSignInAccount == null) {
+        await _writeLog('linkWithGoogle | Google sign-in cancelled');
+        throw Exception('Google sign-in cancelled');
+      }
+      await _writeLog('linkWithGoogle | Google account selected: ${googleSignInAccount.email}');
+
       try {
         await FunctionsService.call(
           functionName: 'checkEmailCooldown',
           payload: {'email': googleSignInAccount.email},
         );
+        await _writeLog('linkWithGoogle | email cooldown check passed');
       } catch (e) {
         final msg = e.toString();
         if (msg.contains('cooldown') || msg.contains('permission-denied')) {
+          await _writeLog('linkWithGoogle | email in cooldown');
           throw FirebaseAuthException(
             code: 'permission-denied',
             message: 'This Google account was recently deleted and cannot be used again for 24 hours.',
-          );
-        }
-        // Don't block on other errors — proceed
-      }
-
-      // Attempt to ensure a guest user exists first, but don't fail if guest creation fails
-      if (_auth.currentUser == null) {
-        try {
-          await signInAsGuest();
-        } catch (e) {
-          debugPrint(
-            '⚠️ AuthService: Guest sign-in failed during link preparation: $e',
           );
         }
       }
@@ -90,55 +140,71 @@ class AuthService {
       );
 
       final User? current = _auth.currentUser;
+      final String? previousGuestUid = current != null && current.uid.startsWith('guest_') ? current.uid : null;
+      await _writeLog('linkWithGoogle | currentMember=${current?.uid} | previousGuestUid=$previousGuestUid');
       UserCredential result;
 
       if (current != null) {
+        await _writeLog('linkWithGoogle | linking credential to existing member');
         try {
           result = await current.linkWithCredential(credential);
-          debugPrint(
-            '✅ Linked guest to Google, UID remains: ${result.user?.uid}',
-          );
+          await _writeLog('linkWithGoogle | linked OK, uid=${result.user?.uid}');
         } on FirebaseAuthException catch (e) {
+          await _writeLog('linkWithGoogle | link error: ${e.code}');
           if (e.code == 'credential-already-in-use' ||
               e.code == 'provider-already-linked') {
-            debugPrint(
-              '🔄 Credential in use or already linked, switching accounts',
-            );
+            await _writeLog('linkWithGoogle | switching to signInWithCredential');
             result = await _auth.signInWithCredential(credential);
           } else {
             rethrow;
           }
         }
       } else {
-        debugPrint('🔄 No current user, performing direct Google sign-in');
+        await _writeLog('linkWithGoogle | no current member, fresh Google sign-in');
         result = await _auth.signInWithCredential(credential);
       }
 
-      final user = result.user!;
+      final member = result.user!;
+      await _writeLog('linkWithGoogle | result uid=${member.uid} | isAnonymous=${member.isAnonymous}');
       final deviceId = await DeviceUtils.getUniqueId();
 
-      // Attempt to sync with backend, but don't block the UI on it
-      unawaited(
-        FunctionsService.linkGoogleAccount(
-          email: user.email ?? googleUser.email,
-          displayName: user.displayName ?? googleUser.displayName ?? '',
+      try {
+        await FunctionsService.linkGoogleAccount(
+          email: member.email ?? googleUser.email,
+          displayName: member.displayName ?? googleUser.displayName ?? '',
           deviceId: deviceId,
-        ).catchError(
-          (e) => debugPrint('⚠️ linkGoogleAccount backend sync failed: $e'),
-        ),
-      );
+          previousGuestUid: previousGuestUid,
+        );
+        await _writeLog('linkWithGoogle | linkGoogleAccount cloud function succeeded');
+      } catch (e) {
+        await _writeLog('linkWithGoogle | linkGoogleAccount cloud function FAILED: $e');
+      }
 
-      debugPrint('✅ Google account process completed');
+      await _writeLog('linkWithGoogle COMPLETED');
       return result;
     } catch (e) {
-      debugPrint('❌ linkWithGoogle failed: $e');
+      await _writeLog('linkWithGoogle FAILED: $e');
+      _googleAuthInProgress = false;
       throw Exception('Authentication failed: $e');
+    } finally {
+      _googleAuthInProgress = false;
+    }
+  }
+
+  /// After Google sign-in, pull remote suites (if any).
+  static Future<void> completePostLoginFlow() async {
+    await AnalyticsService.logDebug(message: 'completePostLoginFlow: ENTER');
+    try {
+      await CloudSyncService.pullRemoteSuites();
+      await AnalyticsService.logDebug(message: 'completePostLoginFlow: SUCCESS');
+    } catch (e) {
+      await AnalyticsService.logDebug(message: 'completePostLoginFlow: FAILED $e');
     }
   }
 
   // Sign out and return to guest state
   static Future<void> signOut() async {
-    debugPrint('🔐 AuthService: signOut');
+    await AnalyticsService.logDebug(message: 'signOut: ENTER');
     try {
       await _googleSignIn.signOut();
     } catch (e, _) {
@@ -161,7 +227,7 @@ class AuthService {
       debugPrint('🔐 AuthService: cache clear error: $e');
     }
     try {
-      await signInAsGuest(forceReturning: true);
+      await signInAsGuest(forceReturning: true, caller: 'sign_out');
     } catch (e, _) {
       debugPrint('🔐 AuthService: Guest sign-in error: $e');
     }
@@ -172,6 +238,20 @@ class AuthService {
     } catch (e, _) {
       debugPrint('🔐 AuthService: DB re-init error: $e');
     }
+  }
+
+  /// Hard sign-out: wipes local data, does NOT re-create guest.
+  /// Used when the user is kicked out due to multi-device conflict.
+  static Future<void> hardSignOut() async {
+    await AnalyticsService.logDebug(message: 'hardSignOut: ENTER');
+    await DatabaseService.clearAll();
+    DatabaseService.invalidateSuitesCache();
+    try { await _googleSignIn.signOut(); } catch (_) {}
+    try { await _auth.signOut(); } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (_) {}
   }
 
   static Future<void> _reinitializeDb(String identity) async {

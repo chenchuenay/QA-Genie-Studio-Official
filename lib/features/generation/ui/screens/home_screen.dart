@@ -22,6 +22,7 @@ import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
 import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
+import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
@@ -41,7 +42,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with TickerProviderStateMixin {
   final TextEditingController mCtrl = TextEditingController();
   final TextEditingController fCtrl = TextEditingController();
   final TextEditingController cCtrl = TextEditingController();
@@ -55,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String platform = 'Web';
   bool loading = false;
   bool _isPro = false;
-  int _rewardedRemaining = AppConfig.coreRewardedBatchesPerDay;
+  int _rewardedRemaining = 0;
   int _proRemaining = AppConfig.proFreeBatchesPerDay;
   DateTime? _resetTime;
   int _adAttempts = 0;
@@ -63,12 +65,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _authSubscription = AuthService.authStateChanges.listen((user) {
-      if (user != null) {
+    _authSubscription = AuthService.authStateChanges.listen((member) {
+      if (member != null) {
         UsageManager.invalidateCache();
         _refreshStatus();
       }
     });
+    _refreshStatus();
   }
 
   @override
@@ -147,7 +150,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Column(
               children: [
                 Expanded(
-                  child: SingleChildScrollView(
+                  child: RefreshIndicator(
+                    onRefresh: _refreshStatus,
+                    color: AppColors.accent,
+                    backgroundColor: AppColors.surface,
+                    child: SingleChildScrollView(
                     physics: fullLock
                         ? const NeverScrollableScrollPhysics()
                         : const AlwaysScrollableScrollPhysics(),
@@ -172,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             key: HomeScreen.moduleKey,
                             child: _input(
                               'Module Name *',
-                              'e.g. User Authentication',
+                              'e.g. Member Authentication',
                               mCtrl,
                               maxLength: 40,
                               enabled: !fullLock,
@@ -225,7 +232,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          _constraints(fullLock),
+                          Container(
+                            key: HomeScreen.constraintsKey,
+                            child: _constraints(fullLock),
+                          ),
                           const SizedBox(height: 12),
                           Center(
                             child: Text(
@@ -238,6 +248,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
+                  ),
                   ),
                 ),
                 Padding(
@@ -536,6 +547,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
     _adAttempts = 0;
 
+    // Silence cloud pull for members before generation
+    if (!AuthService.isGuest) {
+      await CloudSyncService.pullRemoteSuites();
+    }
+
     try {
       final module = mCtrl.text.trim();
       final feature = fCtrl.text.trim();
@@ -609,6 +625,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         cases: session.testCases,
       );
       debugPrint('🚀 _generate: Suite saved');
+
+      // Push to cloud for members
+      if (!AuthService.isGuest) {
+        try {
+          await CloudSyncService.pushPendingSuites();
+          debugPrint('🚀 _generate: cloud push completed');
+        } catch (e) {
+          debugPrint('❌ _generate: cloud push failed: $e');
+        }
+      }
 
       debugPrint('🚀 _generate: Invalidating usage cache');
       UsageManager.invalidateCache();

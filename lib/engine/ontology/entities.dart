@@ -4,7 +4,7 @@ enum EntityType {
   credential,
   session,
   token,
-  user,
+  member,
   profile,
   role,
   permission,
@@ -97,8 +97,8 @@ extension EntityTypeExtension on EntityType {
         return 'session';
       case EntityType.token:
         return 'token';
-      case EntityType.user:
-        return 'user';
+      case EntityType.member:
+        return 'member';
       case EntityType.profile:
         return 'profile';
       case EntityType.role:

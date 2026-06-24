@@ -21,7 +21,7 @@ import 'package:qa_genie/core/config/app_environment.dart';
 ///
 /// FLOW:
 ///
-/// User Input
+/// Member Input
 ///    ↓
 /// SecurityFilter
 ///    ↓

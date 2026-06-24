@@ -1,16 +1,22 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import '../../../monetization/ui/upgrade_screen.dart';
 import 'package:qa_genie/app/startup/app_dependencies.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
+import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/shared/widgets/native_ad_widget.dart';
 import 'package:qa_genie/features/monetization/ads/ad_units.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart'; // ✅ correct import
 import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/core/network/network_guard.dart';
+import 'package:qa_genie/core/ui/network_ui_helper.dart';
 
 class SuitesScreen extends StatefulWidget {
   final VoidCallback? onGenerate;
@@ -27,13 +33,75 @@ class SuitesScreenState extends State<SuitesScreen> {
   bool _isPro = false;
   bool _isDeleting = false;
   bool _isRenaming = false;
+  StreamSubscription<User?>? _authSub;
 
   @override
   void initState() {
     super.initState();
+    _authSub = AuthService.authStateChanges.listen((_) => _refreshSuites());
     AdManager().loadRewardedAd(adUnitId: AdUnits.rewardedTcExport);
     _refreshSuites();
+    _syncAndReload();
     _checkPro();
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _syncAndReload() async {
+    await CloudSyncService.processPendingDeletes();
+    await CloudSyncService.manualSync();
+    if (mounted) _refreshSuites();
+  }
+
+  Future<void> _checkCloud() async {
+    if (!await NetworkUiHelper.ensureProductionOnline(context)) return;
+    final pulled = await CloudSyncService.pullRemoteSuites();
+    if (!mounted) return;
+    if (pulled > 0) {
+      _refreshSuites();
+      showBlurredDialog(
+        context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text('Synced', style: TextStyle(color: Colors.white)),
+          content: Text(
+            'Found $pulled suite(s) in cloud.',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      showBlurredDialog(
+        context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text(
+            'Check Cloud',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: const Text(
+            'No suites found in Cloud.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   void _refreshSuites() {
@@ -52,8 +120,13 @@ class SuitesScreenState extends State<SuitesScreen> {
     _refreshSuites();
   }
 
+  Future<void> triggerSync() async {
+    await _syncAndReload();
+  }
+
   Future<bool?> _confirmDelete(int id) async {
-    return showBlurredDialog<bool>(context,
+    return showBlurredDialog<bool>(
+      context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text(
@@ -84,6 +157,12 @@ class SuitesScreenState extends State<SuitesScreen> {
   Future<void> _deleteSuite(int id) async {
     if (_isDeleting) return;
     _isDeleting = true;
+    final networkOk = NetworkGuard.isOnline;
+    if (networkOk && !AuthService.isGuest) {
+      await CloudSyncService.deleteRemoteSuite(id);
+    } else if (!networkOk && !AuthService.isGuest) {
+      await DatabaseService.queuePendingDelete(id);
+    }
     await DatabaseService.deleteSuite(id);
     _isDeleting = false;
     refresh();
@@ -93,7 +172,8 @@ class SuitesScreenState extends State<SuitesScreen> {
     if (_isRenaming) return;
     _isRenaming = true;
     final ctrl = TextEditingController(text: current);
-    final newName = await showBlurredDialog<String>(context,
+    final newName = await showBlurredDialog<String>(
+      context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text(
@@ -116,7 +196,10 @@ class SuitesScreenState extends State<SuitesScreen> {
         ],
       ),
     );
-    if (newName == null || newName.isEmpty) { _isRenaming = false; return; }
+    if (newName == null || newName.isEmpty) {
+      _isRenaming = false;
+      return;
+    }
     await DatabaseService.renameSuite(id, newName);
     _isRenaming = false;
     refresh();
@@ -271,60 +354,83 @@ class SuitesScreenState extends State<SuitesScreen> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: Text('Loading...', style: TextStyle(color: AppColors.textSecondary)),
+                    child: Text(
+                      'Loading...',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
                   );
                 }
                 final suites = snapshot.data ?? [];
                 if (suites.isEmpty) {
-                  return ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (!_isPro) _adPlaceholder(),
-                      const SizedBox(height: 24),
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.folder_open,
-                              size: 64,
-                              color: AppColors.textHint,
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'No test suites yet',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 16,
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      await _syncAndReload();
+                    },
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        const SizedBox(height: 120),
+                        if (!_isPro) ...[
+                          _adPlaceholder(),
+                          const SizedBox(height: 24),
+                        ],
+                        Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.folder_open,
+                                size: 64,
+                                color: AppColors.textHint,
                               ),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: () => widget.onGenerate?.call(),
-                              icon: const Icon(Icons.bolt, color: Colors.black),
-                              label: const Text(
-                                'Generate now',
+                              const SizedBox(height: 16),
+                              const Text(
+                                'No test suites yet',
                                 style: TextStyle(
-                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textSecondary,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton.icon(
+                                onPressed: () => widget.onGenerate?.call(),
+                                icon: const Icon(
+                                  Icons.bolt,
                                   color: Colors.black,
                                 ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.accent,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 32,
-                                  vertical: 14,
+                                label: const Text(
+                                  'Generate now',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
+                                  ),
                                 ),
-                                elevation: 4,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.accent,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 14,
+                                  ),
+                                  elevation: 4,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 12),
+                              if (!AuthService.isGuest)
+                                TextButton.icon(
+                                  onPressed: _checkCloud,
+                                  icon: const Icon(Icons.cloud_sync, size: 18),
+                                  label: const Text('Check cloud'),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 120),
+                      ],
+                    ),
                   );
                 }
 
@@ -336,9 +442,10 @@ class SuitesScreenState extends State<SuitesScreen> {
 
                 return RefreshIndicator(
                   onRefresh: () async {
-                    refresh();
+                    await _syncAndReload();
                   },
                   child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     children: children,
                   ),
@@ -348,10 +455,12 @@ class SuitesScreenState extends State<SuitesScreen> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-            child: const Text(
-              'Data stays local on this device and is not synced to the cloud.',
+            child: Text(
+              AuthService.isGuest
+                  ? 'Data stays local on this device and is not synced to the cloud.'
+                  : 'Synced to cloud — accessible from any device.',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textHint,
                 fontStyle: FontStyle.italic,

@@ -110,83 +110,96 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
     final isLast = _currentStep == widget.steps.length - 1;
     final padBottom = MediaQuery.of(context).padding.bottom;
     final padTop = MediaQuery.of(context).padding.top;
+    final screenHeight = MediaQuery.of(context).size.height;
     final targetRect = _getTargetRect();
+
+    final tooltipOnTop = targetRect != null &&
+        targetRect.bottom > screenHeight - 260;
 
     return Material(
       color: Colors.transparent,
-      child: FadeTransition(
-        opacity: _fadeAnim,
-        child: Stack(
-          children: [
-            if (targetRect != null)
-              ClipPath(
-                clipper: _HoleClipper(targetRect),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                  child: Container(color: Colors.black.withOpacity(0.4)),
-                ),
-              )
-            else
-              Container(color: Colors.black.withOpacity(0.65)),
+      child: Stack(
+        children: [
+          ClipPath(
+            clipper: targetRect != null ? _HoleClipper(targetRect) : _NoHoleClipper(),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+              child: Container(color: Colors.black.withOpacity(0.4)),
+            ),
+          ),
 
-            if (targetRect != null)
-              Positioned(
-                left: targetRect.left - 1,
-                top: targetRect.top - 1,
-                width: targetRect.width + 2,
-                height: targetRect.height + 2,
-                child: IgnorePointer(
+          FadeTransition(
+            opacity: _fadeAnim,
+            child: Stack(
+              children: [
+                if (targetRect != null)
+                  Positioned(
+                    left: targetRect.left - 1,
+                    top: targetRect.top - 1,
+                    width: targetRect.width + 2,
+                    height: targetRect.height + 2,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: AppColors.accent.withOpacity(0.8),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                Positioned(
+                  top: padTop + 8,
+                  right: 12,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: AppColors.accent.withOpacity(0.8),
-                        width: 2,
+                        color: AppColors.accent.withOpacity(0.25),
+                      ),
+                    ),
+                    child: TextButton(
+                      onPressed: _dismiss,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
+                      ),
+                      child: const Text(
+                        'Skip  →',
+                        style: TextStyle(
+                          color: AppColors.accent,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-            Positioned(
-              top: padTop + 8,
-              right: 12,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.accent.withOpacity(0.25),
+                if (tooltipOnTop)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    top: padTop + 60,
+                    child: _buildTooltip(step, isLast),
+                  )
+                else
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: padBottom + 24,
+                    child: _buildTooltip(step, isLast),
                   ),
-                ),
-                child: TextButton(
-                  onPressed: _dismiss,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                  ),
-                  child: const Text(
-                    'Skip  →',
-                    style: TextStyle(
-                      color: AppColors.accent,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
+              ],
             ),
-
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: padBottom + 24,
-              child: _buildTooltip(step, isLast),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -322,4 +335,12 @@ class _HoleClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(_HoleClipper old) => old.holeRect != holeRect;
+}
+
+class _NoHoleClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) => Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+
+  @override
+  bool shouldReclip(_NoHoleClipper old) => false;
 }

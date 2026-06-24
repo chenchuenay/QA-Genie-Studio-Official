@@ -68,7 +68,7 @@ class FinalizationStage {
       'submit', 'send', 'post', 'upload', 'download', 'export', 'import',
       'receive', 'search', 'approve', 'reject', 'accept',
       'pay', 'checkout', 'purchase', 'book', 'reschedule', 'schedule',
-      'should', 'must', 'will', 'user', 'system', 'app',
+      'should', 'must', 'will', 'member', 'system', 'app',
     };
 
     if (newConceptStarts.contains(words.first)) return true;
