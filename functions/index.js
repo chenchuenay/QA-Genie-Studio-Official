@@ -643,7 +643,7 @@ exports.getOrCreateGuestToken = functions.runWith({
 }).https.onCall(async (data) => {
   const { deviceId, forceReturning, caller, androidId } = data;
   console.log(`[getOrCreateGuestToken] CALLED | deviceId=${deviceId} | androidId=${androidId} | forceReturning=${forceReturning} | caller=${caller}`);
-  if (!deviceId)
+  if (!deviceId || typeof deviceId !== "string" || deviceId.length < 8 || deviceId.length > 128 || !/^[a-zA-Z0-9_\-]+$/.test(deviceId))
     throw new functions.https.HttpsError(
       "invalid-argument",
       "deviceId required",
@@ -1087,6 +1087,10 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
   const { email, displayName, deviceId, previousGuestUid } = data;
+  if (email && context.auth.token?.email && email !== context.auth.token.email) {
+    console.log(`[linkGoogleAccount] EMAIL MISMATCH | data.email=${email} | token.email=${context.auth.token.email}`);
+    throw new functions.https.HttpsError("permission-denied", "Email mismatch");
+  }
   const cooldownRef = db
     .collection("emailCooldown")
     .doc(email);
@@ -1575,7 +1579,7 @@ exports.getMemberSuites = functions.https.onCall(async (data, context) => {
 
     // UID redirect via memberProfiles if no suites found (handles reinstall)
     if (suites.length === 0) {
-      const email = context.auth.token?.email || data?.email;
+      const email = context.auth.token?.email;
       if (email) {
         const profileDoc = await db.collection("memberProfiles").doc(email).get();
         if (profileDoc.exists) {
