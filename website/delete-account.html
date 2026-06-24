@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ads & Monetization Policy — QA Genie</title>
-    <meta name="description" content="QA Genie Ads & Monetization Policy — how rewarded ads work and what data is shared.">
+    <title>Delete Account — QA Genie</title>
+    <meta name="description" content="Request QA Genie account deletion — email wipe@qagenies.com from your registered email address.">
     <link rel="icon" type="image/png" href="assets/logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,6 +32,8 @@
         strong { color: var(--text); }
         a { color: var(--accent); text-decoration: none; }
         a:hover { text-decoration: underline; }
+        .warning { background: rgba(255, 193, 7, 0.08); border: 1px solid rgba(255, 193, 7, 0.15); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+        .warning strong { color: #FFC107; }
         .divider { height: 1px; background: var(--border); max-width: 720px; margin: 0 auto; padding: 0 24px; }
         footer { border-top: 1px solid var(--border); padding: 40px 0; }
         footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
@@ -65,54 +67,23 @@
 
     <div class="page">
         <div class="container">
-            <h1>Ads & Monetization Policy</h1>
+            <h1>Delete Account</h1>
             <p class="date">Last updated: June 22, 2026</p>
 
-            <p>QA Genie operates on a freemium model to ensure our generation services remain sustainable. Some features require watching a rewarded advertisement.</p>
+            <p>To request deletion of your QA Genie account and all associated data, send an email to <strong><a href="mailto:wipe@qagenies.com">wipe@qagenies.com</a></strong>.</p>
 
-            <h2>1. Rewarded Ads (Opt-In)</h2>
-            <p>CORE tier users may unlock additional generation and export capacity by watching rewarded video ads delivered through the Google AdMob network.</p>
+            <h2>Requirements</h2>
             <ul>
-                <li>Ads are <strong>user-initiated only</strong> — you choose when to watch an ad</li>
-                <li>A <strong>transaction token</strong> is generated upon ad completion and sent to our backend for verification</li>
-                <li>Ad completion is verified server-side using a cryptographically random transaction token</li>
-                <li>Attempting to spoof ad completion or bypass ad requirements violates our Terms of Service and may result in account suspension</li>
+                <li>You <strong>must</strong> send the email from the same email address registered in our database — we verify your identity against your registered email.</li>
+                <li>Include your account details in the email (the Google email address you signed up with, and optionally the reason for deletion).</li>
             </ul>
 
-            <h2>2. Data & AdMob</h2>
-            <p>By watching a rewarded ad, Google AdMob may collect:</p>
-            <ul>
-                <li>Advertising ID (Android Advertising ID)</li>
-                <li>Device information</li>
-                <li>IP address</li>
-                <li>App interaction data</li>
-            </ul>
-            <p>These identifiers are processed per <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's AdMob Privacy & Terms</a>. You can opt out of ad personalization via <strong>Android Settings → Google → Ads → Opt out of Ads Personalization</strong>.</p>
+            <h2>Processing Time</h2>
+            <p>After we receive and verify your request, your account will be completely deleted within <strong>24–48 hours</strong>. All your data — profile, synced test cases, usage history — will be permanently removed.</p>
 
-            <h2>3. Ad-Free Pro Tier</h2>
-            <p>PRO tier users experience no ads and bypass all ad-supported limitations. PRO status is managed via internal subscription verification logic. If you believe your PRO status is not correctly applied, please contact us through the app's Support → Report an Issue.</p>
-
-            <h2>4. No Intrusive Ads</h2>
-            <p>We do not serve interstitial, banner, or native ads during your workflow. The only ad format is rewarded video, triggered only by your explicit action:</p>
-            <ul>
-                <li>No pop-ups</li>
-                <li>No auto-playing ads</li>
-                <li>No background ad loading</li>
-                <li>No interruption of your core workflow</li>
-            </ul>
-
-            <h2>5. Ad Integrity</h2>
-            <p>Ad completion is verified server-side using a cryptographically random transaction token. Attempting to spoof ad completion or bypass ad requirements violates our Terms of Service and may result in account suspension.</p>
-
-            <h2>6. Mediated Networks</h2>
-            <p>In addition to AdMob, ads may be served through Unity Ads as a mediated partner. Each network operates under its own privacy policy and data handling practices.</p>
-
-            <h2>7. Contact</h2>
-            <p>General enquiries: <a href="mailto:hello@qagenies.com">hello@qagenies.com</a><br>
-            Creator: <a href="mailto:chenchuenay@qagenies.com">chenchuenay@qagenies.com</a><br>
-            Account deletion: <a href="mailto:wipe@qagenies.com">wipe@qagenies.com</a> (no take backs)</p>
-
-            <p>See also: <a href="terms.html">Terms of Service</a> | <a href="privacy.html">Privacy Policy</a></p>
+            <div class="warning">
+                <strong>⚠️ No take backs.</strong> Once you send this email, deletion is irreversible. There is no undo. All your data will be permanently erased from our systems.
+            </div>
         </div>
     </div>
 

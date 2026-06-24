@@ -1283,22 +1283,37 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
   );
   await batch.commit();
 
-  // Clean up synced suites under memberData/{uid}/dates/{date}/suites/{serial}
+  // Clean up synced suites under memberData/{tier}/{uid}/{date}/suites/{serial}
   try {
-    const dateColRef = db.collection("memberData").doc(uid).collection("dates");
-    const dateDocs = await dateColRef.get();
+    const tier = await _getMemberTier(uid);
+    const suiteBatch = db.batch();
     const gcsPromises = [];
+
+    // New path: memberData/{tier}/{uid}/{date}/suites/{serial}
+    const uidDocRef = db.collection("memberData").doc(tier).collection(uid);
+    const dateDocs = await uidDocRef.get();
     for (const dateDoc of dateDocs.docs) {
       const suitesSnap = await dateDoc.ref.collection("suites").get();
       for (const suiteDoc of suitesSnap.docs) {
-        batch.delete(suiteDoc.ref);
+        suiteBatch.delete(suiteDoc.ref);
         gcsPromises.push(
-          bucket.file(`memberData/${uid}/dates/${dateDoc.id}/suites/${suiteDoc.id}.json`)
+          bucket.file(`memberData/${tier}/${uid}/${dateDoc.id}/suites/${suiteDoc.id}.json`)
             .delete().catch(() => {}),
         );
       }
     }
-    await batch.commit();
+
+    // Legacy path: memberData/{uid}/dates/{date}/suites/{serial} (pre-tier restructure)
+    const legacyColRef = db.collection("memberData").doc(uid).collection("dates");
+    const legacyDateDocs = await legacyColRef.get();
+    for (const dateDoc of legacyDateDocs.docs) {
+      const suitesSnap = await dateDoc.ref.collection("suites").get();
+      for (const suiteDoc of suitesSnap.docs) {
+        suiteBatch.delete(suiteDoc.ref);
+      }
+    }
+
+    await suiteBatch.commit();
     await Promise.all(gcsPromises);
   } catch (e) {
     log("warn", `deleteAccount: suite cleanup failed for ${uid}`, { error: e.message });

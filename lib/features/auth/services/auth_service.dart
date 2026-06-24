@@ -240,6 +240,20 @@ class AuthService {
     }
   }
 
+  /// Hard sign-out: wipes local data, does NOT re-create guest.
+  /// Used when the user is kicked out due to multi-device conflict.
+  static Future<void> hardSignOut() async {
+    await AnalyticsService.logDebug(message: 'hardSignOut: ENTER');
+    await DatabaseService.clearAll();
+    DatabaseService.invalidateSuitesCache();
+    try { await _googleSignIn.signOut(); } catch (_) {}
+    try { await _auth.signOut(); } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (_) {}
+  }
+
   static Future<void> _reinitializeDb(String identity) async {
     await DatabaseService.initDatabase(identity);
     DatabaseService.invalidateSuitesCache();

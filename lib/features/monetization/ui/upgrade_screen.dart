@@ -215,30 +215,48 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
-            onPressed: _isTapping ? null : () {
+                onPressed: _isTapping ? null : () {
               setState(() => _isTapping = true);
               showBlurredDialog(
                 context,
+                barrierDismissible: false,
                 builder: (ctx) => AlertDialog(
                   backgroundColor: AppColors.surface,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppRadius.dialog),
                   ),
                   title: const Text(
-                    'Thanks for your interest!',
+                    'Interested in Pro?',
                     style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
-                  content: const Text(
-                    'Our billing system is still cooking.\nWe\'ll notify you when it\'s ready.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
-                    textAlign: TextAlign.center,
+                  content: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.star, color: AppColors.accent, size: 48),
+                      SizedBox(height: 12),
+                      Text(
+                        'You're on the list!',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'We're putting the final touches on something great.\n'
+                        'You\'ll be among the first to know when it\'s ready.',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                   actions: [
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () => Navigator.pop(ctx),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          setState(() => _isTapping = false);
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.accent,
                           foregroundColor: Colors.black,

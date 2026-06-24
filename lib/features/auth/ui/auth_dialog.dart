@@ -365,39 +365,8 @@ class _AuthDialogState extends State<AuthDialog> {
                 SizedBox(
                   width: double.infinity,
                   height: 54,
-                  child: ElevatedButton.icon(
+                  child: ElevatedButton(
                     onPressed: _isLoading || _isGuestLoading ? null : _handleContinueWithGoogle,
-                    icon: const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
-                    label: _isLoading
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'Connecting to Google',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                            Text(
-                              '${'.' * _dotCount}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        )
-                      : const Text(
-                          'Continue with Google',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
-                        ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isLoading
                           ? AppColors.accent.withOpacity(0.7)
@@ -406,7 +375,61 @@ class _AuthDialogState extends State<AuthDialog> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                      ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Opacity(
+                          opacity: _isLoading ? 0.0 : 1.0,
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
+                              SizedBox(width: 8),
+                              Text(
+                                'Continue with Google',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              SizedBox(width: 24),
+                            ],
+                          ),
+                        ),
+                        Opacity(
+                          opacity: _isLoading ? 1.0 : 0.0,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Connecting to Google',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 24,
+                                child: Text(
+                                  '${'.' * _dotCount}',
+                                  textAlign: TextAlign.left,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
                 if (widget.showGuestButton && !_forceGoogleOnly) ...[
                   const SizedBox(height: 12),

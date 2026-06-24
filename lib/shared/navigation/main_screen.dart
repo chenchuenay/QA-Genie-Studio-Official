@@ -11,6 +11,7 @@ import 'package:qa_genie/features/suites/ui/screens/suites_screen.dart';
 import 'package:qa_genie/features/account/ui/account_screen.dart';
 import 'package:qa_genie/features/generation/ui/screens/home_screen.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
+import 'package:qa_genie/features/auth/services/session_monitor.dart';
 import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/update/logic/update_manager.dart';
@@ -41,8 +42,15 @@ class MainScreenState extends State<MainScreen> {
         shouldAutoStartTour = false;
         startWalkthrough();
       }
+      SessionMonitor.start(context);
     });
     _checkForUpdate();
+  }
+
+  @override
+  void dispose() {
+    SessionMonitor.stop();
+    super.dispose();
   }
 
   Future<void> _checkForUpdate() async {
