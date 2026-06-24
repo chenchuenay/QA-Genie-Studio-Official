@@ -54,6 +54,7 @@ class FunctionsService {
     Map<String, dynamic>? payload,
     Duration timeout = const Duration(seconds: 30),
     int attempt = 1,
+    bool throwOnError = false,
   }) async {
     final startTime = DateTime.now();
 
@@ -98,8 +99,11 @@ class FunctionsService {
           payload: payload,
           timeout: timeout,
           attempt: attempt + 1,
+          throwOnError: throwOnError,
         );
       }
+
+      if (throwOnError) rethrow;
 
       return {
         'success': false,
@@ -130,8 +134,11 @@ class FunctionsService {
           payload: payload,
           timeout: timeout,
           attempt: attempt + 1,
+          throwOnError: throwOnError,
         );
       }
+
+      if (throwOnError) rethrow;
 
       return {
         'success': false,
@@ -149,6 +156,7 @@ class FunctionsService {
     required String functionName,
     Map<String, dynamic>? payload,
     Duration timeout = const Duration(seconds: 30),
+    bool throwOnError = false,
   }) async {
     debugPrint('📡 FUNCTIONS_SERVICE: Calling $functionName');
 
@@ -160,6 +168,7 @@ class FunctionsService {
       functionName: functionName,
       payload: payload,
       timeout: timeout,
+      throwOnError: throwOnError,
     );
   }
 

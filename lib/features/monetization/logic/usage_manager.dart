@@ -65,14 +65,14 @@ class UsageManager {
       final result = await FunctionsService.call(functionName: 'checkExportQuota', payload: {'rewarded': rewarded});
       return result['allowed'] == true;
     } catch (e) {
-      debugPrint('UsageManager.canGenerate error: $e');
+      debugPrint('UsageManager.canExport error: $e');
       return false;
     }
   }
 
   static Future<bool> canExportSummary({bool rewarded = false}) async => canExport(rewarded: rewarded);
 
-  static Future<void> incrementGeneration({int count = 8, bool rewarded = false}) async {
+  static Future<void> invalidateGenerationCache() async {
     _invalidateCache();
   }
 

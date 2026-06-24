@@ -16,7 +16,7 @@ class DatabaseService {
   static bool _isInitializing = false;
   static final Completer<void> _initCompleter = Completer();
   static const String _dbName = 'qa_genie.db';
-  static const int _version = 5;
+  static const int _version = 6;
   static List<Map<String, dynamic>>? _suitesCache;
 
   static Future<Database> get db async {
@@ -79,6 +79,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE pending_deletes (
         suite_id INTEGER PRIMARY KEY,
+        cloud_id TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
@@ -146,6 +147,7 @@ class DatabaseService {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS pending_deletes (
           suite_id INTEGER PRIMARY KEY,
+          cloud_id TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
       ''');
@@ -154,6 +156,10 @@ class DatabaseService {
       await db.execute('''
         ALTER TABLE suites ADD COLUMN dirty INTEGER DEFAULT 0
       ''');
+    }
+    if (oldVersion < 6) {
+      // Add cloud_id to pending_deletes (may already exist if v4 migration ran with updated schema)
+      try { await db.execute('ALTER TABLE pending_deletes ADD COLUMN cloud_id TEXT'); } catch (_) {}
     }
   }
   
@@ -463,7 +469,11 @@ class DatabaseService {
         whereArgs: [moduleName, feature, platform]);
     if (duplicate.isNotEmpty) {
       final localId = duplicate.first['id'] as int;
-      await db.update('suites', {'cloud_id': cloudId}, where: 'id = ?', whereArgs: [localId]);
+      final existingCloudId = duplicate.first['cloud_id'] as String?;
+      // Only assign cloud_id if this suite doesn't belong to a different cloud suite
+      if (existingCloudId == null || existingCloudId == cloudId) {
+        await db.update('suites', {'cloud_id': cloudId}, where: 'id = ?', whereArgs: [localId]);
+      }
       invalidateSuitesCache();
       return localId;
     }
@@ -480,12 +490,18 @@ class DatabaseService {
   }
 
   /// Queue a suite id for remote deletion.
-  static Future<void> queuePendingDelete(int suiteId) async {
+  static Future<void> queuePendingDelete(int suiteId, {String? cloudId}) async {
     final db = await DatabaseService.db;
     try {
-      await db.insert('pending_deletes', {'suite_id': suiteId});
+      await db.insert('pending_deletes', {'suite_id': suiteId, 'cloud_id': cloudId});
     } catch (_) {
-      // Already exists
+      // Already exists — update cloud_id
+      if (cloudId != null) {
+        try {
+          await db.update('pending_deletes', {'cloud_id': cloudId},
+              where: 'suite_id = ?', whereArgs: [suiteId]);
+        } catch (_) {}
+      }
     }
   }
 
@@ -494,6 +510,12 @@ class DatabaseService {
     final db = await DatabaseService.db;
     final rows = await db.query('pending_deletes', columns: ['suite_id']);
     return rows.map((r) => r['suite_id'] as int).toList();
+  }
+
+  /// Get all pending delete entries with cloud_id.
+  static Future<List<Map<String, dynamic>>> getPendingDeleteEntries() async {
+    final db = await DatabaseService.db;
+    return db.query('pending_deletes');
   }
 
   /// Clear a pending delete after successful remote deletion.

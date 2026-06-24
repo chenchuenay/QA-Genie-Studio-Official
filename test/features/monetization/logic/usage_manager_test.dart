@@ -91,9 +91,9 @@ void main() {
       await UsageManager.trackProInterest('test');
     });
 
-    test('incrementGeneration invalidates cache', () async {
+    test('invalidateGenerationCache invalidates cache', () async {
       UsageManager.invalidateCache();
-      await UsageManager.incrementGeneration();
+      await UsageManager.invalidateGenerationCache();
     });
 
     test('getLifetimeStats returns default values when dashboard unavailable', () async {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/config/app_config.dart';
+import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
@@ -36,6 +37,10 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _init() async {
     final prefs = await AppConfig.sharedPrefs;
     final firstLaunch = prefs.getBool('first_launch_completed') ?? false;
+
+    // Initialize DB early so post-login flows (suite pull) can access it
+    final identity = await DeviceUtils.getUniqueId();
+    await DatabaseService.initDatabase(identity);
 
     if (!firstLaunch) {
       await showBlurredDialog(
@@ -97,7 +102,7 @@ class _SplashScreenState extends State<SplashScreen> {
           context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1C1C1E),
+            backgroundColor: AppColors.surface,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text(
               'Already Signed In',
@@ -105,17 +110,17 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             content: const Text(
               'Signing in here logs out the other device.',
-              style: TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, 'no'),
-                child: const Text('No', style: TextStyle(color: Color(0xFF8E8E93))),
+                child: const Text('No', style: TextStyle(color: AppColors.textSecondary)),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, 'okay'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF007AFF),
+                  backgroundColor: AppColors.accent,
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
@@ -159,9 +164,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _backgroundInit() async {
-    final identity = await DeviceUtils.getUniqueId();
-    await DatabaseService.initDatabase(identity);
-    // One-time migration from legacy UID-based identity to device-level identity
     final oldUid = AuthService.currentMember?.uid ?? 'guest_default';
     await DatabaseService.migrateDataToCurrentDb(oldUid);
 

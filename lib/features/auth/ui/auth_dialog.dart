@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
@@ -97,32 +98,27 @@ class _AuthDialogState extends State<AuthDialog> {
         await FunctionsService.call(
           functionName: 'checkEmailCooldown',
           payload: {'email': googleAccount.email},
+          throwOnError: true,
         );
-      } catch (e) {
-        final msg = e.toString();
-        if (msg.contains('cooldown') || msg.contains('permission-denied')) {
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'permission-denied') {
           throw FirebaseAuthException(
             code: 'permission-denied',
             message: 'This Google account was recently deleted and cannot be used again for 24 hours.',
           );
         }
+        rethrow;
       }
 
       // Step 3: Check session conflict BEFORE linking
       final deviceId = await DeviceUtils.getUniqueId();
-      Map<String, dynamic> sessionCheck;
-      try {
-        sessionCheck = await FunctionsService.checkSessionByEmail(
-          email: googleAccount.email,
-          deviceId: deviceId,
-        );
-      } catch (e) {
-        debugPrint('⚠️ Auth: checkSessionByEmail threw — $e');
-        sessionCheck = {'conflict': false};
-      }
+      final sessionCheck = await FunctionsService.checkSessionByEmail(
+        email: googleAccount.email,
+        deviceId: deviceId,
+      );
       if (sessionCheck['error'] != null) {
         debugPrint('⚠️ Auth: checkSessionByEmail error — ${sessionCheck['error']}');
-        sessionCheck = {'conflict': false};
+        sessionCheck['conflict'] = false;
       }
 
       if (sessionCheck['conflict'] == true) {
@@ -271,7 +267,10 @@ class _AuthDialogState extends State<AuthDialog> {
       _isGuestLoading = true;
       _errorMessage = null;
     });
-    if (!await NetworkGuard.ensureProductionOnline(context)) return;
+    if (!await NetworkGuard.ensureProductionOnline(context)) {
+      if (mounted) setState(() => _isGuestLoading = false);
+      return;
+    }
     try {
       unawaited(AnalyticsService.logDebug(message: 'handleContinueAsGuest: calling signInAsGuest'));
       await AuthService.signInAsGuest(caller: 'guest_button');
@@ -450,6 +449,15 @@ class _AuthDialogState extends State<AuthDialog> {
                     'Use a different Google account to continue.',
                     style: TextStyle(color: AppColors.textHint, fontSize: 13),
                     textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 44,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 24),

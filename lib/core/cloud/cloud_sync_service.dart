@@ -155,10 +155,20 @@ class CloudSyncService {
   static Future<void> processPendingDeletes() async {
     if (!_canSync) return;
     try {
-      final pendingIds = await DatabaseService.getPendingDeleteSuiteIds();
-      for (final id in pendingIds) {
-        await deleteRemoteSuite(id);
-        await DatabaseService.clearPendingDelete(id);
+      final pending = await DatabaseService.getPendingDeleteEntries();
+      for (final entry in pending) {
+        final id = entry['suite_id'] as int;
+        final cloudId = entry['cloud_id'] as String?;
+        if (cloudId != null) {
+          try {
+            await FunctionsService.deleteMemberSuite(cloudId);
+            await DatabaseService.clearPendingDelete(id);
+          } catch (e) {
+            debugPrint('CloudSyncService: delete remote failed for $cloudId: $e');
+          }
+        } else {
+          await DatabaseService.clearPendingDelete(id);
+        }
       }
     } catch (e) {
       debugPrint('CloudSyncService: processPendingDeletes failed: $e');

@@ -112,23 +112,7 @@ class AuthService {
         throw Exception('Google sign-in cancelled');
       }
       await _writeLog('linkWithGoogle | Google account selected: ${googleSignInAccount.email}');
-
-      try {
-        await FunctionsService.call(
-          functionName: 'checkEmailCooldown',
-          payload: {'email': googleSignInAccount.email},
-        );
-        await _writeLog('linkWithGoogle | email cooldown check passed');
-      } catch (e) {
-        final msg = e.toString();
-        if (msg.contains('cooldown') || msg.contains('permission-denied')) {
-          await _writeLog('linkWithGoogle | email in cooldown');
-          throw FirebaseAuthException(
-            code: 'permission-denied',
-            message: 'This Google account was recently deleted and cannot be used again for 24 hours.',
-          );
-        }
-      }
+      // Cooldown check already performed in auth_dialog before this call
 
       final googleUser = googleSignInAccount;
 
@@ -250,7 +234,19 @@ class AuthService {
     try { await _auth.signOut(); } catch (_) {}
     try {
       final prefs = await SharedPreferences.getInstance();
+      final preserved = <String, dynamic>{};
+      for (final k in ['first_launch_completed', 'never_show_guidelines', 'first_launch_guidelines_shown']) {
+        final v = prefs.get(k);
+        if (v != null) preserved[k] = v;
+      }
       await prefs.clear();
+      for (final e in preserved.entries) {
+        final v = e.value;
+        if (v is bool) await prefs.setBool(e.key, v);
+        else if (v is String) await prefs.setString(e.key, v);
+        else if (v is int) await prefs.setInt(e.key, v);
+        else if (v is double) await prefs.setDouble(e.key, v);
+      }
     } catch (_) {}
   }
 

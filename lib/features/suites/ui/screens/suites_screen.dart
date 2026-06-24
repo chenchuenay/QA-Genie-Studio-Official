@@ -157,11 +157,13 @@ class SuitesScreenState extends State<SuitesScreen> {
   Future<void> _deleteSuite(int id) async {
     if (_isDeleting) return;
     _isDeleting = true;
+    // Capture cloud_id BEFORE local delete so pending deletes can use it
+    final cloudId = await DatabaseService.getCloudIdForSuite(id);
     final networkOk = NetworkGuard.isOnline;
     if (networkOk && !AuthService.isGuest) {
       await CloudSyncService.deleteRemoteSuite(id);
-    } else if (!networkOk && !AuthService.isGuest) {
-      await DatabaseService.queuePendingDelete(id);
+    } else if (!networkOk && !AuthService.isGuest && cloudId != null) {
+      await DatabaseService.queuePendingDelete(id, cloudId: cloudId);
     }
     await DatabaseService.deleteSuite(id);
     _isDeleting = false;
