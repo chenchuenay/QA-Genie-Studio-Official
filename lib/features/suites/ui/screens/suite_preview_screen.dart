@@ -11,10 +11,10 @@ import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/account/ui/account_screen.dart';
+import 'package:qa_genie/features/support/ui/report_issue_screen.dart';
 import 'package:qa_genie/features/summary/ui/summary_report_screen.dart';
 import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
-import 'package:qa_genie/core/ui/network_ui_helper.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 
@@ -138,7 +138,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         screen: 'SuitePreviewScreen',
         stage: ErrorStage.unknown,
         severity: ErrorSeverity.error,
-        userMessage: 'Save failed. Please try again.',
+        memberMessage: 'Save failed. Please try again.',
         error: e,
         stack: stack,
       );
@@ -170,7 +170,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         screen: 'SuitePreviewScreen',
         stage: ErrorStage.export,
         severity: ErrorSeverity.error,
-        userMessage: 'Export failed. Please try again.',
+        memberMessage: 'Export failed. Please try again.',
         error: e,
         stack: stackTrace,
       );
@@ -346,6 +346,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     final casesToMove = indices.map((i) => widget.session.testCases[i]).toList();
     final deleteIds = casesToMove.map((tc) => tc.dbId).whereType<int>().toList();
     await DatabaseService.insertTestCases(suiteId: targetSuiteId, cases: casesToMove);
+    await DatabaseService.markSuiteDirty(targetSuiteId);
     if (deleteIds.isNotEmpty) await DatabaseService.batchDeleteTestCases(deleteIds);
     for (final i in indices) {
       widget.session.testCases.removeAt(i);
@@ -491,6 +492,15 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                           ),
                         ),
                         const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.flag_outlined, color: AppColors.textSecondary, size: 20),
+                          tooltip: 'Report Issue',
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ReportIssueScreen()),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
                         OutlinedButton(
                           onPressed: _toggleEdit,
                           style: OutlinedButton.styleFrom(
@@ -622,7 +632,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
               ),
             ),
             const Padding(
-              padding: EdgeInsets.only(bottom: 4),
+              padding: EdgeInsets.zero,
               child: Text(
                 'Hybrid-logic generation orchestrated. Please review/adjust before export.',
                 textAlign: TextAlign.center,
@@ -634,10 +644,9 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
               ),
             ),
 
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: SizedBox(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
@@ -654,7 +663,6 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                       ),
                     ),
                   ),
-                ),
               ),
             ),
           ],

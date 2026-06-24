@@ -9,7 +9,7 @@
 /// PURPOSE:
 /// - Prevent accidental leakage of sensitive information
 /// - Reduce prompt injection attack surface
-/// - Avoid real user/company data exposure
+/// - Avoid real member/company data exposure
 /// - Sanitize prompts BEFORE AI transmission
 ///
 /// IMPORTANT:

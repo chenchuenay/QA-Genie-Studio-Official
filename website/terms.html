@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service — QA Genie</title>
+    <meta name="description" content="QA Genie Terms of Service — rules and guidelines for using the app.">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --bg: #05060A; --surface: #0D1018; --card: #141922; --border: #232938; --accent: #3DDCFF; --text: #FFFFFF; --text-secondary: #B8C0CF; --text-tertiary: #72798A; --radius-card: 24px; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(5, 6, 10, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+        nav .container { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 18px; }
+        .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--accent); }
+        .page { padding: 120px 0 60px; }
+        h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+        .date { color: var(--text-tertiary); font-size: 14px; margin-bottom: 48px; }
+        h2 { font-size: 20px; font-weight: 700; margin: 40px 0 16px; color: var(--accent); }
+        h3 { font-size: 16px; font-weight: 600; margin: 24px 0 12px; color: var(--text); }
+        p { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; line-height: 1.8; }
+        ul, ol { color: var(--text-secondary); font-size: 14px; padding-left: 20px; margin-bottom: 16px; }
+        li { margin-bottom: 8px; line-height: 1.7; }
+        strong { color: var(--text); }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent); }
+        .divider { height: 1px; background: var(--border); max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        footer { border-top: 1px solid var(--border); padding: 40px 0; }
+        footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        footer .footer-links { display: flex; gap: 24px; align-items: center; }
+        footer a { color: var(--text-tertiary); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+        footer a:hover { color: var(--accent); }
+        footer p { color: var(--text-tertiary); font-size: 13px; margin-bottom: 0; }
+        @media (max-width: 768px) {
+            nav .container { height: 56px; }
+            .nav-links a { display: none; }
+            .page { padding: 100px 0 40px; }
+            h1 { font-size: 26px; }
+            footer .container { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="nav-logo">
+                <img src="assets/logo.png" alt="QA Genie">
+                QA Genie
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="privacy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="container">
+            <h1>Terms of Service</h1>
+            <p class="date">Last updated: June 22, 2026</p>
+
+            <h2>1. Acceptance</h2>
+            <p>By downloading, installing, or using QA Genie ("the App"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the App.</p>
+
+            <h2>2. Service Purpose</h2>
+            <p>QA Genie is a hybrid-powered test case generation tool intended for professional quality assurance and software testing purposes. The App employs a generation engine — combining cloud-based inference with locally defined fallback domains — to produce structured test case suggestions based on your natural-language description of the feature under test.</p>
+            <p>An active internet connection is required to generate test cases, export test cases, and export summaries. Editing test cases, viewing saved suites, and managing local data may be performed offline.</p>
+            <p>Generated test cases are suggestions only and <strong>must</strong> be reviewed, validated, and adapted by a qualified human tester before use in any development, testing, or production environment.</p>
+
+            <h2>3. Account Types</h2>
+            <p>QA Genie recognizes two account types:</p>
+            <ul>
+                <li><strong>USER:</strong> Authenticated via Google Sign-In. Your suites sync across devices via cloud storage. You can manage your account, delete your data, and access all available features.</li>
+                <li><strong>GUEST:</strong> Anonymous, local-only account. No sign-in required. Guest data does not sync and is tied to the device. Two guest subtypes exist:
+                    <ul>
+                        <li><strong>First-time Guest:</strong> 6 free generations per day</li>
+                        <li><strong>Returning Guest:</strong> 1 free generation per day (created after logout or account deletion)</li>
+                    </ul>
+                </li>
+            </ul>
+            <p><strong>One person, one account:</strong> Account sharing or automated account creation is prohibited. You are responsible for all activity under your account and device.</p>
+
+            <h2>4. Tiers</h2>
+            <p>Two service tiers are defined:</p>
+            <ul>
+                <li><strong>CORE (Free):</strong> The default tier for all users and guests. Includes daily generation quotas, ad-rewarded extra generations, and standard features.</li>
+                <li><strong>PRO (Upcoming):</strong> A paid tier not yet released. PRO will offer additional features and increased quotas. Pricing will be announced at launch. Expressing pro interest within the App does not constitute a purchase or binding commitment. PRO access is managed via internal subscription verification logic.</li>
+            </ul>
+
+            <h2>5. Quotas & Fair Use</h2>
+            <p>Daily generation quotas reset at midnight UTC. Quotas vary by account type and tier. CORE users may watch rewarded video ads to earn additional same-day generations. Quota limits and reward values are subject to change with notice. Unused quota does not carry over to the next day.</p>
+            <p>When your quota is exhausted, a dialog will display the exact time remaining until reset. Quota information is displayed only in the generation hint area.</p>
+            <p><strong>Rate limits:</strong> Maximum 10 generation requests per minute; 5 issue reports per minute. Automated scraping, quota bypass, or abuse of our services is strictly prohibited and will result in account suspension.</p>
+
+            <h2>6. Multi-Device Use</h2>
+            <p>You may use the same Google account on multiple devices, but only one device can maintain an active session at a time. When you sign in on a new device:</p>
+            <ul>
+                <li>You will be notified if another device currently holds the active session.</li>
+                <li>You may choose to take over the session (overwriting the previous device) or cancel the operation.</li>
+                <li>The previous device will be automatically signed out of its session when it next connects to the internet.</li>
+            </ul>
+            <p>This mechanism is designed to protect your data and prevent silent session conflicts. You are responsible for managing your sessions across devices.</p>
+
+            <h2>7. Account Deletion & Cooldown</h2>
+            <p>You may delete your account at any time through the App settings. Account deletion:</p>
+            <ul>
+                <li>Removes your profile data, authentication links, and active sessions</li>
+                <li>Deletes your test case content from cloud storage</li>
+                <li>Converts your current session to a returning guest account (1 quota)</li>
+                <li>Triggers a 24-hour cooldown during which the same Google account cannot be re-registered</li>
+            </ul>
+            <p>This cooldown is global (not device-based) and is enforced server-side. You may use a different Google account on the same device immediately.</p>
+
+            <h2>8. Acceptable Use</h2>
+            <p>You agree not to:</p>
+            <ul>
+                <li>Submit prompts containing malicious code, injection attacks, or prohibited content</li>
+                <li>Attempt to extract system prompts or bypass security filters</li>
+                <li>Use the App for any illegal purpose or in violation of applicable laws</li>
+                <li>Attempt to reverse engineer, decompile, or extract the source code of the App</li>
+                <li>Automate interactions with the App through scripts, bots, or other automated means</li>
+                <li>Interfere with or disrupt the App's servers, networks, or security measures</li>
+                <li>Use the App to generate content that is harmful, abusive, defamatory, or discriminatory</li>
+                <li>Use the App to generate content that exploits or abuses children (CSAM / child sexual abuse material)</li>
+                <li>Generate non-consensual deepfake or deceptive synthetic media</li>
+                <li>Generate content intended to deceive voters or interfere with elections</li>
+                <li>Generate malicious code, malware, ransomware, or exploit code</li>
+                <li>Generate content that harasses, bullies, or threatens individuals or groups</li>
+                <li>Circumvent quota limits, authentication mechanisms, or other access controls</li>
+            </ul>
+
+            <h2>9. Data Processing</h2>
+            <p>All generation requests are processed through Firebase Cloud Functions before reaching the inference provider:</p>
+            <ul>
+                <li>Prompts are sanitized (HTML stripped, truncated to 12,000 characters) and PII-scrubbed before transmission</li>
+                <li>We use idempotency keys (requestId) to prevent duplicate processing</li>
+                <li>The inference provider receives only the sanitized prompt text — no personal identifiers</li>
+                <li>Generated test cases are returned to the device and may be synced to cloud storage for multi-device access</li>
+            </ul>
+            <p>See our <a href="privacy.html">Privacy Policy</a> for complete details on data handling.</p>
+
+            <h2>10. Intellectual Property</h2>
+            <p>QA Genie, the QA Genie logo, and all related branding are the property of Enay Kumar. The App's code, design, and visual assets are protected by applicable intellectual property laws.</p>
+            <p>Test cases you generate through the App belong to you. You are solely responsible for the content you generate and how you use it.</p>
+
+            <h2>11. Export Formats</h2>
+            <p>QA Genie supports export of test cases in the following formats: Excel (.xlsx), CSV, JSON, and PDF. Exports require an active internet connection.</p>
+
+            <h2>12. Advertising</h2>
+            <p>QA Genie displays rewarded video ads via Google AdMob with Unity Ads as a mediated partner. Watching an ad is voluntary and rewards are provided at our discretion. We do not display interstitial or banner advertisements. Refer to our <a href="ads-monetization.html">Ads & Monetization Policy</a> for full details.</p>
+
+            <h2>13. AI Output & Validation</h2>
+            <p>Generated test cases are probabilistic in nature — inference models function by predicting information based on learned patterns rather than absolute deterministic logic. Consequently, generated content may contain:</p>
+            <ul>
+                <li>Logical inaccuracies or missing steps</li>
+                <li>Incorrect expected results</li>
+                <li>Hallucinated features or behaviors</li>
+                <li>Inconsistent test data</li>
+            </ul>
+            <p><strong>Human review required.</strong> You are solely responsible for reviewing, validating, and verifying all generated content before use. Generated test cases are a starting point, not a final product. We make no warranties regarding completeness, accuracy, or fitness for purpose of generated content. See our <a href="ai-disclaimer.html">AI Disclaimer</a> for full details.</p>
+
+            <h2>14. Disclaimer of Warranties</h2>
+            <p>THE APP IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, AND NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE APP WILL BE UNINTERRUPTED, ERROR-FREE, SECURE, OR THAT GENERATED TEST CASES WILL MEET YOUR REQUIREMENTS.</p>
+
+            <h2>15. Limitation of Liability</h2>
+            <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL QA GENIE, ITS CREATOR, OR CONTRIBUTORS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE APP, INCLUDING BUT NOT LIMITED TO DAMAGES FOR LOSS OF PROFITS, DATA, OR BUSINESS INTERRUPTION, WHETHER BASED ON WARRANTY, CONTRACT, TORT, OR ANY OTHER LEGAL THEORY.</p>
+            <p>Generated test cases are suggestions only. You are responsible for reviewing, validating, and adapting them before use. We are not liable for any loss, damage, or claim arising from the use of generated test cases in any environment.</p>
+
+            <h2>16. Termination</h2>
+            <p>We reserve the right to suspend or terminate your access to the App at our sole discretion, without prior notice, for conduct that we believe violates these Terms or is harmful to other users, third parties, or the App itself. You may stop using the App at any time and delete your account through the App settings.</p>
+
+            <h2>17. Changes to These Terms</h2>
+            <p>We may update these Terms from time to time. Updated Terms will be posted on this page with an updated "Last updated" date. Continued use of the App after changes constitutes acceptance of the updated Terms. Material changes will be communicated in-app.</p>
+
+            <h2>18. Governing Law</h2>
+            <p>These Terms shall be governed by and construed in accordance with the laws of India, without regard to its conflict of law provisions. Any disputes arising under these Terms shall be subject to the exclusive jurisdiction of the courts in Kerala, India.</p>
+
+            <h2>19. Contact</h2>
+            <p>General enquiries: <a href="mailto:hello@qagenies.com">hello@qagenies.com</a><br>
+            Creator: <a href="mailto:chenchuenay@qagenies.com">chenchuenay@qagenies.com</a><br>
+            Account deletion: <a href="mailto:wipe@qagenies.com">wipe@qagenies.com</a> (no take backs)</p>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 QA Genie. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="mailto:hello@qagenies.com">Contact</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

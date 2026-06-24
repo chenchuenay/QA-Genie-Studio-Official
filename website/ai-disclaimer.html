@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Disclaimer — QA Genie</title>
+    <meta name="description" content="QA Genie AI Disclaimer — understanding the probabilistic nature of AI-generated test cases.">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --bg: #05060A; --surface: #0D1018; --card: #141922; --border: #232938; --accent: #3DDCFF; --text: #FFFFFF; --text-secondary: #B8C0CF; --text-tertiary: #72798A; --radius-card: 24px; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(5, 6, 10, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+        nav .container { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 18px; }
+        .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--accent); }
+        .page { padding: 120px 0 60px; }
+        h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+        .date { color: var(--text-tertiary); font-size: 14px; margin-bottom: 48px; }
+        h2 { font-size: 20px; font-weight: 700; margin: 40px 0 16px; color: var(--accent); }
+        p { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; line-height: 1.8; }
+        ul, ol { color: var(--text-secondary); font-size: 14px; padding-left: 20px; margin-bottom: 16px; }
+        li { margin-bottom: 8px; line-height: 1.7; }
+        strong { color: var(--text); }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent); }
+        .divider { height: 1px; background: var(--border); max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        footer { border-top: 1px solid var(--border); padding: 40px 0; }
+        footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        footer .footer-links { display: flex; gap: 24px; align-items: center; }
+        footer a { color: var(--text-tertiary); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+        footer a:hover { color: var(--accent); }
+        footer p { color: var(--text-tertiary); font-size: 13px; margin-bottom: 0; }
+        @media (max-width: 768px) {
+            nav .container { height: 56px; }
+            .nav-links a { display: none; }
+            .page { padding: 100px 0 40px; }
+            h1 { font-size: 26px; }
+            footer .container { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="nav-logo">
+                <img src="assets/logo.png" alt="QA Genie">
+                QA Genie
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="privacy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="container">
+            <h1>AI Content Disclaimer</h1>
+            <p class="date">Last updated: June 22, 2026</p>
+
+            <p>QA Genie utilizes inference models to assist in the creation of test scenarios, test steps, and quality assurance documentation. While our engine is engineered to provide high-quality, relevant test data, it is imperative to understand the following:</p>
+
+            <h2>1. Probabilistic Nature</h2>
+            <p>Inference models function by predicting information based on learned patterns rather than absolute, deterministic logic. Consequently, generated content may contain:</p>
+            <ul>
+                <li>Logical inaccuracies or missing steps</li>
+                <li>Incorrect expected results</li>
+                <li>Hallucinated features or behaviors that do not exist in the software under test</li>
+                <li>Inconsistent test data</li>
+            </ul>
+
+            <h2>2. Human Review Required</h2>
+            <p>QA Genie is a tool designed to <strong>accelerate</strong>, not replace, the work of Quality Assurance professionals. Generated test cases are a starting point, not a final product. All generated content <strong>MUST</strong> be reviewed, validated, and edited by a qualified QA engineer before use in:</p>
+            <ul>
+                <li>Production test suites</li>
+                <li>CI/CD pipelines</li>
+                <li>Regulatory or compliance testing</li>
+                <li>Customer-facing deliverables</li>
+            </ul>
+
+            <h2>3. No Warranty</h2>
+            <p>We disclaim all warranties, express or implied, regarding the accuracy, completeness, or fitness for purpose of generated content. We are not liable for defects, outages, or damages arising from use of generated test content. By using this tool, you acknowledge that you are responsible for the outcome of any testing strategy that incorporates generated content.</p>
+
+            <h2>4. PII Scrubbing</h2>
+            <p>Prompts may be processed by an automated PII scrubber that detects and redacts: email addresses, phone numbers, URLs, IP addresses, credit card numbers, API keys, JWTs, and UUIDs. This is a <strong>best-effort</strong> mechanism and does not guarantee complete removal of all sensitive data. <strong>Do not include real credentials, personal data, or production secrets in prompts.</strong></p>
+
+            <h2>5. Fallback Processing</h2>
+            <p>If the primary generation service is unavailable or returns invalid results, the app may fall back to local deterministic generation. These generated cases are simpler and rule-based, not derived from inference models.</p>
+
+            <h2>6. Your Responsibility</h2>
+            <p>By using this tool, you acknowledge that you are solely responsible for the quality and suitability of any testing strategy that incorporates generated content. We strongly recommend that all generated content is subjected to rigorous manual review and validation before being utilized in critical software development life cycles, testing environments, or production systems.</p>
+
+            <p>See also: <a href="terms.html">Terms of Service</a> | <a href="privacy.html">Privacy Policy</a></p>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 QA Genie. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="mailto:hello@qagenies.com">Contact</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

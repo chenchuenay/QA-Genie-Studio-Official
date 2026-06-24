@@ -92,10 +92,10 @@ TITLE_DIRECTION: ${sk['title']}
         "id": "TC_LOGIN_001",
         "title": "Valid login succeeds",
         "module": "Login",
-        "feature": "User login",
+        "feature": "Member login",
         "platform": "WEB",
-        "preconditions": ["User account exists", "Application is accessible"],
-        "testData": "email=user@example.com&password=ValidPass123!",
+        "preconditions": ["Member account exists", "Application is accessible"],
+        "testData": "email=member@example.com&password=ValidPass123!",
         "steps": [
           {
             "action": "Open login page",
@@ -104,7 +104,7 @@ TITLE_DIRECTION: ${sk['title']}
           },
         ],
         "expectedResult":
-            "User is authenticated successfully and redirected to dashboard",
+            "Member is authenticated successfully and redirected to dashboard",
         "priority": "High",
         "type": "POSITIVE",
         "categoryLock": "positive",

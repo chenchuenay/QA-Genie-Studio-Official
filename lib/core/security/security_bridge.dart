@@ -1,6 +1,5 @@
 import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:qa_genie/core/network/cloud_authority_service.dart';
-import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 // ============================================================
 // FILE: lib/core/security/security_bridge.dart
 // ============================================================

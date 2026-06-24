@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
@@ -14,7 +13,6 @@ import 'package:qa_genie/shared/dialogs/export_success_dialog.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
-import 'package:qa_genie/shared/widgets/animated_dots.dart';
 
 class ExportPreviewDialog extends StatefulWidget {
   final String type; // 'excel', 'pdf', 'jira', 'xray'
@@ -785,14 +783,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       valueListenable: AdManager().isAdLoading,
       builder: (context, isAdLoading, child) {
         final fullLock = _isProcessing || isAdLoading || _isSharing;
-        Widget content = AbsorbPointer(absorbing: fullLock, child: child!);
-        if (_isSharing) {
-          return BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: content,
-          );
-        }
-        return content;
+        return AbsorbPointer(absorbing: fullLock, child: child!);
       },
       child: dialogBody,
     );

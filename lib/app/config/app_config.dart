@@ -30,6 +30,7 @@ class AppConfig {
   // Generation batches per day
   static const int coreFreeBatchesPerDay = 0;           // Core: 0 free generations
   static const int coreRewardedBatchesPerDay = 6;       // Core: 6 rewarded ad generations
+  static const int returningGuestBatchesPerDay = 1;     // Returning guest: 1 quota
   static const int proFreeBatchesPerDay = 15;           // Pro: 15 free generations
 
   // Cases per batch

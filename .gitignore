@@ -13,6 +13,16 @@
 # macOS
 .DS_Store
 
+# Windows
+Thumbs.db
+
+# Heap dumps & captures
+*.hprof
+captures/
+
+# Test coverage output
+coverage/
+
 # IntelliJ / Android Studio
 .idea/
 *.iml
@@ -104,7 +114,6 @@ audit_bundle*/
 # Generated analysis artifacts
 fallback_analysis_*.json
 fallback_data*.json
-commands.txt
 gen_feature_graphic.py
 public/
 
@@ -123,6 +132,7 @@ project_context_snapshot.dart
 Full_structure.txt
 
 # Gradle
+android/.gradle/
 gradle-*.zip
 android/key.properties
 android/app/upload-keystore.jks

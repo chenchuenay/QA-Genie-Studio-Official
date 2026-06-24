@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Account — QA Genie</title>
+    <meta name="description" content="Request QA Genie account deletion — email wipe@qagenies.com from your registered email address.">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --bg: #05060A; --surface: #0D1018; --card: #141922; --border: #232938; --accent: #3DDCFF; --text: #FFFFFF; --text-secondary: #B8C0CF; --text-tertiary: #72798A; --radius-card: 24px; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(5, 6, 10, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+        nav .container { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 18px; }
+        .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--accent); }
+        .page { padding: 120px 0 60px; }
+        h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+        .date { color: var(--text-tertiary); font-size: 14px; margin-bottom: 48px; }
+        h2 { font-size: 20px; font-weight: 700; margin: 40px 0 16px; color: var(--accent); }
+        p { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; line-height: 1.8; }
+        ul, ol { color: var(--text-secondary); font-size: 14px; padding-left: 20px; margin-bottom: 16px; }
+        li { margin-bottom: 8px; line-height: 1.7; }
+        strong { color: var(--text); }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .warning { background: rgba(255, 193, 7, 0.08); border: 1px solid rgba(255, 193, 7, 0.15); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+        .warning strong { color: #FFC107; }
+        .divider { height: 1px; background: var(--border); max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        footer { border-top: 1px solid var(--border); padding: 40px 0; }
+        footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        footer .footer-links { display: flex; gap: 24px; align-items: center; }
+        footer a { color: var(--text-tertiary); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+        footer a:hover { color: var(--accent); }
+        footer p { color: var(--text-tertiary); font-size: 13px; margin-bottom: 0; }
+        @media (max-width: 768px) {
+            nav .container { height: 56px; }
+            .nav-links a { display: none; }
+            .page { padding: 100px 0 40px; }
+            h1 { font-size: 26px; }
+            footer .container { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="nav-logo">
+                <img src="assets/logo.png" alt="QA Genie">
+                QA Genie
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="privacy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="container">
+            <h1>Delete Account</h1>
+            <p class="date">Last updated: June 22, 2026</p>
+
+            <p>To request deletion of your QA Genie account and all associated data, send an email to <strong><a href="mailto:wipe@qagenies.com">wipe@qagenies.com</a></strong>.</p>
+
+            <h2>Requirements</h2>
+            <ul>
+                <li>You <strong>must</strong> send the email from the same email address registered in our database — we verify your identity against your registered email.</li>
+                <li>Include your account details in the email (the Google email address you signed up with, and optionally the reason for deletion).</li>
+            </ul>
+
+            <h2>Processing Time</h2>
+            <p>After we receive and verify your request, your account will be completely deleted within <strong>24–48 hours</strong>. All your data — profile, synced test cases, usage history — will be permanently removed.</p>
+
+            <div class="warning">
+                <strong>⚠️ No take backs.</strong> Once you send this email, deletion is irreversible. There is no undo. All your data will be permanently erased from our systems.
+            </div>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 QA Genie. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="mailto:hello@qagenies.com">Contact</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

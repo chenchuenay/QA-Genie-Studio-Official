@@ -21,15 +21,14 @@ import 'package:qa_genie/core/utils/dialog_utils.dart';
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
-  static bool _pendingRefresh = false;
-  static void markForRefresh() => _pendingRefresh = true;
+  static void markForRefresh() {} // kept for external callers
 
   @override
   State<AccountScreen> createState() => _AccountScreenState();
 }
 
 class _AccountScreenState extends State<AccountScreen> {
-  User? _user;
+  User? _member;
   bool _isPro = false;
   int _totalGenerations = 0;
   int _totalExports = 0;
@@ -38,18 +37,14 @@ class _AccountScreenState extends State<AccountScreen> {
   String? _lastSyncedText;
   String _appVersion = '';
   String _guestDisplayName = '';
+  String _profileDisplayName = '';
 
   @override
   void initState() {
     super.initState();
-    _user = AuthService.currentUser;
+    _member = AuthService.currentMember;
     _loadVersion();
-    _loadCachedData();
-    _refreshIsPro();
-    if (AccountScreen._pendingRefresh) {
-      AccountScreen._pendingRefresh = false;
-      _loadData();
-    }
+    _loadData();
   }
 
   Future<void> _loadVersion() async {
@@ -57,50 +52,11 @@ class _AccountScreenState extends State<AccountScreen> {
     if (mounted) setState(() => _appVersion = packageInfo.version);
   }
 
-  Future<void> _refreshIsPro() async {
-    final pro = await UsageManager.isPro();
-    if (mounted) setState(() => _isPro = pro);
-  }
-
-  Future<void> _loadCachedData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final generations = prefs.getInt('stats_generations') ?? 0;
-    final exports = prefs.getInt('stats_exports') ?? 0;
-    final lastSync = prefs.getInt('stats_last_sync') ?? 0;
-    final cachedGuestName = prefs.getString('guest_display_name') ?? '';
-
-    if (mounted) {
-      setState(() {
-        _totalGenerations = generations;
-        _totalExports = exports;
-        _guestDisplayName = cachedGuestName;
-        if (lastSync > 0) {
-          final diff = DateTime.now().difference(
-            DateTime.fromMillisecondsSinceEpoch(lastSync),
-          );
-          if (diff.inMinutes < 1) {
-            _lastSyncedText = 'Sync just now';
-          } else if (diff.inMinutes < 60) {
-            _lastSyncedText = '${diff.inMinutes}m ago';
-          } else if (diff.inHours < 24) {
-            _lastSyncedText = '${diff.inHours}h ago';
-          } else if (diff.inDays < 30) {
-            _lastSyncedText = '${diff.inDays}d ago';
-          } else {
-            _lastSyncedText = '${(diff.inDays / 30).floor()}mo ago';
-          }
-        } else {
-          _lastSyncedText = 'Syncing...';
-        }
-      });
-    }
-  }
-
   Future<void> _loadData() async {
     if (_isSyncing) return;
     setState(() => _isSyncing = true);
 
-    final user = AuthService.currentUser;
+    final member = AuthService.currentMember;
     final isPro = await UsageManager.isPro();
 
     int generations = _totalGenerations;
@@ -112,22 +68,23 @@ class _AccountScreenState extends State<AccountScreen> {
       generations = stats['generations'] ?? 0;
       exports = stats['exports'] ?? 0;
 
-      if (user != null) {
+      if (member != null) {
         final dashboard = await UsageManager.getDashboardData();
         final identity = dashboard['identity'] as Map?;
         if (identity != null) {
-          // Parse creation date for both users and guests
           final createdAt = identity['createdAt'];
           if (createdAt is String) {
             memberSince = DateTime.parse(createdAt);
           }
-          final isGuestUser = AuthService.isGuest;
-          if (isGuestUser) {
-            final name = identity['displayName'] as String?;
-            if (name != null && name.isNotEmpty) {
+          final name = identity['displayName'] as String?;
+          if (name != null && name.isNotEmpty) {
+            final isGuest = AuthService.isGuest;
+            if (isGuest) {
               final prefs = await SharedPreferences.getInstance();
               await prefs.setString('guest_display_name', name);
               if (mounted) _guestDisplayName = name;
+            } else {
+              if (mounted) _profileDisplayName = name;
             }
           }
         }
@@ -146,7 +103,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
       if (mounted) {
         setState(() {
-          _user = user;
+          _member = member;
           _isPro = isPro;
           _totalGenerations = generations;
           _totalExports = exports;
@@ -204,8 +161,12 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     final isGuest = AuthService.isGuest;
-    final email = _user?.email ?? '';
-    final displayName = _user?.displayName ?? '';
+    final email = _member?.email ?? '';
+    final displayName = _profileDisplayName.isNotEmpty
+        ? _profileDisplayName
+        : (_member?.displayName?.isNotEmpty == true
+            ? _member!.displayName!
+            : (_member?.email?.split('@').first ?? ''));
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -296,10 +257,10 @@ class _AccountScreenState extends State<AccountScreen> {
     setState(() => _isSyncing = true);
     try {
       final deviceId = await DeviceUtils.getUniqueId();
-      final user = AuthService.currentUser;
+      final member = AuthService.currentMember;
       await FunctionsService.call(functionName: 'deleteAccount', payload: {
         'deviceId': deviceId,
-        if (user != null && !user.isAnonymous) 'email': user.email,
+        if (member != null && !member.isAnonymous) 'email': member.email,
       });
       await DatabaseService.clearAll();
       await _logout();
@@ -392,7 +353,9 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
           const SizedBox(height: 14),
           Text(
-            'Joined ${_memberSince != null ? _formatDate(_memberSince!) : '...'} • ${_lastSyncedText ?? 'Syncing...'}',
+            _memberSince != null
+                ? 'Joined ${_formatDate(_memberSince!)} • ${_lastSyncedText ?? 'Syncing...'}'
+                : '${_lastSyncedText ?? 'N/A'}',
             style: const TextStyle(fontSize: 11, color: AppColors.textHint),
           ),
           if (isGuest) ...[
@@ -461,7 +424,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Widget _buildMenuCard() {
     final isGuest = AuthService.isGuest;
-    final isAnonymous = (_user?.isAnonymous ?? true) || isGuest;
+    final isAnonymous = (_member?.isAnonymous ?? true) || isGuest;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -490,7 +453,7 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
           _divider(),
-          // Sign Out + Delete Account for signed-in users only
+          // Sign Out + Delete Account for signed-in members only
           if (!isAnonymous) ...[
             _divider(),
             _menuItem(
@@ -534,10 +497,12 @@ class _AccountScreenState extends State<AccountScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             width: double.infinity,
-            child: const Text(
-              'Data stays local on this device and is not synced to the cloud.',
+            child: Text(
+              AuthService.isGuest
+                  ? 'Data stays local on this device and is not synced to the cloud.'
+                  : 'Synced to cloud — accessible from any device.',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.textHint,
                 fontStyle: FontStyle.italic,

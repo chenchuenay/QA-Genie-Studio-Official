@@ -92,7 +92,7 @@ class _TestModeScreenState extends State<TestModeScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    _isPro ? "You are a Pro" : "Core User",
+                    _isPro ? "You are a Pro" : "Core Member",
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 24,

@@ -1,10 +1,6 @@
-import 'dart:async';
-import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
-import 'package:qa_genie/firebase/app_check/app_check_service.dart';
 
 class FunctionsService {
   const FunctionsService();
@@ -156,16 +152,6 @@ class FunctionsService {
   }) async {
     debugPrint('📡 FUNCTIONS_SERVICE: Calling $functionName');
 
-    // Non-blocking AppCheck diagnostic — does not delay the actual call
-    unawaited(AppCheckService.getToken().timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => null,
-    ).then((token) {
-      debugPrint('🛡️ AppCheck token present: ${token != null && token.isNotEmpty}');
-    }).catchError((e) {
-      debugPrint('🛡️ AppCheck diagnostic error: $e');
-    }));
-
     if (payload != null) {
       debugPrint('📦 FUNCTIONS_SERVICE: Payload keys: ${payload.keys.toList()}');
     }
@@ -177,8 +163,8 @@ class FunctionsService {
     );
   }
 
-  static Future<Map<String, dynamic>> getUserStats() async {
-    return call(functionName: 'getUserDashboard', payload: {'type': 'user'});
+  static Future<Map<String, dynamic>> getMemberStats() async {
+    return call(functionName: 'getMemberDashboard', payload: {'type': 'member'});
   }
 
   static Future<bool> verifyReward({required String rewardToken}) async {
@@ -225,16 +211,14 @@ class FunctionsService {
     );
   }
 
-  static Future<String> getGuestToken({required String deviceId, bool forceReturning = false}) async {
+  static Future<Map<String, dynamic>> getGuestToken({required String deviceId, bool forceReturning = false, String caller = 'unknown', String? androidId}) async {
     final result = await call(
       functionName: 'getOrCreateGuestToken',
-      payload: {'deviceId': deviceId, 'forceReturning': forceReturning},
+      payload: {'deviceId': deviceId, 'forceReturning': forceReturning, 'caller': caller, 'androidId': androidId},
     );
-    // Check for success flag or presence of token
     if (result.containsKey('token') && result['token'] is String) {
-      return result['token'] as String;
+      return result;
     }
-    // Log the full error and throw
     final error =
         result['error'] ?? {'code': 'UNKNOWN', 'message': 'No token returned'};
     throw Exception(
@@ -254,6 +238,7 @@ class FunctionsService {
     required String email,
     required String displayName,
     required String deviceId,
+    String? previousGuestUid,
   }) async {
     await call(
       functionName: 'linkGoogleAccount',
@@ -261,7 +246,67 @@ class FunctionsService {
         'email': email,
         'displayName': displayName,
         'deviceId': deviceId,
+        if (previousGuestUid != null) 'previousGuestUid': previousGuestUid,
       },
+    );
+  }
+
+  /// Push a suite to cloud. Returns full result map (includes serialNumber on success).
+  /// `serialNumber` is optional — if omitted the server generates one atomically.
+  static Future<Map<String, dynamic>> pushMemberSuite({
+    String? serialNumber,
+    required String date,
+    required Map<String, dynamic> suiteData,
+  }) async {
+    final payload = <String, dynamic>{
+      'date': date,
+      'suiteData': suiteData,
+    };
+    if (serialNumber != null) payload['serialNumber'] = serialNumber;
+    return call(
+      functionName: 'pushMemberSuite',
+      payload: payload,
+    );
+  }
+
+  /// Get all suites from cloud. Returns list of suite maps.
+  static Future<List<Map<String, dynamic>>> getMemberSuites() async {
+    final result = await call(functionName: 'getMemberSuites');
+    if (result['success'] != true) {
+      debugPrint('⚠️ getMemberSuites: cloud function returned failure');
+      return [];
+    }
+    final suites = result['suites'];
+    if (suites is! List) return [];
+    return suites.cast<Map<String, dynamic>>();
+  }
+
+  /// Delete a suite from cloud by its cloud_id ("date/serialNumber").
+  static Future<bool> deleteMemberSuite(String cloudId) async {
+    final result = await call(
+      functionName: 'deleteMemberSuite',
+      payload: {'suiteId': cloudId},
+    );
+    return result['success'] == true;
+  }
+
+  static Future<Map<String, dynamic>> checkSessionByEmail({
+    required String email,
+    required String deviceId,
+  }) async {
+    return call(
+      functionName: 'checkSessionByEmail',
+      payload: {'email': email, 'deviceId': deviceId},
+    );
+  }
+
+  static Future<Map<String, dynamic>> registerSession({
+    required String deviceId,
+    required bool force,
+  }) async {
+    return call(
+      functionName: 'registerSession',
+      payload: {'deviceId': deviceId, 'force': force},
     );
   }
 

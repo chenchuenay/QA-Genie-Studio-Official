@@ -119,6 +119,13 @@ class AnalyticsService {
     }
   }
 
+  static Future<void> logDebug({required String message, Map<String, Object?> parameters = const {}}) async {
+    await _safeLog(
+      eventName: 'debug_auth',
+      parameters: {'message': message, ...parameters},
+    );
+  }
+
   static Future<void> _safeLog({
     required String eventName,
     Map<String, Object?> parameters = const {},

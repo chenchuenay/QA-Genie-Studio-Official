@@ -52,11 +52,11 @@ class UpdateManager {
       if (_semverCompare(currentVersion, blockBelowBuild) < 0) {
         final isGuest = AuthService.isGuest;
         int dismissCount = 0;
-        if (!isGuest && AuthService.currentUser != null) {
+        if (!isGuest && AuthService.currentMember != null) {
           try {
             final result = await FunctionsService.call(
-              functionName: 'getUserDashboard',
-              payload: {'type': 'user'},
+              functionName: 'getMemberDashboard',
+              payload: {'type': 'member'},
             );
             final metrics = result['metrics'] as Map?;
             dismissCount = (metrics?['updateDismissals'] as int?) ?? 0;
@@ -87,7 +87,7 @@ class UpdateManager {
   }
 
   static Future<void> recordDismissal() async {
-    final uid = AuthService.currentUser?.uid;
+    final uid = AuthService.currentMember?.uid;
     if (uid != null && !AuthService.isGuest) {
       try {
         await FunctionsService.call(functionName: 'recordUpdateDismissal');

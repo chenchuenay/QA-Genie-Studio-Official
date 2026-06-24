@@ -45,42 +45,37 @@ class NetworkGuard {
     _debounceTimer = null;
   }
 
+  static final List<String> _checkUrls = [
+    'https://clients3.google.com/generate_204',
+    'https://www.google.com/generate_204',
+    'https://connectivitycheck.gstatic.com/generate_204',
+    'https://firebase.googleapis.com',
+  ];
+
   static Future<bool> hasInternet() async {
-    // Use cached result for 30s to avoid blocking every gen/export
     if (_httpCached && _lastHttpCheck != null) {
       final age = DateTime.now().difference(_lastHttpCheck!);
       if (age.inSeconds < 30) return true;
     }
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 5);
-    try {
-      final request = await client.headUrl(
-        Uri.parse('https://clients3.google.com/generate_204'),
-      );
-      final response = await request.close();
-      final online = response.statusCode == 204;
-      if (online) {
-        _httpCached = true;
-        _lastHttpCheck = DateTime.now();
-      } else {
-        _httpCached = false;
+    for (final url in _checkUrls) {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 5);
+      try {
+        final request = await client.headUrl(Uri.parse(url));
+        final response = await request.close();
+        if (response.statusCode == 204 || response.statusCode == 200) {
+          _httpCached = true;
+          _lastHttpCheck = DateTime.now();
+          return true;
+        }
+      } catch (_) {
+        continue;
+      } finally {
+        client.close(force: true);
       }
-      return online;
-    } on SocketException catch (_) {
-      _httpCached = false;
-      return false;
-    } on HttpException catch (_) {
-      _httpCached = false;
-      return false;
-    } on TlsException catch (_) {
-      _httpCached = false;
-      return false;
-    } on TimeoutException catch (_) {
-      _httpCached = false;
-      return false;
-    } finally {
-      client.close(force: true);
     }
+    _httpCached = false;
+    return false;
   }
 
   static Future<void> requireInternet() async {

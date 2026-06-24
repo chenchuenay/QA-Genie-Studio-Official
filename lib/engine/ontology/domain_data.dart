@@ -2,9 +2,9 @@ class DomainData {
   static const Map<String, Map<String, String>> samples = {
     'Identity': {
       'TapLoginField': 'Focus login field',
-      'EnterCredentials': 'user@example.com / CorrectP@ss123',
+      'EnterCredentials': 'member@example.com / CorrectP@ss123',
       'TapSubmit': 'Tap Submit button',
-      'VerifyDashboard': 'Dashboard loads with user profile visible',
+      'VerifyDashboard': 'Dashboard loads with member profile visible',
       'ClickLoginButton': 'Locate and click Login button',
       'EnterEmailAndPassword': 'admin@test.com / SecurePass456',
       'ClickSubmit': 'Click Submit/Login button',

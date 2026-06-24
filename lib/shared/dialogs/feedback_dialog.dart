@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
+import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/features/support/ui/report_issue_screen.dart';
 
 class FeedbackDialog extends StatelessWidget {
@@ -7,6 +8,7 @@ class FeedbackDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isGuest = AuthService.isGuest;
     return Dialog(
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -25,9 +27,11 @@ class FeedbackDialog extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            const Text(
-              'We\'d appreciate your feedback.\nWould you like to report the issue?',
-              style: TextStyle(color: Colors.white70),
+            Text(
+              isGuest
+                  ? 'Sign in with Google to share your feedback.\nYour input helps us make QA Genie better.'
+                  : 'We\'d appreciate your feedback.\nWould you like to report the issue?',
+              style: const TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -42,6 +46,7 @@ class FeedbackDialog extends StatelessWidget {
                 ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).pop();
+                    if (isGuest) return;
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const ReportIssueScreen(screen: 'Feedback'),
@@ -49,10 +54,10 @@ class FeedbackDialog extends StatelessWidget {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accent,
+                    backgroundColor: isGuest ? AppColors.textHint : AppColors.accent,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  child: const Text('Share', style: TextStyle(color: Colors.black)),
+                  child: Text(isGuest ? 'OK' : 'Share', style: const TextStyle(color: Colors.black)),
                 ),
               ],
             ),

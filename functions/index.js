@@ -1,9 +1,11 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
+const zlib = require("zlib");
 
 admin.initializeApp();
 const db = admin.firestore();
+const bucket = admin.storage().bucket("qa-genie-ai-test-cases");
 
 // ============================================================
 // CENTRALIZED CONSTANTS – CHANGE QUOTAS HERE ONLY
@@ -17,7 +19,7 @@ const RETURNING_GUEST_BATCHES_PER_DAY = 1; // Returning guest on same device: 1
 const CORE_CASES_PER_BATCH = 10;
 const PRO_CASES_PER_BATCH = 20;
 
-const EXPORT_LIMIT_PER_DAY = 50; // 50 exports per day for all non-pro users
+const EXPORT_LIMIT_PER_DAY = 50; // 50 exports per day for all non-pro members
 const COOLDOWN_HOURS = 24; // 24h cooldown after Google account deletion
 
 function today() {
@@ -64,7 +66,7 @@ function checkRateLimit(key, maxPerMinute = 20) {
 // IN-MEMORY FUNCTION RESULT CACHE (60s TTL, per-instance)
 // ------------------------------------------------------------------
 const functionCache = new Map();
-const CACHE_TTL_MS = 60000;
+const CACHE_TTL_MS = 10000;
 
 setInterval(() => {
   const cutoff = Date.now() - CACHE_TTL_MS;
@@ -91,8 +93,98 @@ function sanitisePrompt(prompt) {
   return prompt.replace(/<[^>]*>/g, "").replace(/[<>]/g, "").slice(0, 12000);
 }
 
+// --------------------------------------------------------------
+// CHECK SESSION BY EMAIL (before linking, auth dialog)
+// --------------------------------------------------------------
+exports.checkSessionByEmail = functions.https.onCall(async (data, context) => {
+  // No auth required — called before the user is signed in (auth dialog flow).
+  const { email, deviceId } = data;
+  if (!email || !deviceId)
+    throw new functions.https.HttpsError("invalid-argument", "email and deviceId required");
+  // Rate limit by email since no auth uid is available
+  if (!checkRateLimit(`checkSession_${email}`, 10)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+
+  log("info", `checkSessionByEmail: email=${email} deviceId=${deviceId}`);
+
+  const profileDoc = await db.collection("memberProfiles").doc(email).get();
+  if (!profileDoc.exists) {
+    log("info", "checkSessionByEmail: no profile found");
+    return { conflict: false };
+  }
+
+  const profileData = profileDoc.data();
+  const uid = profileData.uid;
+  const tier = profileData.subscription?.planType === "pro" ? "pro" : "core";
+  log("info", `checkSessionByEmail: profile uid=${uid} tier=${tier}`);
+
+  const sessionRef = db.collection("memberData").doc(tier).collection(uid).doc("_session");
+  const session = await sessionRef.get();
+  if (!session.exists) {
+    log("info", "checkSessionByEmail: no session doc found");
+    return { conflict: false, uid, tier };
+  }
+  const storedDeviceId = session.data().deviceId;
+  log("info", `checkSessionByEmail: session deviceId=${storedDeviceId} vs incoming=${deviceId}`);
+  if (storedDeviceId === deviceId) return { conflict: false, uid, tier };
+
+  return { conflict: true, uid, tier };
+});
+
+// --------------------------------------------------------------
+// REGISTER SESSION (after linking or cold start)
+// Uses profile uid (not auth uid) for session path to handle
+// uid changes after reinstall.
+// --------------------------------------------------------------
+exports.registerSession = functions.https.onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  if (!checkRateLimit(`registerSession_${context.auth.uid}`, 20)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+  const authUid = context.auth.uid;
+  const { deviceId, force } = data;
+  if (!deviceId)
+    throw new functions.https.HttpsError("invalid-argument", "deviceId required");
+
+  log("info", `registerSession: authUid=${authUid} deviceId=${deviceId} force=${force}`);
+
+  // Try uid lookup first, fall back to email (handles reinstall uid change)
+  let profile = await _getMemberProfileByUid(authUid);
+  if (!profile && context.auth.token?.email) {
+    log("info", `registerSession: uid lookup failed, trying email ${context.auth.token.email}`);
+    const doc = await db.collection("memberProfiles").doc(context.auth.token.email).get();
+    if (doc.exists) {
+      profile = { email: doc.id, ref: doc.ref, data: doc.data() };
+    }
+  }
+  if (!profile) {
+    log("info", "registerSession: no profile found at all");
+    return { conflict: false, tier: "core" };
+  }
+
+  // Use profile uid for session path — this is what checkSessionByEmail also uses
+  const profileUid = profile.data.uid;
+  const tier = profile.data.subscription?.planType === "pro" ? "pro" : "core";
+  log("info", `registerSession: resolved profileUid=${profileUid} tier=${tier}`);
+
+  const sessionRef = db.collection("memberData").doc(tier).collection(profileUid).doc("_session");
+  const existing = await sessionRef.get();
+  if (existing.exists && existing.data().deviceId !== deviceId && !force) {
+    log("info", "registerSession: conflict detected");
+    return { conflict: true, tier };
+  }
+  await sessionRef.set({
+    deviceId,
+    lastActive: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  log("info", "registerSession: session saved");
+  return { conflict: false, tier };
+});
+
 // ------------------------------------------------------------------
-// HELPER: Get or create registry counter (total users+guests ever)
+// HELPER: Get or create registry counter (total members+guests ever)
 // ------------------------------------------------------------------
 async function getNextRegistryNumber() {
   const globalRef = db.collection("analytics").doc("global");
@@ -111,6 +203,31 @@ function getResetISO() {
   const reset = new Date();
   reset.setUTCHours(24, 0, 0, 0);
   return reset.toISOString();
+}
+
+// --------------------------------------------------------------
+// HELPER: Look up memberProfiles doc by uid (email is the doc ID)
+// Returns { email, ref, data } or null.
+// --------------------------------------------------------------
+async function _getMemberProfileByUid(uid) {
+  const snap = await db
+    .collection("memberProfiles")
+    .where("uid", "==", uid)
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { email: doc.id, ref: doc.ref, data: doc.data() };
+}
+
+// --------------------------------------------------------------
+// Returns the tier ("core" or "pro") for a given uid.
+// Defaults to "core" if profile not found.
+// --------------------------------------------------------------
+async function _getMemberTier(uid) {
+  const profile = await _getMemberProfileByUid(uid);
+  if (!profile) return "core";
+  return profile.data.subscription?.planType === "pro" ? "pro" : "core";
 }
 
 // ------------------------------------------------------------------
@@ -153,19 +270,26 @@ exports.generate = functions
     const nowStr = today();
     const adPresent = !!(adToken || rewardToken);
 
+    // Resolve memberProfiles (email-based doc) before transaction
+    let memberProfileEmail = null;
+    try {
+      const profileResult = await _getMemberProfileByUid(uid);
+      if (profileResult) memberProfileEmail = profileResult.email;
+    } catch (_) {}
+
     try {
       const uRef = db.collection("usage").doc(uid);
       const gRef = db.collection("analytics").doc("global");
       const reqRef = db.collection("processed_requests").doc(requestId);
-      const userRef = db.collection("users").doc(uid);
+      const memberProfileRef = memberProfileEmail
+        ? db.collection("memberProfiles").doc(memberProfileEmail)
+        : db.collection("_void").doc(uid);
       const guestRef = db.collection("guests").doc(uid);
       const deviceRef = db.collection("deviceUsage").doc(deviceId);
 
-      // Dedup check BEFORE calling DeepSeek — prevents wasted API calls on retries
+      // Dedup check BEFORE calling DeepSeek — prevents double charges
       const reqSnap = await reqRef.get();
       if (reqSnap.exists) {
-        const cached = reqSnap.data()?.response;
-        if (cached) return { success: true, data: cached };
         return { success: false, error: { code: "ALREADY_PROCESSED" } };
       }
 
@@ -190,11 +314,11 @@ exports.generate = functions
       }
 
       const generationData = await db.runTransaction(async (t) => {
-        const [uDoc, reqDoc, userDoc, guestDoc, deviceDoc] =
+        const [uDoc, reqDoc, memberProfileDoc, guestDoc, deviceDoc] =
           await Promise.all([
             t.get(uRef),
             t.get(reqRef),
-            t.get(userRef),
+            t.get(memberProfileRef),
             t.get(guestRef),
             t.get(deviceRef),
           ]);
@@ -227,8 +351,8 @@ exports.generate = functions
 
         let isPro = false,
           isGuest = false;
-        if (userDoc.exists)
-          isPro = userDoc.data()?.subscription?.planType === "pro";
+        if (memberProfileDoc.exists)
+          isPro = memberProfileDoc.data()?.subscription?.planType === "pro";
         else if (guestDoc.exists) {
           isGuest = true;
           if (deviceId && guestDoc.data()?.identity?.deviceId &&
@@ -292,7 +416,8 @@ exports.generate = functions
             (metrics.lifetimeGeneratedCases || 0) + caseCount;
           metrics.lastReset = nowStr;
           t.set(uRef, {
-            type: "user",
+            uid,
+            type: "member",
             metrics: {
               ...metrics,
               exportCount: uDoc.data()?.metrics?.exportCount ?? 0,
@@ -319,6 +444,7 @@ exports.generate = functions
           guestMetrics.rewardedGenCount = devData.rewardedGenCount;
           guestMetrics.lastReset = nowStr;
           t.set(uRef, {
+            uid,
             type: "guest",
             metrics: {
               ...guestMetrics,
@@ -345,8 +471,9 @@ exports.generate = functions
           resetTimestamp: getResetISO(),
         };
         t.set(reqRef, {
+          uid,
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
-          response: { testCases: responseTestCases, usage: responseUsage },
+          // No response field — never store test case content per data policy
         });
         t.set(gRef, {
           totalGenerations: admin.firestore.FieldValue.increment(1),
@@ -403,9 +530,8 @@ exports.trackExport = functions.https.onCall(async (data, context) => {
   const ext = extension || (target === "pdf" ? "pdf" : target);
   const nowStr = today();
 
-  const userDoc = await db.collection("users").doc(uid).get();
-  const isPro =
-    userDoc.exists && userDoc.data()?.subscription?.planType === "pro";
+  const profile = await _getMemberProfileByUid(uid);
+  const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
 
   if (!isPro) {
     // Non-pro (core + guest): check daily export limit
@@ -428,7 +554,8 @@ exports.trackExport = functions.https.onCall(async (data, context) => {
       [`fileExtensions.${ext}`]: admin.firestore.FieldValue.increment(1),
     },
   };
-  usageUpdate.type = userDoc.exists ? "user" : "guest";
+  usageUpdate.type = profile ? "member" : "guest";
+  usageUpdate.uid = uid;
   if (!isPro) {
     usageUpdate.metrics = {
       exportCount: admin.firestore.FieldValue.increment(1),
@@ -514,44 +641,109 @@ exports.trackValidatorRejected = functions.https.onCall(async (data, context) =>
 exports.getOrCreateGuestToken = functions.runWith({
   enforceAppCheck: false,
 }).https.onCall(async (data) => {
-  const { deviceId, forceReturning } = data;
+  const { deviceId, forceReturning, caller, androidId } = data;
+  console.log(`[getOrCreateGuestToken] CALLED | deviceId=${deviceId} | androidId=${androidId} | forceReturning=${forceReturning} | caller=${caller}`);
   if (!deviceId)
     throw new functions.https.HttpsError(
       "invalid-argument",
       "deviceId required",
     );
   if (!checkRateLimit(`guestToken_${deviceId}`, 5)) {
+    console.log(`[getOrCreateGuestToken] RATE LIMITED | deviceId=${deviceId}`);
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
-  const mappingRef = db.collection("deviceGuestMapping").doc(deviceId);
-  const mappingDoc = await mappingRef.get();
-  let guestUid;
-  let isNew = false;
-  let guestTier = "first";
-  if (mappingDoc.exists) {
-    guestUid = mappingDoc.data().guestUid;
-    const guestDoc = await db.collection("guests").doc(guestUid).get();
-    if (!guestDoc.exists) {
-      // Mapping exists but guest was consumed (upgraded to Google or deleted)
-      isNew = true;
-      guestTier = "returning";
+  let deviceDocId = deviceId;
+  let mappingRef = db.collection("deviceGuestMapping").doc(deviceId);
+  let mappingDoc = await mappingRef.get();
+  // If deviceId not found, cross-reference by ANDROID_ID for migration
+  if (!mappingDoc.exists && androidId && androidId !== deviceId) {
+    console.log(`[getOrCreateGuestToken] trying androidId=${androidId} as fallback`);
+    const altRef = db.collection("deviceGuestMapping").doc(androidId);
+    const altDoc = await altRef.get();
+    if (altDoc.exists) {
+      console.log(`[getOrCreateGuestToken] FOUND by androidId`);
+      mappingDoc = altDoc;
+      deviceDocId = androidId;
     }
-    // Else: same guest returning — restore them, keep their existing tier
-  } else {
-    isNew = true;
-    guestTier = "first";
   }
 
-  // After logout/delete, force a fresh returning guest with 1 quota
+  if (mappingDoc.exists) {
+    // Device already mapped → ALWAYS returning (1 quota), never first
+    const existingUid = mappingDoc.data().guestUid;
+    console.log(`[getOrCreateGuestToken] MAPPING EXISTS | guestUid=${existingUid} | deviceDocId=${deviceDocId}`);
+    const existingGuestDoc = await db.collection("guests").doc(existingUid).get();
+    if (existingGuestDoc.exists) {
+      // Reuse existing guest with returning tier
+      console.log(`[getOrCreateGuestToken] REUSING existing guest as returning | uid=${existingUid}`);
+      const reuseBatch = db.batch();
+      reuseBatch.update(db.collection("guests").doc(existingUid), { guestTier: "returning" });
+      reuseBatch.set(db.collection("usage").doc(existingUid), {
+        type: "guest",
+        metrics: { lifetimeGeneratedCases: 0 },
+        exports: { lifetimeExports: 0 },
+      });
+      reuseBatch.set(db.collection("deviceUsage").doc(deviceDocId), {
+        rewardedGenCount: 0,
+        lastReset: today(),
+        uid: existingUid,
+      }, { merge: true });
+      await reuseBatch.commit();
+      const customToken = await admin.auth().createCustomToken(existingUid);
+      return { token: customToken, isNew: false, guestTier: "returning" };
+    }
+    // Guest doc consumed (upgraded/deleted) → create new returning guest
+    console.log(`[getOrCreateGuestToken] GUEST CONSUMED | creating new returning guest`);
+    const newUid = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const registryNumber = await getNextRegistryNumber();
+    const displayName = `Guest${registryNumber}`;
+    const batch = db.batch();
+    batch.set(db.collection("guests").doc(newUid), {
+      identity: { uid: newUid, displayName, type: "guest", deviceId, createdAt: admin.firestore.FieldValue.serverTimestamp() },
+      guestTier: "returning",
+    });
+    batch.set(db.collection("usage").doc(newUid), {
+      type: "guest", metrics: { lifetimeGeneratedCases: 0 }, exports: { lifetimeExports: 0 },
+    });
+    batch.set(db.collection("the_qag_registry").doc(newUid), {
+      uid: newUid, type: "guest", displayName, createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    batch.set(db.collection("deviceGuestMapping").doc(deviceDocId), {
+      guestUid: newUid, androidId: androidId || null, createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    if (androidId && androidId !== deviceDocId) {
+      batch.set(db.collection("deviceGuestMapping").doc(androidId), {
+        guestUid: newUid, deviceId: deviceDocId, createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    batch.set(db.collection("deviceUsage").doc(deviceDocId), {
+      rewardedGenCount: 0, lastReset: today(), uid: newUid,
+    }, { merge: true });
+    await batch.commit();
+    const customToken = await admin.auth().createCustomToken(newUid);
+    return { token: customToken, isNew: true, guestTier: "returning" };
+  }
+
+  // No mapping for this device
+  let isNew = false;
+  let guestTier = "first";
+  let guestUid;
   if (forceReturning) {
+    // Explicit returning (sign-out / delete) → create returning guest
+    console.log(`[getOrCreateGuestToken] NO MAPPING + forceReturning | creating returning guest`);
     isNew = true;
     guestTier = "returning";
+  } else {
+    // Truly new device → first-time guest (6 quotas)
+    console.log(`[getOrCreateGuestToken] NO MAPPING | creating first-time guest`);
+    isNew = true;
+    guestTier = "first";
   }
 
   if (isNew) {
     guestUid = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const registryNumber = await getNextRegistryNumber();
     const displayName = `Guest${registryNumber}`;
+    console.log(`[getOrCreateGuestToken] CREATING NEW guest | uid=${guestUid} | tier=${guestTier} | displayName=${displayName}`);
     const batch = db.batch();
     batch.set(db.collection("guests").doc(guestUid), {
       identity: {
@@ -576,15 +768,26 @@ exports.getOrCreateGuestToken = functions.runWith({
     });
     batch.set(mappingRef, {
       guestUid,
+      androidId: androidId || null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    // Reset device usage so the new returning guest gets a fresh 1 quota
+    // Also index by ANDROID_ID for resilience across data clear
+    if (androidId && androidId !== deviceDocId) {
+      batch.set(db.collection("deviceGuestMapping").doc(androidId), {
+        guestUid,
+        deviceId: deviceDocId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
     batch.set(db.collection("deviceUsage").doc(deviceId), {
       rewardedGenCount: 0,
       lastReset: today(),
       uid: guestUid,
     }, { merge: true });
     await batch.commit();
+    console.log(`[getOrCreateGuestToken] BATCH COMMITTED | guest created in Firestore`);
+  } else {
+    console.log(`[getOrCreateGuestToken] NOT NEW | returning existing guest | uid=${guestUid} | tier=${guestTier}`);
   }
   const customToken = await admin.auth().createCustomToken(guestUid);
   return { token: customToken, isNew, guestTier };
@@ -598,8 +801,8 @@ exports.checkExportQuota = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
   const { rewarded = false } = data;
-  const userDoc = await db.collection("users").doc(uid).get();
-  const isPro = userDoc.exists && userDoc.data()?.subscription?.planType === "pro";
+  const profile = await _getMemberProfileByUid(uid);
+  const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
   const nowStr = today();
   let allowed = false, remaining = 0;
 
@@ -607,7 +810,7 @@ exports.checkExportQuota = functions.https.onCall(async (data, context) => {
     allowed = true;
     remaining = 999;
   } else {
-    // Same 50/day limit for core users and guests
+    // Same 50/day limit for core members and guests
     const usageDoc = await db.collection("usage").doc(uid).get();
     let metrics = usageDoc.exists ? usageDoc.data().metrics : {};
     if (metrics.lastReset !== nowStr) metrics.exportCount = 0;
@@ -638,9 +841,9 @@ exports.resetDailyLimits = functions.https.onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// GET USER DASHBOARD
+// GET MEMBER DASHBOARD
 // ------------------------------------------------------------------
-exports.getUserDashboard = functions.https.onCall(async (data, context) => {
+exports.getMemberDashboard = functions.https.onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -649,23 +852,23 @@ exports.getUserDashboard = functions.https.onCall(async (data, context) => {
   if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
     return cached.data;
   }
-  const idDoc = await db.collection("users").doc(uid).get();
-  const isUser = idDoc.exists;
+  const profile = await _getMemberProfileByUid(uid);
+  const isMember = !!profile;
   const usageDoc = await db.collection("usage").doc(uid).get();
   let isGuest = false, guestDoc = null;
-  if (!isUser) {
+  if (!isMember) {
     guestDoc = await db.collection("guests").doc(uid).get();
     isGuest = guestDoc.exists;
   }
-  const planType = isUser ? idDoc.data().subscription?.planType : null;
+  const planType = profile ? profile.data.subscription?.planType : null;
   function toISO(val) {
     if (!val) return null;
     if (typeof val.toDate === "function") return val.toDate().toISOString();
     if (val instanceof Date) return val.toISOString();
     return val;
   }
-  const identity = isUser
-    ? { displayName: idDoc.data()?.identity?.displayName, email: idDoc.data()?.identity?.email, createdAt: toISO(idDoc.data()?.identity?.createdAt) }
+  const identity = isMember
+    ? { displayName: profile.data.displayName || "", email: profile.data.email || "", createdAt: toISO(profile.data.createdAt) }
     : isGuest
       ? { ...guestDoc.data().identity, createdAt: toISO(guestDoc.data().identity?.createdAt) }
       : null;
@@ -677,7 +880,7 @@ exports.getUserDashboard = functions.https.onCall(async (data, context) => {
   let proGensRemaining = 0;
   const isPro = planType === "pro";
 
-  if (isUser) {
+  if (isMember) {
     let rewarded = 0, proFree = 0;
     if (metrics.lastReset === nowStr) {
       rewarded = metrics.rewardedGenCount || 0;
@@ -717,16 +920,18 @@ exports.getUserDashboard = functions.https.onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// SET USER PRO
+// SET MEMBER PRO
 // ------------------------------------------------------------------
-exports.setUserPro = functions.https.onCall(async (data, context) => {
+exports.setMemberPro = functions.https.onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const { isPro } = data;
   const uid = context.auth.uid;
+  const profile = await _getMemberProfileByUid(uid);
+  if (!profile) throw new functions.https.HttpsError("not-found", "Member profile not found");
   await db
-    .collection("users")
-    .doc(uid)
+    .collection("memberProfiles")
+    .doc(profile.email)
     .set(
       {
         subscription: {
@@ -760,7 +965,7 @@ exports.trackProInterest = functions.https.onCall(async (data, context) => {
     if (!interests.proInterestSources) interests.proInterestSources = {};
     interests.proInterestSources[source] =
       (interests.proInterestSources[source] || 0) + 1;
-    t.set(usageRef, { interests }, { merge: true });
+    t.set(usageRef, { uid, interests }, { merge: true });
     const globalUpdate = {
       totalProInterest: admin.firestore.FieldValue.increment(1),
       proTabClicks: admin.firestore.FieldValue.increment(
@@ -768,7 +973,7 @@ exports.trackProInterest = functions.https.onCall(async (data, context) => {
       ),
     };
     if (isFirst)
-      globalUpdate.uniqueProInterestedUsers =
+      globalUpdate.uniqueProInterestedMembers =
         admin.firestore.FieldValue.increment(1);
     t.set(globalRef, globalUpdate, { merge: true });
   });
@@ -796,16 +1001,16 @@ exports.checkGenerationQuota = functions.https.onCall(async (data, context) => {
   if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
     return cached.data;
   }
-  const userDoc = await db.collection("users").doc(uid).get();
+  const profile = await _getMemberProfileByUid(uid);
   const guestDoc = await db.collection("guests").doc(uid).get();
-  const isUser = userDoc.exists;
+  const isMember = !!profile;
   const isGuest = guestDoc.exists;
-  const isPro = isUser && userDoc.data()?.subscription?.planType === "pro";
+  const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
   const nowStr = today();
   let allowed = false,
     remaining = 0;
 
-  if (isUser) {
+  if (isMember) {
     const usageDoc = await db.collection("usage").doc(uid).get();
     const metrics = usageDoc.exists ? usageDoc.data().metrics : {};
     let rewarded = 0,
@@ -871,34 +1076,50 @@ exports.verifyRewardAd = functions.https.onCall(async (data, context) => {
 // LINK GOOGLE ACCOUNT (with cooldown)
 // ------------------------------------------------------------------
 exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
-  if (!context.auth)
+  if (!context.auth) {
+    console.log(`[linkGoogleAccount] UNAUTHENTICATED`);
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  }
   const uid = context.auth.uid;
+  console.log(`[linkGoogleAccount] CALLED | uid=${uid} | email=${data.email}`);
   if (!checkRateLimit(`linkGoogle_${uid}`, 3)) {
+    console.log(`[linkGoogleAccount] RATE LIMITED`);
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
-  const { email, displayName, deviceId } = data;
-  // Cooldown check
+  const { email, displayName, deviceId, previousGuestUid } = data;
   const cooldownRef = db
     .collection("emailCooldown")
     .doc(email);
   const cooldownDoc = await cooldownRef.get();
   if (cooldownDoc.exists && cooldownDoc.data().expires.toDate() > new Date()) {
+    console.log(`[linkGoogleAccount] EMAIL IN COOLDOWN | email=${email}`);
     throw new functions.https.HttpsError(
       "permission-denied",
       "Account in cooldown",
     );
   } else if (cooldownDoc.exists) await cooldownRef.delete();
 
+  // Clean up orphaned guest from credential-already-in-use scenario
+  // We keep deviceGuestMapping so the device is never eligible for first-time guest again.
+  if (previousGuestUid && previousGuestUid !== uid) {
+    console.log(`[linkGoogleAccount] cleaning orphaned guest | previousGuestUid=${previousGuestUid}`);
+    try {
+      await db.collection("guests").doc(previousGuestUid).delete();
+      console.log(`[linkGoogleAccount] orphaned guest cleaned | previousGuestUid=${previousGuestUid}`);
+    } catch (e) {
+      console.warn(`[linkGoogleAccount] failed to clean orphaned guest: ${e.message}`);
+    }
+  }
+
   const guestRef = db.collection("guests").doc(uid);
   const guestDoc = await guestRef.get();
   const usageRef = db.collection("usage").doc(uid);
-  const userRef = db.collection("users").doc(uid);
-  const userDoc = await userRef.get();
+  console.log(`[linkGoogleAccount] guestDoc.exists=${guestDoc.exists}`);
 
   let guestDisplayName = "";
 
   if (guestDoc.exists) {
+    console.log(`[linkGoogleAccount] GUEST EXISTS | upgrading to member`);
     const guestData = guestDoc.data();
     guestDisplayName = guestData?.identity?.displayName || "";
     const guestTier = guestData?.guestTier || "first";
@@ -906,7 +1127,34 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
     if (guestTier === "returning") {
       // Returning guest upgrade → fresh start, reset usage
       await usageRef.set({
-        type: "user",
+        type: "member",
+        metrics: {
+          rewardedGenCount: 0,
+          proFreeGenCount: 0,
+          lifetimeGeneratedCases: 0,
+          lastReset: today(),
+        },
+      });
+    } else {
+      // First-time guest upgrade — mark usage as member
+      await usageRef.set({ type: "member" }, { merge: true });
+    }
+
+    // Delete guest doc
+    await guestRef.delete();
+    console.log(`[linkGoogleAccount] GUEST DELETED`);
+  }
+
+  if (!guestDoc.exists) {
+    const existingUsage = await usageRef.get();
+    if (existingUsage.exists) {
+      // Returning member — preserve existing metrics, don't nuke quota
+      console.log(`[linkGoogleAccount] RETURNING MEMBER | preserving usage metrics`);
+      await usageRef.set({ type: "member" }, { merge: true });
+    } else {
+      console.log(`[linkGoogleAccount] FRESH MEMBER | creating usage doc`);
+      await usageRef.set({
+        type: "member",
         metrics: {
           rewardedGenCount: 0,
           proFreeGenCount: 0,
@@ -915,52 +1163,62 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
         },
       });
     }
-    // First-time guest upgrade → usage doc already exists with type: "guest", leave it
-
-    // Delete guest doc, update registry
-    await guestRef.delete();
-    await db.collection("the_qag_registry").doc(uid).set(
-      {
-        type: "user",
-        uid,
-        displayName: displayName || guestDisplayName,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
   }
 
-  if (!guestDoc.exists && !userDoc.exists) {
-    // Fresh Google sign-in (no prior guest) — create usage doc
-    await usageRef.set({
-      type: "user",
-      metrics: {
-        rewardedGenCount: 0,
-        proFreeGenCount: 0,
-        lifetimeGeneratedCases: 0,
-        lastReset: today(),
-      },
-    });
-  }
-
-  const now = admin.firestore.FieldValue.serverTimestamp();
-  const identity = {
-    uid,
-    email,
-    displayName: displayName || guestDisplayName || "",
-    type: "user",
-    deviceId: deviceId || "",
-    createdAt: userDoc.exists
-      ? userDoc.data()?.identity?.createdAt || now
-      : now,
-  };
-  await userRef.set(
+  // Ensure registry entry exists for ALL Google accounts (not just guest upgrades)
+  await db.collection("the_qag_registry").doc(uid).set(
     {
-      identity,
-      subscription: { planType: "core", updatedAt: now },
+      type: "member",
+      uid,
+      displayName: displayName || guestDisplayName || "",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },
   );
+
+  // Create / update email → uid mapping for cross-reinstall identity resolution.
+  // Preserve the original uid so getMemberSuites can redirect to the first-ever UID
+  // after reinstall (when Firebase Auth issues a new UID).
+  let recoveredCreatedAt = null;
+  if (email) {
+    const profileRef = db.collection("memberProfiles").doc(email);
+    const existingProfile = await profileRef.get();
+    const originalUid = existingProfile.exists ? existingProfile.data().uid : uid;
+    if (existingProfile.exists && existingProfile.data().createdAt) {
+      recoveredCreatedAt = existingProfile.data().createdAt;
+    }
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const profileData = {
+      uid: originalUid,
+      email,
+      displayName: displayName || guestDisplayName || "",
+      type: "member",
+      deviceId: deviceId || "",
+      subscription: { planType: "core", updatedAt: now },
+      createdAt: recoveredCreatedAt || admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: now,
+    };
+    // Store previousGuestUid so getMemberSuites can redirect and find orphaned suites
+    if (previousGuestUid && previousGuestUid !== uid) {
+      profileData.previousGuestUid = previousGuestUid;
+      console.log(`[linkGoogleAccount] storing previousGuestUid=${previousGuestUid} in memberProfiles for suite redirect`);
+    }
+    await profileRef.set(profileData, { merge: true });
+
+    // Create session doc so multi-device conflict detection works immediately
+    try {
+      const sessionRef = db
+        .collection("memberData").doc("core")
+        .collection(originalUid).doc("_session");
+      await sessionRef.set({
+        deviceId: deviceId || "",
+        lastActive: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      log("warn", `linkGoogleAccount: failed to create _session for ${originalUid}`, { error: e.message });
+    }
+  }
+
   return { success: true };
 });
 
@@ -976,20 +1234,29 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
   }
   const { deviceId, email } = data;
   const batch = db.batch();
-  const userDoc = await db.collection("users").doc(uid).get();
-  const isUser = userDoc.exists;
-  if (isUser) {
-    batch.delete(userDoc.ref);
+  const profile = await _getMemberProfileByUid(uid);
+  const isMember = !!profile;
+  if (isMember) {
     if (email) {
       const cooldownRef = db
         .collection("emailCooldown")
         .doc(email);
       batch.set(cooldownRef, {
+        uid,
+        email,
         expires: admin.firestore.Timestamp.fromDate(
           new Date(Date.now() + COOLDOWN_HOURS * 60 * 60 * 1000),
         ),
         reason: "account_deleted",
       });
+      // Preserve original data in memberProfiles so re-registration recovers the join date
+      batch.set(db.collection("memberProfiles").doc(email), {
+        uid,
+        email,
+        type: "member",
+        createdAt: profile.data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
     }
   } else {
     const guestDoc = await db.collection("guests").doc(uid).get();
@@ -1003,6 +1270,8 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
   }
   batch.delete(db.collection("usage").doc(uid));
   batch.delete(db.collection("the_qag_registry").doc(uid));
+  // memberSessions cleanup
+  batch.delete(db.collection("memberSessions").doc(uid));
   // deviceUsage/{deviceId} is NOT deleted — it carries the device's daily quota
   // across account resets. This prevents quota abuse via delete-recreate.
   const reports = await db
@@ -1010,9 +1279,46 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
     .where("uid", "==", uid)
     .get();
   reports.forEach((doc) =>
-    batch.update(doc.ref, { uid: "deleted_user" }),
+    batch.update(doc.ref, { uid: "deleted_member" }),
   );
   await batch.commit();
+
+  // Clean up synced suites under memberData/{tier}/{uid}/{date}/suites/{serial}
+  try {
+    const tier = await _getMemberTier(uid);
+    const suiteBatch = db.batch();
+    const gcsPromises = [];
+
+    // New path: memberData/{tier}/{uid}/{date}/suites/{serial}
+    const uidDocRef = db.collection("memberData").doc(tier).collection(uid);
+    const dateDocs = await uidDocRef.get();
+    for (const dateDoc of dateDocs.docs) {
+      const suitesSnap = await dateDoc.ref.collection("suites").get();
+      for (const suiteDoc of suitesSnap.docs) {
+        suiteBatch.delete(suiteDoc.ref);
+        gcsPromises.push(
+          bucket.file(`memberData/${tier}/${uid}/${dateDoc.id}/suites/${suiteDoc.id}.json`)
+            .delete().catch(() => {}),
+        );
+      }
+    }
+
+    // Legacy path: memberData/{uid}/dates/{date}/suites/{serial} (pre-tier restructure)
+    const legacyColRef = db.collection("memberData").doc(uid).collection("dates");
+    const legacyDateDocs = await legacyColRef.get();
+    for (const dateDoc of legacyDateDocs.docs) {
+      const suitesSnap = await dateDoc.ref.collection("suites").get();
+      for (const suiteDoc of suitesSnap.docs) {
+        suiteBatch.delete(suiteDoc.ref);
+      }
+    }
+
+    await suiteBatch.commit();
+    await Promise.all(gcsPromises);
+  } catch (e) {
+    log("warn", `deleteAccount: suite cleanup failed for ${uid}`, { error: e.message });
+  }
+
   await admin.auth().deleteUser(uid);
   return { success: true };
 });
@@ -1075,7 +1381,7 @@ exports.recordUpdateDismissal = functions.https.onCall(async (data, context) => 
 // ------------------------------------------------------------------
 // HELPER: CALL DEEPSEEK
 // ------------------------------------------------------------------
-const SYSTEM_PROMPT = `You are a QA test case generator. Generate professional, execution-ready test cases.
+const SYSTEM_PROMPT = `You are a QA test case generator. Generate professional, realistic, execution-ready test cases for the given module, feature, and platform.
 
 Output a JSON object with a single key "testCases" containing an array of test case objects.
 
@@ -1086,7 +1392,7 @@ Each test case object MUST have:
 - feature (string)
 - platform (string)
 - preconditions (array of strings)
-- testData (string, realistic input data)
+- testData (string, realistic input data — use concise symbolic values like password_min_len, valid_email_1, rate_limit_1000ms)
 - steps (array of objects with action/data/expected)
 - expectedResult (string, measurable outcome)
 - priority ("High", "Medium", or "Low")
@@ -1094,8 +1400,21 @@ Each test case object MUST have:
 - categoryLock (string)
 - intent_id (string)
 
-Rules:
+PRIORITY GUIDELINES:
+- High: Security, authentication, payment, session, critical business flows
+- Medium: Validation, boundary, retry, data integrity
+- Low: Positive UI flows, cosmetic, informational
+
+PLATFORM GUIDELINES:
+- WEB: Use browser/UI terminology (page, element, navigation)
+- MOBILE: Use mobile/app terminology (screen, tap, swipe, device)
+- API: Use request/response terminology (endpoint, status code, schema)
+
+QUALITY RULES:
 - Use realistic data, observable actions, measurable expected results
+- Use senior QA terminology
+- Vary titles, steps, and expected results across cases
+- Semantic duplicates are not allowed
 - No generic phrases like "works correctly" or "as expected"
 - No markdown, no explanations, no code blocks
 - Each test case must be unique and execution-ready`;
@@ -1150,6 +1469,201 @@ async function callDeepSeek(prompt) {
     return { success: false, error: { code: "CLIENT_ERROR" } };
   }
 }
+
+// --------------------------------------------------------------
+// Push a suite under memberData/{tier}/{uid}/{date}/suites/{serialNumber}
+// Cases go to GCS (best-effort), metadata always persists to Firestore.
+// --------------------------------------------------------------
+exports.pushMemberSuite = functions.https.onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  const uid = context.auth.uid;
+  const { suiteData, date, serialNumber } = data;
+  if (!suiteData || !date)
+    throw new functions.https.HttpsError("invalid-argument", "date and suiteData required");
+  if (!checkRateLimit(`pushSuite_${uid}`, 30)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+
+  const { cases, platform, title, ...metadata } = suiteData;
+  metadata.uid = uid;
+  metadata.date = date;
+
+  const tier = await _getMemberTier(uid);
+
+  // Determine serialNumber: if re-syncing, reuse existing; else atomically generate
+  let serialStr = serialNumber;
+  if (!serialStr) {
+    await db.runTransaction(async (t) => {
+      const counterRef = db
+        .collection("memberData").doc(tier)
+        .collection(uid).doc("_counter_suites");
+      const counterDoc = await t.get(counterRef);
+      const next = (counterDoc.exists ? counterDoc.data().value : 0) + 1;
+      t.set(counterRef, { value: next });
+      serialStr = String(next);
+    });
+  }
+
+  const dateRef = db
+    .collection("memberData").doc(tier)
+    .collection(uid).doc(date);
+  const suiteRef = dateRef.collection("suites").doc(serialStr);
+
+  // Write cases to GCS (best-effort — metadata always saves)
+  let gcsError = null;
+  if (Array.isArray(cases) && cases.length > 0) {
+    try {
+      const gzipped = zlib.gzipSync(JSON.stringify(cases));
+      await bucket
+        .file(`memberData/${tier}/${uid}/${date}/suites/${serialStr}.json`)
+        .save(gzipped, {
+          metadata: { contentType: "application/json", contentEncoding: "gzip" },
+        });
+    } catch (e) {
+      gcsError = e.message;
+      log("error", `pushMemberSuite: GCS write failed for ${uid}/${date}/${serialStr}`, { error: e.message });
+    }
+  }
+
+  // Write metadata to Firestore; also ensure the date doc exists for retrieval
+  await Promise.all([
+    suiteRef.set(metadata),
+    dateRef.set({ uid, date, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true }),
+  ]);
+  return { success: true, serialNumber: serialStr, gcsError };
+});
+
+// --------------------------------------------------------------
+// Helper: read all suite docs under memberData/{tier}/{uid}
+// Iterates {date}/suites (no collectionGroup index needed).
+// --------------------------------------------------------------
+async function _getMemberSuites(uid, tier) {
+  const suites = [];
+  const uidColRef = db.collection("memberData").doc(tier).collection(uid);
+  const dateDocs = await uidColRef.get();
+  for (const dateDoc of dateDocs.docs) {
+    if (dateDoc.id.startsWith("_")) continue; // skip counter docs
+    const suitesSnap = await dateDoc.ref.collection("suites").get();
+    for (const suiteDoc of suitesSnap.docs) {
+      suites.push({
+        _date: dateDoc.id,
+        _serial: suiteDoc.id,
+        ...suiteDoc.data(),
+      });
+    }
+  }
+  return suites;
+}
+
+// --------------------------------------------------------------
+// Get all synced suites: metadata from Firestore, cases from GCS.
+// Uses memberData/{tier}/{uid}/{date}/suites/{serialNumber}.
+// --------------------------------------------------------------
+exports.getMemberSuites = functions.https.onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  const uid = context.auth.uid;
+  if (!checkRateLimit(`getSuites_${uid}`, 10)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+  try {
+    let effectiveUid = uid;
+    const initialTier = await _getMemberTier(effectiveUid);
+    let tier = initialTier;
+    let suites = await _getMemberSuites(effectiveUid, tier);
+
+    // UID redirect via memberProfiles if no suites found (handles reinstall)
+    if (suites.length === 0) {
+      const email = context.auth.token?.email || data?.email;
+      if (email) {
+        const profileDoc = await db.collection("memberProfiles").doc(email).get();
+        if (profileDoc.exists) {
+          const profileData = profileDoc.data();
+          if (profileData.uid && profileData.uid !== uid) {
+            effectiveUid = profileData.uid;
+            tier = await _getMemberTier(effectiveUid);
+            log("info", `getMemberSuites: redirecting from ${uid} to profile uid ${effectiveUid} (email ${email})`);
+            suites = await _getMemberSuites(effectiveUid, tier);
+          }
+          if (suites.length === 0 && profileData.previousGuestUid && profileData.previousGuestUid !== effectiveUid) {
+            effectiveUid = profileData.previousGuestUid;
+            tier = await _getMemberTier(effectiveUid);
+            log("info", `getMemberSuites: redirecting from ${uid} to previousGuestUid ${effectiveUid} (email ${email})`);
+            suites = await _getMemberSuites(effectiveUid, tier);
+          }
+        }
+      }
+    }
+
+    const result = await Promise.all(suites.map(async (s) => {
+      let cases = [];
+      try {
+        const [content] = await bucket
+          .file(`memberData/${tier}/${effectiveUid}/${s._date}/suites/${s._serial}.json`)
+          .download();
+        const raw = content.toString();
+        // GCS auto-decompresses when contentEncoding:gzip is set
+        cases = JSON.parse(raw);
+      } catch (e) {
+        log("warn", `GCS read failed for suite ${s._serial}: ${e.message || e}`, { uid: effectiveUid, date: s._date });
+      }
+      const suiteId = `${s._date}/${s._serial}`;
+      return { suiteId, ...s, cases };
+    }));
+
+    return { success: true, suites: result };
+  } catch (e) {
+    return { success: false, error: e.message, suites: [] };
+  }
+});
+
+// --------------------------------------------------------------
+// Delete a suite: Firestore metadata + GCS cases.
+// suiteId format: "date/serialNumber"
+// --------------------------------------------------------------
+exports.deleteMemberSuite = functions.https.onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  const uid = context.auth.uid;
+  const { suiteId } = data;
+  if (!suiteId)
+    throw new functions.https.HttpsError("invalid-argument", "suiteId required");
+  try {
+    const parts = suiteId.split('/');
+    if (parts.length !== 2)
+      throw new functions.https.HttpsError("invalid-argument", "suiteId must be in format 'date/serialNumber'");
+    const [date, serial] = parts;
+
+    // Resolve effectiveUid (try current uid, then redirect via memberProfiles)
+    let effectiveUid = uid;
+    const email = context.auth.token?.email;
+    if (email) {
+      const profileDoc = await db.collection("memberProfiles").doc(email).get();
+      if (profileDoc.exists) {
+        const profileData = profileDoc.data();
+        if (profileData.uid && profileData.uid !== uid) {
+          effectiveUid = profileData.uid;
+        } else if (profileData.previousGuestUid && profileData.previousGuestUid !== uid) {
+          effectiveUid = profileData.previousGuestUid;
+        }
+      }
+    }
+
+    const tier = await _getMemberTier(effectiveUid);
+    const uidDocRef = db.collection("memberData").doc(tier).collection(effectiveUid);
+
+    await uidDocRef.doc(date).collection("suites").doc(serial).delete();
+
+    try {
+      await bucket.file(`memberData/${tier}/${effectiveUid}/${date}/suites/${serial}.json`).delete();
+    } catch (_) {}
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
 
 function transformTestCases(rawCases, module, feature, platform, limit) {
   return rawCases.slice(0, limit).map((tc, i) => ({

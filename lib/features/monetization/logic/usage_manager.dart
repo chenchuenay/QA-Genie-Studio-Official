@@ -9,7 +9,7 @@ class UsageManager {
   static Map<String, dynamic>? _dashboardCache;
   static DateTime? _dashboardCacheTime;
   static String? _dashboardCacheUid;
-  static const Duration _cacheDuration = Duration(seconds: 60);
+  static const Duration _cacheDuration = Duration(seconds: 10);
 
   static Future<SharedPreferences> _prefs() async => SharedPreferences.getInstance();
 
@@ -39,7 +39,7 @@ class UsageManager {
     final prefs = await _prefs();
     await prefs.setBool(_proKey, value);
     try {
-      await FunctionsService.call(functionName: 'setUserPro', payload: {'isPro': value});
+      await FunctionsService.call(functionName: 'setMemberPro', payload: {'isPro': value});
     } catch (e) {
       debugPrint('UsageManager.setPro error: $e');
     }
@@ -106,16 +106,19 @@ class UsageManager {
   }
 
   static Future<Map<String, dynamic>>? _dashboardFetch;
+  static int _dashboardEpoch = 0;
 
   static void invalidateCache() {
     _dashboardCache = null;
     _dashboardCacheTime = null;
     _dashboardCacheUid = null;
+    _dashboardFetch = null;
+    _dashboardEpoch++;
   }
 
   static void _invalidateCache() => invalidateCache();
 
-  static String _currentUid() => AuthService.currentUser?.uid ?? 'guest';
+  static String _currentUid() => AuthService.currentMember?.uid ?? 'guest';
 
   static Future<Map<String, dynamic>> _getDashboard() async {
     final now = DateTime.now();
@@ -137,11 +140,16 @@ class UsageManager {
   }
 
   static Future<Map<String, dynamic>> _fetchDashboard(DateTime now, String uid) async {
+    final epoch = _dashboardEpoch;
     try {
-      final result = await FunctionsService.call(functionName: 'getUserDashboard', payload: {'type': 'user'});
-      _dashboardCache = result;
-      _dashboardCacheTime = now;
-      _dashboardCacheUid = uid;
+      final result = await FunctionsService.call(functionName: 'getMemberDashboard', payload: {'type': 'member'});
+      if (epoch == _dashboardEpoch) {
+        _dashboardCache = result;
+        _dashboardCacheTime = now;
+        _dashboardCacheUid = uid;
+      } else {
+        debugPrint('UsageManager._fetchDashboard: discarding stale result (epoch changed)');
+      }
       return result;
     } catch (e) {
       debugPrint('Error fetching dashboard: $e');
@@ -168,6 +176,10 @@ class UsageManager {
     if (remaining is int) return remaining;
     final metrics = dashboard['metrics'] ?? {};
     final used = metrics['rewardedGenCount'] ?? 0;
+    final guestTier = dashboard['guestTier'] as String?;
+    if (guestTier == 'returning') {
+      return _clampRemaining(AppConfig.returningGuestBatchesPerDay, used);
+    }
     return _clampRemaining(AppConfig.coreRewardedBatchesPerDay, used);
   }
 
@@ -182,12 +194,12 @@ class UsageManager {
 
   static Future<Map<String, dynamic>> getDashboardData() => _getDashboard();
 
-  /// Returns true if the current user can submit feedback/reports.
-  /// Only signed-in (non-guest) users can give feedback. Guests must sign in.
+  /// Returns true if the current member can submit feedback/reports.
+  /// Only signed-in (non-guest) members can give feedback. Guests must sign in.
   static bool get canGiveFeedback => !AuthService.isGuest;
 
   /// Returns true if the star rating should be shown in export success dialog.
-  /// Shown for signed-in users and first-time (6-quota) guests.
+  /// Shown for signed-in members and first-time (6-quota) guests.
   /// Hidden for returning (1-quota) guests.
   static Future<bool> canShowStars() async {
     if (AuthService.isGuest) {

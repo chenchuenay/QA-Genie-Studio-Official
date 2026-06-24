@@ -12,6 +12,8 @@ import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/engine/prompts/prompt_cache_manager.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -32,13 +34,13 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _init() async {
-    // Only local operations before navigation — no network/cloud calls.
     final prefs = await AppConfig.sharedPrefs;
     final firstLaunch = prefs.getBool('first_launch_completed') ?? false;
 
     if (!firstLaunch) {
       await showBlurredDialog(
         context,
+        barrierDismissible: false,
         builder: (ctx) => const AuthDialog(showGuestButton: true),
       );
       if (!mounted) return;
@@ -63,9 +65,85 @@ class _SplashScreenState extends State<SplashScreen> {
           }
         }
       }
+    } else if (FirebaseAuth.instance.currentUser == null) {
+      // No persisted auth session — show auth dialog instead of auto-creating a guest.
+      await showBlurredDialog(
+        context,
+        barrierDismissible: false,
+        builder: (ctx) => const AuthDialog(showGuestButton: true),
+      );
+      if (!mounted) return;
     }
 
-    // Navigate immediately — splash should be invisible to the user.
+    // Session conflict check for already-signed-in members (cold start)
+    if (FirebaseAuth.instance.currentUser != null && !AuthService.isGuest) {
+      final deviceId = await DeviceUtils.getUniqueId();
+      Map<String, dynamic> sessionResult = {'conflict': false};
+      try {
+        sessionResult = await FunctionsService.registerSession(
+          deviceId: deviceId,
+          force: false,
+        );
+      } catch (e) {
+        debugPrint('⚠️ Splash: registerSession threw — $e');
+      }
+      if (sessionResult['error'] != null) {
+        debugPrint('⚠️ Splash: registerSession error — ${sessionResult['error']}');
+        sessionResult = {'conflict': false};
+      }
+      if (sessionResult['conflict'] == true) {
+        if (!mounted) return;
+        final choice = await showBlurredDialog<String>(
+          context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1C1C1E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text(
+              'Already Signed In',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              'Signing in here logs out the other device.',
+              style: TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 'no'),
+                child: const Text('No', style: TextStyle(color: Color(0xFF8E8E93))),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, 'okay'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF007AFF),
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Okay'),
+              ),
+            ],
+          ),
+        );
+
+        if (choice == 'no') {
+          await AuthService.signOut();
+          if (!mounted) return;
+          await showBlurredDialog(
+            context,
+            barrierDismissible: false,
+            builder: (ctx) => const AuthDialog(showGuestButton: true),
+          );
+          if (!mounted) return;
+        } else {
+          await FunctionsService.registerSession(
+            deviceId: deviceId,
+            force: true,
+          );
+        }
+      }
+    }
+
+    // Navigate immediately — splash should be invisible to the member.
     if (!mounted) return;
     MainScreenState.shouldAutoStartTour = _showGuidelines;
     Navigator.of(context).pushReplacement(
@@ -81,23 +159,14 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _backgroundInit() async {
-    final guestAuthDone = _initGuestAuth().timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => null,
-    );
-    await guestAuthDone;
     final identity = await DeviceUtils.getUniqueId();
     await DatabaseService.initDatabase(identity);
     // One-time migration from legacy UID-based identity to device-level identity
-    final oldUid = AuthService.currentUser?.uid ?? 'guest_default';
+    final oldUid = AuthService.currentMember?.uid ?? 'guest_default';
     await DatabaseService.migrateDataToCurrentDb(oldUid);
-  }
 
-  Future<void> _initGuestAuth() async {
-    if (FirebaseAuth.instance.currentUser == null) {
-      try {
-        await AuthService.signInAsGuest();
-      } catch (_) {}
+    if (AuthService.currentMember != null && !AuthService.isGuest) {
+      unawaited(CloudSyncService.tryAutoSync().catchError((_) {}));
     }
   }
 

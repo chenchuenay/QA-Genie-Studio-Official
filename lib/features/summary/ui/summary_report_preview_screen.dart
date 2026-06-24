@@ -1,9 +1,7 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
-import 'package:qa_genie/shared/widgets/animated_dots.dart';
 import 'package:qa_genie/core/config/app_environment.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/shared/widgets/watch_ad_dialog.dart';
@@ -278,12 +276,6 @@ class _SummaryReportPreviewScreenState
       ),
     );
 
-    if (_isSharing) {
-      return BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: content,
-      );
-    }
     return content;
   }
 

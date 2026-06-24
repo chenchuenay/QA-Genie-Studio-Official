@@ -16,7 +16,7 @@ class DatabaseService {
   static bool _isInitializing = false;
   static final Completer<void> _initCompleter = Completer();
   static const String _dbName = 'qa_genie.db';
-  static const int _version = 3;
+  static const int _version = 5;
   static List<Map<String, dynamic>>? _suitesCache;
 
   static Future<Database> get db async {
@@ -71,6 +71,14 @@ class DatabaseService {
         moduleName TEXT NOT NULL,
         feature TEXT NOT NULL,
         platform TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        cloud_id TEXT,
+        dirty INTEGER DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE pending_deletes (
+        suite_id INTEGER PRIMARY KEY,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     ''');
@@ -131,6 +139,22 @@ class DatabaseService {
         )
       ''');
     }
+    if (oldVersion < 4) {
+      await db.execute('''
+        ALTER TABLE suites ADD COLUMN cloud_id TEXT
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS pending_deletes (
+          suite_id INTEGER PRIMARY KEY,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+    }
+    if (oldVersion < 5) {
+      await db.execute('''
+        ALTER TABLE suites ADD COLUMN dirty INTEGER DEFAULT 0
+      ''');
+    }
   }
   
   static Future<int> insertSuite({required String moduleName, required String feature, required String platform}) async {
@@ -159,6 +183,7 @@ class DatabaseService {
   static Future<void> renameSuite(int id, String newName) async {
     final db = await DatabaseService.db;
     await db.update('suites', {'moduleName': newName}, where: 'id = ?', whereArgs: [id]);
+    await db.update('suites', {'dirty': 1}, where: 'id = ?', whereArgs: [id]);
     invalidateSuitesCache();
   }
 
@@ -211,14 +236,29 @@ class DatabaseService {
 
   static Future<void> deleteTestCase(int id) async {
     final db = await DatabaseService.db;
+    final rows = await db.query('test_cases',
+        columns: ['suite_id'], where: 'id = ?', whereArgs: [id]);
     await db.delete('test_cases', where: 'id = ?', whereArgs: [id]);
+    if (rows.isNotEmpty) {
+      final suiteId = rows.first['suite_id'] as int;
+      await markSuiteDirty(suiteId);
+    }
   }
 
   static Future<void> batchDeleteTestCases(List<int> ids) async {
     final db = await DatabaseService.db;
     await db.transaction((txn) async {
+      final marked = <int>{};
       for (final id in ids) {
+        final rows = await txn.query('test_cases',
+            columns: ['suite_id'], where: 'id = ?', whereArgs: [id]);
+        if (rows.isNotEmpty) {
+          marked.add(rows.first['suite_id'] as int);
+        }
         await txn.delete('test_cases', where: 'id = ?', whereArgs: [id]);
+      }
+      for (final suiteId in marked) {
+        await txn.update('suites', {'dirty': 1}, where: 'id = ?', whereArgs: [suiteId]);
       }
     });
   }
@@ -338,6 +378,13 @@ class DatabaseService {
     }
   }
 
+  static Future<void> reset() async {
+    if (_db != null) await _db!.close();
+    _db = null;
+    _currentIdentity = null;
+    _suitesCache = null;
+  }
+
   static Future<void> clearAll() async {
     final db = await DatabaseService.db;
     await db.delete('suites');
@@ -345,6 +392,114 @@ class DatabaseService {
     await db.delete('reported_issues');
     await db.execute('DELETE FROM sqlite_sequence');
     invalidateSuitesCache();
+  }
+
+  /// Get suites that haven't been synced to cloud yet (no cloud_id).
+  static Future<List<Map<String, dynamic>>> getPendingSyncSuites() async {
+    final db = await DatabaseService.db;
+    // Return never-synced suites plus dirty (modified) suites
+    return db.query('suites',
+        where: '(cloud_id IS NULL OR dirty = 1)',
+        orderBy: 'created_at DESC');
+  }
+
+  /// Mark a suite as dirty (modified and needs re-sync).
+  static Future<void> markSuiteDirty(int suiteId) async {
+    final db = await DatabaseService.db;
+    await db.update('suites', {'dirty': 1}, where: 'id = ?', whereArgs: [suiteId]);
+    invalidateSuitesCache();
+  }
+
+  /// Mark a suite as synced by storing its cloud_id and clearing dirty flag.
+  static Future<void> markSynced(int localId, String cloudId) async {
+    final db = await DatabaseService.db;
+    await db.update('suites', {'cloud_id': cloudId, 'dirty': 0},
+        where: 'id = ?', whereArgs: [localId]);
+    invalidateSuitesCache();
+  }
+
+  /// Get the cloud_id for a suite.
+  static Future<String?> getCloudIdForSuite(int localId) async {
+    final db = await DatabaseService.db;
+    final rows = await db.query('suites',
+        columns: ['cloud_id'], where: 'id = ?', whereArgs: [localId]);
+    if (rows.isEmpty) return null;
+    return rows.first['cloud_id'] as String?;
+  }
+
+  /// Insert or update a suite from cloud data.
+  /// Returns the local suite id.
+  static Future<int> upsertSuiteFromCloud(Map<String, dynamic> cloudSuite) async {
+    final db = await DatabaseService.db;
+    final cloudId = cloudSuite['suiteId'] as String;
+    final moduleName = cloudSuite['moduleName'] as String? ?? '';
+    final feature = cloudSuite['feature'] as String? ?? '';
+    final platform = cloudSuite['platform'] as String? ?? 'Web';
+    final createdAt = cloudSuite['createdAt'] as String?;
+
+    // Check if already exists by cloud_id
+    final existing = await db.query('suites',
+        where: 'cloud_id = ?', whereArgs: [cloudId]);
+    if (existing.isNotEmpty) {
+      final localId = existing.first['id'] as int;
+      // Don't overwrite if the suite has local dirty changes
+      if (existing.first['dirty'] == 1) {
+        print('DB: Skipping cloud overwrite for dirty suite $localId ($cloudId)');
+        return localId;
+      }
+      await db.update('suites', {
+        'moduleName': moduleName,
+        'feature': feature,
+        'platform': platform,
+        if (createdAt != null) 'created_at': createdAt,
+      }, where: 'id = ?', whereArgs: [localId]);
+      invalidateSuitesCache();
+      return localId;
+    }
+
+    // Check for duplicate by (moduleName, feature, platform)
+    final duplicate = await db.query('suites',
+        where: 'moduleName = ? AND feature = ? AND platform = ?',
+        whereArgs: [moduleName, feature, platform]);
+    if (duplicate.isNotEmpty) {
+      final localId = duplicate.first['id'] as int;
+      await db.update('suites', {'cloud_id': cloudId}, where: 'id = ?', whereArgs: [localId]);
+      invalidateSuitesCache();
+      return localId;
+    }
+
+    final id = await db.insert('suites', {
+      'moduleName': moduleName,
+      'feature': feature,
+      'platform': platform,
+      'cloud_id': cloudId,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+    invalidateSuitesCache();
+    return id;
+  }
+
+  /// Queue a suite id for remote deletion.
+  static Future<void> queuePendingDelete(int suiteId) async {
+    final db = await DatabaseService.db;
+    try {
+      await db.insert('pending_deletes', {'suite_id': suiteId});
+    } catch (_) {
+      // Already exists
+    }
+  }
+
+  /// Get all suite ids queued for remote deletion.
+  static Future<List<int>> getPendingDeleteSuiteIds() async {
+    final db = await DatabaseService.db;
+    final rows = await db.query('pending_deletes', columns: ['suite_id']);
+    return rows.map((r) => r['suite_id'] as int).toList();
+  }
+
+  /// Clear a pending delete after successful remote deletion.
+  static Future<void> clearPendingDelete(int suiteId) async {
+    final db = await DatabaseService.db;
+    await db.delete('pending_deletes', where: 'suite_id = ?', whereArgs: [suiteId]);
   }
 
   /// Syncs only `status` field for already-submitted reports, once per week on Monday.

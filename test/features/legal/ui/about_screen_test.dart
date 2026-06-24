@@ -10,6 +10,6 @@ void main() {
     await tester.pump();
     expect(find.text('About'), findsOneWidget);
     expect(find.text('QA Genie'), findsOneWidget);
-    expect(find.text('AI-Powered Test Flow Engine'), findsOneWidget);
+    expect(find.text('Hybrid-Powered Test Flow Engine'), findsOneWidget);
   });
 }

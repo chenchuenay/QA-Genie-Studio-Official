@@ -39,13 +39,13 @@ class PreconditionGenerator {
     }
 
     if (action == ActionType.login || action == ActionType.authenticate) {
-      preconditions.add('User account is active and verified (not locked, disabled, or pending)');
+      preconditions.add('Member account is active and verified (not locked, disabled, or pending)');
       preconditions.add('Login form is active and accepts input without pre-validation restrictions');
     } else if (action == ActionType.refresh) {
       preconditions.add('Current session token is active and verified with valid expiration window');
     } else if (action == ActionType.reset) {
       preconditions.add('Email delivery service is active and operational with verified send capability');
-      preconditions.add('Registered user has active access to the verified email inbox');
+      preconditions.add('Registered member has active access to the verified email inbox');
     } else if (action == ActionType.pay || action == ActionType.checkout) {
       preconditions.add('Payment gateway is active and operational with verified test mode enabled');
       preconditions.add('Active cart contains at least one verified in-stock item with valid pricing');
@@ -57,7 +57,7 @@ class PreconditionGenerator {
     } else if (action == ActionType.trigger || action == ActionType.send) {
       preconditions.add('API endpoint is active and reachable with verified firewall allowing request');
     } else if (action == ActionType.create && entity == EntityType.record) {
-      preconditions.add('User has active "Create Record" permission with verified authorization');
+      preconditions.add('Member has active "Create Record" permission with verified authorization');
       preconditions.add('Registered patient demographic data is available and verified for entry');
     } else if (action == ActionType.delete) {
       preconditions.add('$entityName is registered and eligible for deletion with no active dependencies');
@@ -75,7 +75,7 @@ class PreconditionGenerator {
   static String _entitySpecificPrecondition(EntityType entity, ActionType action) {
     switch (entity) {
       case EntityType.account:
-        return 'Registered user account is active and verified with valid credentials';
+        return 'Registered member account is active and verified with valid credentials';
       case EntityType.credential:
         return 'Valid login credentials are available for the registered account';
       case EntityType.session:
@@ -121,7 +121,7 @@ class PreconditionGenerator {
     if (scenario.isPositive) {
       switch (action) {
         case ActionType.login:
-          return 'Registered user account exists with verified email and active status';
+          return 'Registered member account exists with verified email and active status';
         case ActionType.authenticate:
           return 'Registered and verified credentials are available for the authentication attempt';
         case ActionType.create:
@@ -129,7 +129,7 @@ class PreconditionGenerator {
         case ActionType.update:
           return 'Updated field values are verified and compliant with active business rules';
         case ActionType.delete:
-          return 'Delete permission is verified and active with confirmed user authorization';
+          return 'Delete permission is verified and active with confirmed member authorization';
         case ActionType.pay:
           return 'Registered payment method is active and verified with sufficient funds';
         case ActionType.checkout:

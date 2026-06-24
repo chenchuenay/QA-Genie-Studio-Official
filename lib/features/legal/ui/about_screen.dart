@@ -27,9 +27,14 @@ class _AboutScreenState extends State<AboutScreen> {
   Future<void> _launchEmail() async {
     final uri = Uri(
       scheme: 'mailto',
-      path: 'qagenieai@gmail.com',
+      path: 'chenchuenay@qagenies.com',
       queryParameters: {'subject': 'QA Genie Feedback'},
     );
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
+
+  Future<void> _launchWebsite() async {
+    final uri = Uri.parse('https://qagenies.com');
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
@@ -49,7 +54,7 @@ class _AboutScreenState extends State<AboutScreen> {
             Image.asset('assets/logo.png', width: 72, height: 72),
             const SizedBox(height: 12),
             const Text(
-              'QA Genie',
+              'QA Genie . Enay Kumar',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -65,6 +70,18 @@ class _AboutScreenState extends State<AboutScreen> {
             const Text(
               'AI-Powered Test Flow Engine',
               style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _launchWebsite,
+              child: const Text(
+                'qagenies.com',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.accent,
+                  decoration: TextDecoration.none,
+                ),
+              ),
             ),
             const SizedBox(height: 28),
             _sectionCard(
@@ -114,6 +131,29 @@ class _AboutScreenState extends State<AboutScreen> {
             const SizedBox(height: 16),
             _sectionCard(
               children: [
+                _sectionHeader('Clarifications'),
+                const SizedBox(height: 10),
+                _featureItem(
+                  'Multi-Device Usage',
+                  'Logging in with the same Google account on multiple devices simultaneously may lead to unsaved data loss.',
+                ),
+                _featureItem(
+                  'Cloud Sync (Members)',
+                  'Sign in with Google to sync your test suites across devices. Guest data stays on device and is never uploaded.',
+                ),
+                _featureItem(
+                  'Local Storage (Guests)',
+                  'Guest data stays on this device and is never uploaded. Members access cloud sync.',
+                ),
+                _featureItem(
+                  'Check Cloud vs Sync',
+                  'Members only. "Check Cloud" pulls suites from server (one-way). Sync icon pushes local changes & pulls remote (two-way). Guests use local storage only.',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _sectionCard(
+              children: [
                 _sectionHeader('Built With'),
                 const SizedBox(height: 10),
                 const Text(
@@ -146,26 +186,20 @@ class _AboutScreenState extends State<AboutScreen> {
                       ),
                       SizedBox(width: 6),
                       Text(
-                        'qagenieai@gmail.com',
+                        'chenchuenay@qagenies.com',
                         style: TextStyle(
                           fontSize: 14,
                           color: AppColors.accent,
-                          decoration: TextDecoration.underline,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Developer: Enay Kumar',
-                  style: TextStyle(fontSize: 13, color: AppColors.textHint),
-                ),
               ],
             ),
             const SizedBox(height: 28),
             const Text(
-              '© 2026 Enay Kumar',
+              '© 2026 QA Genie . Enay Kumar',
               style: TextStyle(fontSize: 12, color: AppColors.textHint),
             ),
             const SizedBox(height: 32),

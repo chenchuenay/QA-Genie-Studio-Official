@@ -34,7 +34,7 @@ class AiRepairEngine {
           if (tc.feature.toLowerCase().contains('login') ||
               tc.module.toLowerCase().contains('auth')) {
             tc.expectedResult =
-                'User is redirected to the dashboard/home page. The top navigation shows the user\'s display name and avatar. A welcome toast confirms successful login. The session token is set and accessible.';
+                'Member is redirected to the dashboard/home page. The top navigation shows the member\'s display name and avatar. A welcome toast confirms successful login. The session token is set and accessible.';
           } else if (tc.feature.toLowerCase().contains('transfer') ||
               tc.feature.toLowerCase().contains('payment')) {
             tc.expectedResult =
@@ -54,14 +54,14 @@ class AiRepairEngine {
                 'The form displays a clear error message: "Invalid email or password." No sensitive information about whether the email exists is revealed. The form does not submit. Fields retain their values for correction.';
           } else if (tc.feature.toLowerCase().contains('transfer')) {
             tc.expectedResult =
-                'The transfer is rejected with an insufficient funds error. No hold is placed on the account. No OTP is sent. The user can adjust the amount and retry.';
+                'The transfer is rejected with an insufficient funds error. No hold is placed on the account. No OTP is sent. The member can adjust the amount and retry.';
           } else if (tc.feature.toLowerCase().contains('payment') ||
               tc.feature.toLowerCase().contains('checkout')) {
             tc.expectedResult =
-                'The transaction is rejected with a clear error message. No charge is processed. The cart/order remains unchanged. The user is prompted to use a different payment method or correct the input.';
+                'The transaction is rejected with a clear error message. No charge is processed. The cart/order remains unchanged. The member is prompted to use a different payment method or correct the input.';
           } else {
             tc.expectedResult =
-                'System rejects the request with a clear error message. No data mutation occurs. The user can correct the input and retry. The error is logged without exposing sensitive details.';
+                'System rejects the request with a clear error message. No data mutation occurs. The member can correct the input and retry. The error is logged without exposing sensitive details.';
           }
           break;
         case 'security':
@@ -78,7 +78,7 @@ class AiRepairEngine {
           break;
         case 'session':
           tc.expectedResult =
-              'The expired session is detected. API returns 401 Unauthorized. User is redirected to the login page. No data loss occurs — the user\'s in-progress work is preserved. After re-authentication, the user is returned to their previous state.';
+              'The expired session is detected. API returns 401 Unauthorized. Member is redirected to the login page. No data loss occurs — the member\'s in-progress work is preserved. After re-authentication, the member is returned to their previous state.';
           break;
         default:
           tc.expectedResult =
@@ -132,14 +132,14 @@ class AiRepairEngine {
           tc.feature.toLowerCase().contains('login') || tc.module.toLowerCase().contains('auth');
       if (isAuth) {
         tc.preconditions = [
-          'User has a registered account with verified email address',
-          'User is on the ${tc.feature} screen with all UI elements rendered',
+          'Member has a registered account with verified email address',
+          'Member is on the ${tc.feature} screen with all UI elements rendered',
           'Authentication service is reachable and responding within normal latency',
         ];
       } else if (tc.feature.toLowerCase().contains('checkout') ||
           tc.feature.toLowerCase().contains('cart')) {
         tc.preconditions = [
-          'User is authenticated with an active session',
+          'Member is authenticated with an active session',
           'Cart contains at least one in-stock item with valid pricing',
           'Valid shipping address is saved in the address book',
           'Payment gateway is operational and test mode is enabled',
@@ -147,7 +147,7 @@ class AiRepairEngine {
       } else if (tc.feature.toLowerCase().contains('transfer') ||
           tc.feature.toLowerCase().contains('payment')) {
         tc.preconditions = [
-          'User is authenticated with an active banking session',
+          'Member is authenticated with an active banking session',
           'Source account has sufficient balance for the transaction',
           'Beneficiary/recipient is added and verified',
           'Two-factor authentication is available',
@@ -155,14 +155,14 @@ class AiRepairEngine {
       } else if (tc.feature.toLowerCase().contains('appointment') ||
           tc.feature.toLowerCase().contains('schedule')) {
         tc.preconditions = [
-          'User is authenticated with an active account',
+          'Member is authenticated with an active account',
           'Provider has available slots on the selected date',
           'Insurance information is valid and on file',
         ];
       } else {
         tc.preconditions = [
-          'User is authenticated with an active session and valid role',
-          'User is on the ${tc.feature} screen with all UI elements rendered',
+          'Member is authenticated with an active session and valid role',
+          'Member is on the ${tc.feature} screen with all UI elements rendered',
           'Backend services are reachable and responding within normal latency',
         ];
       }
@@ -239,7 +239,7 @@ class AiRepairEngine {
   }
 
   Scenario _scenarioFromCase(WorkingCase tc) {
-    EntityType entity = EntityType.user;
+    EntityType entity = EntityType.member;
     ActionType action = ActionType.login;
 
     if (tc.feature.toLowerCase().contains('login') ||

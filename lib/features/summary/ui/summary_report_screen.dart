@@ -6,6 +6,7 @@ import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/features/summary/ui/summary_report_preview_screen.dart';
+import 'package:qa_genie/app/startup/app_dependencies.dart';
 
 class SummaryReportScreen extends StatefulWidget {
   final GenerationSession session;
@@ -68,6 +69,16 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
   String get _environment => _envCtrl.text.trim();
 
   void _toggleEdit() => setState(() => _editing = !_editing);
+
+  Future<void> _saveStatus() async {
+    if (widget.suiteId == null) return;
+    try {
+      await AppDependencies.saveSuiteUseCase.saveSuite(
+        suiteId: widget.suiteId!,
+        cases: widget.session.testCases,
+      );
+    } catch (_) {}
+  }
 
   void _navigateToPreview() {
     Navigator.push(
@@ -496,6 +507,7 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
               tc.status = v;
               _recompute();
             });
+            _saveStatus();
           },
         ),
       ),
