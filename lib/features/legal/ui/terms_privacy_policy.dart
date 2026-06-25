@@ -24,6 +24,7 @@ class TermsPrivacyPolicyScreen extends StatelessWidget {
           _policyItem(context, 'Terms of Use', LegalDocuments.termsOfUse, LegalDocuments.termsOfServiceUrl),
           _policyItem(context, 'AI Disclaimer', LegalDocuments.aiDisclaimer, LegalDocuments.aiDisclaimerUrl),
           _policyItem(context, 'Ads & Monetization', LegalDocuments.adsPolicy, LegalDocuments.adsPolicyUrl),
+          _policyItem(context, 'Account Deletion', LegalDocuments.deleteAccountInfo, LegalDocuments.deleteAccountUrl),
         ],
       ),
     );

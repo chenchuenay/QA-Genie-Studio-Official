@@ -28,7 +28,7 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
+        versionCode = 15
         multiDexEnabled = true
     }
 
@@ -36,6 +36,7 @@ android {
     productFlavors {
         create("dev") {
             dimension = "mode"
+            applicationId = "com.enaykumar.qagenie_dev"
             versionName = "${flutter.versionName}-dev"
         }
         create("prod") {
@@ -78,6 +79,9 @@ android {
         if (name == "extractDeepLinksProdRelease") {
             mustRunAfter("processProdReleaseGoogleServices")
         }
+        if (name == "extractDeepLinksDevRelease") {
+            mustRunAfter("processDevReleaseGoogleServices")
+        }
     }
 
     tasks.whenTaskAdded {
@@ -94,6 +98,22 @@ android {
                 val dir = file("${project.buildDir}/outputs/flutter-apk")
                 val src = dir.resolve("app-prod-release.apk")
                 val dst = dir.resolve("QA-Genie_release-v${flutter.versionName}.apk")
+                if (src.exists()) { src.renameTo(dst) }
+            }
+        }
+        if (name == "bundleDevRelease") {
+            doLast {
+                val dir = file("${project.buildDir}/outputs/bundle/devRelease")
+                val src = dir.resolve("app-dev-release.aab")
+                val dst = dir.resolve("QA-Genie_dev-v${flutter.versionName}.aab")
+                if (src.exists()) { src.renameTo(dst) }
+            }
+        }
+        if (name == "assembleDevRelease") {
+            doLast {
+                val dir = file("${project.buildDir}/outputs/flutter-apk")
+                val src = dir.resolve("app-dev-release.apk")
+                val dst = dir.resolve("QA-Genie_dev-v${flutter.versionName}.apk")
                 if (src.exists()) { src.renameTo(dst) }
             }
         }

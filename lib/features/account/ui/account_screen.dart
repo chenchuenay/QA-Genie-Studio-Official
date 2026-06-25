@@ -17,6 +17,7 @@ import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/features/splash/splash_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -145,16 +146,18 @@ class _AccountScreenState extends State<AccountScreen> {
     if (confirmed == true) _logout();
   }
 
-  Future<void> _logout() async {
+  Future<void> _logout({bool revokeGoogleAccess = false}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('stats_generations');
     await prefs.remove('stats_exports');
     await prefs.remove('stats_last_sync');
-    await AuthService.signOut();
+    await AuthService.signOut(revokeGoogleAccess: revokeGoogleAccess);
 
     if (mounted) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
-      AccountScreen.markForRefresh();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SplashScreen()),
+        (route) => false,
+      );
     }
   }
 
@@ -263,7 +266,7 @@ class _AccountScreenState extends State<AccountScreen> {
         if (member != null && !member.isAnonymous) 'email': member.email,
       });
       await DatabaseService.clearAll();
-      await _logout();
+      await _logout(revokeGoogleAccess: true);
     } catch (e) {
       if (mounted) {
         showBlurredDialog(

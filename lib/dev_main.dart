@@ -7,7 +7,7 @@ import 'package:qa_genie/core/forensics/forensics_service_dev.dart';
 import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 import 'package:qa_genie/features/monetization/ui/test_mode_screen.dart';
 import 'package:qa_genie/core/database/database_service.dart';
-import 'firebase/firebase_options.dart';
+import 'firebase/firebase_options_dev.dart' as dev_fb;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:qa_genie/firebase/app_check/app_check_service.dart';
@@ -28,7 +28,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.android);
+    await Firebase.initializeApp(options: dev_fb.DefaultFirebaseOptionsDev.android);
     await AppCheckService.initialize(isProduction: AppConfig.isProduction);
     await MobileAds.instance.initialize();
   } catch (e) {

@@ -6,6 +6,8 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
+    "deploy:prod": "firebase deploy --project qa-genie-ai --only functions",
+    "deploy:dev": "firebase deploy --project qa-genie-ai-dev --only functions",
     "logs": "firebase functions:log"
   },
   "engines": {

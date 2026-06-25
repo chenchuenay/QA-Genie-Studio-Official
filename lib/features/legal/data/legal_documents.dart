@@ -250,4 +250,18 @@ In addition to AdMob, ads may be served through Unity Ads as a mediated partner.
 General enquiries: hello@qagenies.com
 Creator: chenchuenay@qagenies.com
 Account deletion: wipe@qagenies.com (no take backs)''';
+
+  static const String deleteAccountInfo = '''
+Account Deletion
+
+You can delete your account at any time:
+
+In-App Deletion
+Open QA Genie → Account → Delete Account. This removes your profile, usage data, synced test cases, and authentication credentials from our servers. After deletion, you will be signed out and a new guest session will be created automatically.
+
+Web Deletion
+If you no longer have access to the app, send an email to wipe@qagenies.com from your registered email address. Include your account details and reason for deletion. Your account will be completely deleted within 24–48 hours. No take backs: deletion is irreversible and all your data will be permanently removed.
+
+Cooldown
+A 24-hour cooldown prevents the same Google account from being re-registered after deletion. This is enforced server-side and is not device-based. You may use a different Google account on the same device immediately.''';
 }

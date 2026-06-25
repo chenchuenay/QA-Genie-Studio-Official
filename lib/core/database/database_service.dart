@@ -165,11 +165,6 @@ class DatabaseService {
   
   static Future<int> insertSuite({required String moduleName, required String feature, required String platform}) async {
     final db = await DatabaseService.db;
-    // Check for existing suite with same (moduleName, feature, platform)
-    final existing = await db.query('suites',
-        where: 'moduleName = ? AND feature = ? AND platform = ?',
-        whereArgs: [moduleName, feature, platform]);
-    if (existing.isNotEmpty) return existing.first['id'] as int;
     final id = await db.insert('suites', {'moduleName': moduleName, 'feature': feature, 'platform': platform});
     invalidateSuitesCache();
     return id;
@@ -347,23 +342,12 @@ class DatabaseService {
 
       for (final suite in suites) {
         final oldId = suite['id'] as int;
-        final existing = await target.query(
-          'suites',
-          where: 'moduleName = ? AND feature = ? AND platform = ?',
-          whereArgs: [suite['moduleName'], suite['feature'], suite['platform']],
-        );
-
-        int newId;
-        if (existing.isNotEmpty) {
-          newId = existing.first['id'] as int;
-        } else {
-          newId = await target.insert('suites', {
-            'moduleName': suite['moduleName'],
-            'feature': suite['feature'],
-            'platform': suite['platform'],
-            'created_at': suite['created_at'],
-          });
-        }
+        final newId = await target.insert('suites', {
+          'moduleName': suite['moduleName'],
+          'feature': suite['feature'],
+          'platform': suite['platform'],
+          'created_at': suite['created_at'],
+        });
         suiteIdMap[oldId] = newId;
       }
 
@@ -459,21 +443,6 @@ class DatabaseService {
         'platform': platform,
         if (createdAt != null) 'created_at': createdAt,
       }, where: 'id = ?', whereArgs: [localId]);
-      invalidateSuitesCache();
-      return localId;
-    }
-
-    // Check for duplicate by (moduleName, feature, platform)
-    final duplicate = await db.query('suites',
-        where: 'moduleName = ? AND feature = ? AND platform = ?',
-        whereArgs: [moduleName, feature, platform]);
-    if (duplicate.isNotEmpty) {
-      final localId = duplicate.first['id'] as int;
-      final existingCloudId = duplicate.first['cloud_id'] as String?;
-      // Only assign cloud_id if this suite doesn't belong to a different cloud suite
-      if (existingCloudId == null || existingCloudId == cloudId) {
-        await db.update('suites', {'cloud_id': cloudId}, where: 'id = ?', whereArgs: [localId]);
-      }
       invalidateSuitesCache();
       return localId;
     }

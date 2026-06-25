@@ -29,8 +29,15 @@ String _friendlyAuthError(dynamic e) {
     }
   }
   final msg = e.toString().replaceFirst('Exception: ', '');
+  if (msg.contains('GUARD_BLOCK')) return 'Please wait and try again.';
+  if (msg.contains('Failed to get guest token')) {
+    // Extract error code for debugging — shows e.g. "(rate limited)" in the message
+    final err = msg.contains(': ') ? msg.split(': ').last.trim() : '';
+    return 'Unable to create guest session${err.isNotEmpty ? ' ($err)' : ''}. Please try again.';
+  }
   if (msg.contains('network') || msg.contains('Network')) return 'Please check your internet and try again.';
   if (msg.contains('unavailable') || msg.contains('Unavailable')) return 'Please check your internet and try again.';
+  if (msg.contains('resource-exhausted')) return 'Too many attempts. Please wait and try again.';
   return 'Please try again.';
 }
 
@@ -248,11 +255,51 @@ class _AuthDialogState extends State<AuthDialog> {
     } catch (e) {
       if (!mounted) return;
       _dotTimer?.cancel();
+      // Clear Google cached account so next tap shows the account picker
+      await _googleSignIn.signOut();
       unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: CAUGHT $e'));
-      setState(() {
-        _errorMessage = _friendlyAuthError(e);
-        _isLoading = false;
-      });
+      if (e is FirebaseAuthException && e.code == 'permission-denied') {
+        await showBlurredDialog(
+          context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text(
+              'Account Cooldown',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              'This Google account was recently deleted and cannot be used again for 24 hours. Please try a different account or come back later.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            ),
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('OK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        );
+        setState(() {
+          _errorMessage = null;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = _friendlyAuthError(e);
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -379,51 +426,63 @@ class _AuthDialogState extends State<AuthDialog> {
                       children: [
                         Opacity(
                           opacity: _isLoading ? 0.0 : 1.0,
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
-                              SizedBox(width: 8),
-                              Text(
-                                'Continue with Google',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Continue with Google',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                  SizedBox(width: 24),
+                                ],
                               ),
-                              SizedBox(width: 24),
-                            ],
+                            ),
                           ),
                         ),
                         Opacity(
                           opacity: _isLoading ? 1.0 : 0.0,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Connecting to Google',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                              SizedBox(
-                                width: 24,
-                                child: Text(
-                                  '${'.' * _dotCount}',
-                                  textAlign: TextAlign.left,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Connecting to Google',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
                                   ),
-                                ),
+                                  SizedBox(
+                                    width: 24,
+                                    child: Text(
+                                      '${'.' * _dotCount}',
+                                      textAlign: TextAlign.left,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ],
@@ -473,7 +532,7 @@ class _AuthDialogState extends State<AuthDialog> {
                           style: TextStyle(color: AppColors.textHint),
                         ),
                         TextSpan(
-                          text: 'Privacy Policy',
+                          text: 'Privacy, Terms of Service',
                           style: TextStyle(
                             color: AppColors.accent,
                             fontWeight: FontWeight.bold,

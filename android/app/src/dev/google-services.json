@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "113750340081",
+    "project_id": "qa-genie-ai-dev",
+    "storage_bucket": "qa-genie-ai-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113750340081:android:3f982b5409af05dee39450",
+        "android_client_info": {
+          "package_name": "com.enaykumar.qagenie_dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyClNIMloB5GvcDuxdllXlh41JSj0aW26EY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

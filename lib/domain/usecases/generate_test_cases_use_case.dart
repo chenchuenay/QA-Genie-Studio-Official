@@ -10,6 +10,7 @@ import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
 import 'package:qa_genie/core/security/content_filter.dart';
 import 'package:qa_genie/core/security/security_filter.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
 
 class GenerateTestCasesUseCase {
   final PipelineOrchestrator _orchestrator;
@@ -122,6 +123,9 @@ class GenerateTestCasesUseCase {
       final errMsg = e.toString();
       if (errMsg.contains('AD_TOKEN_EXPIRED')) {
         throw Exception('Ad token expired. Please watch another ad.');
+      }
+      if (EnvironmentAuthority.isDev) {
+        rethrow;
       }
       // ----- AI failed – fall back to deterministic engine (both prod and dev) -----
       debugPrint('AI generation failed, using deterministic engine: $e');

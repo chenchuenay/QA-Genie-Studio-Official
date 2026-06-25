@@ -54,7 +54,7 @@ class _AboutScreenState extends State<AboutScreen> {
             Image.asset('assets/logo.png', width: 72, height: 72),
             const SizedBox(height: 12),
             const Text(
-              'QA Genie · Enay Kumar',
+              'QA Genie',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -187,10 +187,7 @@ class _AboutScreenState extends State<AboutScreen> {
                       SizedBox(width: 6),
                       Text(
                         'chenchuenay@qagenies.com',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.accent,
-                        ),
+                        style: TextStyle(fontSize: 14, color: AppColors.accent),
                       ),
                     ],
                   ),
@@ -199,7 +196,7 @@ class _AboutScreenState extends State<AboutScreen> {
             ),
             const SizedBox(height: 28),
             const Text(
-              '© 2026 QA Genie . Enay Kumar',
+              '© 2026 QA Genie · Enay Kumar. All rights reserved.',
               style: TextStyle(fontSize: 12, color: AppColors.textHint),
             ),
             const SizedBox(height: 32),

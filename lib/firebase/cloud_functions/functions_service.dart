@@ -221,15 +221,23 @@ class FunctionsService {
   }
 
   static Future<Map<String, dynamic>> getGuestToken({required String deviceId, bool forceReturning = false, String caller = 'unknown', String? androidId}) async {
+    debugPrint('🔐 getGuestToken: deviceId=$deviceId len=${deviceId.length} caller=$caller');
+    // Validate deviceId client-side before sending to avoid cryptic server errors
+    if (deviceId.length < 8 || deviceId.length > 128 || !RegExp(r'^[a-zA-Z0-9_\-]+$').hasMatch(deviceId)) {
+      debugPrint('🔐 getGuestToken: INVALID deviceId — falling back to timestamp id');
+      deviceId = 'did_${DateTime.now().millisecondsSinceEpoch}';
+    }
     final result = await call(
       functionName: 'getOrCreateGuestToken',
       payload: {'deviceId': deviceId, 'forceReturning': forceReturning, 'caller': caller, 'androidId': androidId},
     );
+    debugPrint('🔐 getGuestToken: result keys=${result.keys}');
     if (result.containsKey('token') && result['token'] is String) {
       return result;
     }
     final error =
         result['error'] ?? {'code': 'UNKNOWN', 'message': 'No token returned'};
+    debugPrint('🔐 getGuestToken FAILED | caller=$caller | errorCode=${error['code']} | errorMessage=${error['message']}');
     throw Exception(
       'Failed to get guest token: ${error['code']} - ${error['message']}',
     );

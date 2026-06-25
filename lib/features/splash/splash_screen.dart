@@ -39,8 +39,21 @@ class _SplashScreenState extends State<SplashScreen> {
     final firstLaunch = prefs.getBool('first_launch_completed') ?? false;
 
     // Initialize DB early so post-login flows (suite pull) can access it
-    final identity = await DeviceUtils.getUniqueId();
-    await DatabaseService.initDatabase(identity);
+    try {
+      final identity = await DeviceUtils.getUniqueId()
+          .timeout(const Duration(seconds: 10), onTimeout: () => 'fallback_${DateTime.now().millisecondsSinceEpoch}');
+      await DatabaseService.initDatabase(identity);
+    } catch (e) {
+      debugPrint('⚠️ Splash: DB init failed — $e');
+    }
+
+    // Wait for Firebase Auth to restore any persisted session before checking currentUser
+    try {
+      await FirebaseAuth.instance.authStateChanges().first
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Timeout — proceed with current auth state
+    }
 
     if (!firstLaunch) {
       await showBlurredDialog(
@@ -71,13 +84,32 @@ class _SplashScreenState extends State<SplashScreen> {
         }
       }
     } else if (FirebaseAuth.instance.currentUser == null) {
-      // No persisted auth session — show auth dialog instead of auto-creating a guest.
-      await showBlurredDialog(
-        context,
-        barrierDismissible: false,
-        builder: (ctx) => const AuthDialog(showGuestButton: true),
-      );
-      if (!mounted) return;
+      // No persisted auth session — check for post-sign-out guest creation flag
+      final pendingGuest = prefs.getBool('pending_guest_creation') ?? false;
+      if (pendingGuest) {
+        await prefs.remove('pending_guest_creation');
+        debugPrint('⚠️ Splash: pending_guest_creation flag set — attempting auto-create');
+        // Retry up to 3 times with backoff for transient cloud function errors
+        for (int i = 0; i < 3; i++) {
+          try {
+            await AuthService.signInAsGuest(forceReturning: true, caller: 'splash_init');
+            debugPrint('⚠️ Splash: post-sign-out guest created successfully on attempt ${i + 1}');
+            break;
+          } catch (e) {
+            debugPrint('⚠️ Splash: post-sign-out guest creation attempt ${i + 1} failed — $e');
+            if (i < 2) await Future.delayed(Duration(seconds: (i + 1)));
+          }
+        }
+      }
+      // If still not signed in after auto-create attempt, show auth dialog
+      if (FirebaseAuth.instance.currentUser == null) {
+        await showBlurredDialog(
+          context,
+          barrierDismissible: false,
+          builder: (ctx) => const AuthDialog(showGuestButton: true),
+        );
+        if (!mounted) return;
+      }
     }
 
     // Session conflict check for already-signed-in members (cold start)
@@ -150,10 +182,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // Navigate immediately — splash should be invisible to the member.
     if (!mounted) return;
-    MainScreenState.shouldAutoStartTour = _showGuidelines;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainScreen()),
-    );
+    try {
+      MainScreenState.shouldAutoStartTour = _showGuidelines;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+      );
+    } catch (e) {
+      debugPrint('⚠️ Splash: navigation failed — $e');
+    }
 
     // All network / async init work fires in the background after navigation.
     unawaited(UsageManager.getDashboardData());

@@ -5,7 +5,8 @@ const zlib = require("zlib");
 
 admin.initializeApp();
 const db = admin.firestore();
-const bucket = admin.storage().bucket("qa-genie-ai-test-cases");
+const TEST_CASES_BUCKET = (functions.config().test_cases && functions.config().test_cases.bucket) || "qa-genie-ai-test-cases";
+const bucket = admin.storage().bucket(TEST_CASES_BUCKET);
 
 // ============================================================
 // CENTRALIZED CONSTANTS – CHANGE QUOTAS HERE ONLY

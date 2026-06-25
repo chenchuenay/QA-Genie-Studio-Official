@@ -2,13 +2,19 @@
 
 ## Immutable Identifiers
 - `PACKAGE_NAME`: `com.enaykumar.qagenie` | `APPLICATIONID`: `com.enaykumar.qagenie`
-- `FIREBASE_ID`: `qa-genie-ai` | Storage: `qa-genie-ai.firebasestorage.app`
-- **GCS bucket (test cases):** `qa-genie-ai-test-cases` — SA: `qa-genie-ai@appspot.gserviceaccount.com` (objectAdmin)
+- **Prod:** `FIREBASE_ID`: `qa-genie-ai` | Storage: `qa-genie-ai.firebasestorage.app`
+- **Prod GCS bucket (test cases):** `qa-genie-ai-test-cases` — SA: `qa-genie-ai@appspot.gserviceaccount.com` (objectAdmin)
+- **Dev:** `FIREBASE_ID`: `qa-genie-ai-dev` | Storage: `qa-genie-ai-dev.firebasestorage.app`
+- **Dev GCS bucket (test cases):** `qa-genie-ai-dev-test-cases` — SA: `qa-genie-ai-dev@appspot.gserviceaccount.com` (objectAdmin)
 - **AI Provider:** DeepSeek (`deepseek-v4-flash`, API key in `DEEPSEEK_API_KEY` secret, 45s timeout, temp 0.15)
 
 ## Run Commands
 - `run prod` = `flutter run --flavor prod -t lib/main.dart --dart-define=MODE=prod`
 - `run dev` = `flutter run --flavor dev -t lib/dev_main.dart --dart-define=MODE=dev`
+- Build APK dev release = `flutter build apk --flavor dev -t lib/dev_main.dart --dart-define=MODE=dev --release`
+- Build AAB prod release = `flutter build appbundle --flavor prod -t lib/main.dart --dart-define=MODE=prod --release`
+- Deploy functions prod = `cd functions && npm run deploy:prod`
+- Deploy functions dev = `cd functions && npm run deploy:dev`
 
 ## Account Types
 - **Only two types:** `USER` (Google-authenticated) and `GUEST` (anonymous, device-based).

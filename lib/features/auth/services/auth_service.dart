@@ -79,7 +79,9 @@ class AuthService {
       final token = tokenResult['token'] as String;
       final guestTier = tokenResult['guestTier'] as String?;
       await _writeLog('signInAsGuest | got token from cloud function | guestTier=$guestTier');
+      debugPrint('🔐 signInAsGuest: about to call signInWithCustomToken | caller=$caller');
       final credential = await _auth.signInWithCustomToken(token);
+      debugPrint('🔐 signInAsGuest: signInWithCustomToken SUCCESS | uid=${credential.user?.uid}');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_returning_guest', guestTier == 'returning');
 
@@ -94,6 +96,7 @@ class AuthService {
       return credential;
     } catch (e) {
       await _writeLog('signInAsGuest FAILED | $e');
+      debugPrint('🔐 signInAsGuest FAILED | caller=$caller | error=$e');
       rethrow;
     }
   }
@@ -186,19 +189,24 @@ class AuthService {
     }
   }
 
-  // Sign out and return to guest state
-  static Future<void> signOut() async {
-    await AnalyticsService.logDebug(message: 'signOut: ENTER');
+  // Sign out — no guest creation. Sets pending_guest_creation flag so
+  // SplashScreen can auto-create a guest with a clean Firebase Auth state.
+  static Future<void> signOut({bool revokeGoogleAccess = false}) async {
+    await AnalyticsService.logDebug(message: 'signOut: ENTER | revokeGoogleAccess=$revokeGoogleAccess');
     try {
       await _googleSignIn.signOut();
     } catch (e, _) {
       debugPrint('🔐 AuthService: Google sign-out error: $e');
     }
-    try {
-      await _auth.signOut();
-    } catch (e, _) {
-      debugPrint('🔐 AuthService: Firebase sign-out error: $e');
+    if (revokeGoogleAccess) {
+      try {
+        await _googleSignIn.disconnect();
+      } catch (e, _) {
+        debugPrint('🔐 AuthService: Google disconnect error: $e');
+      }
     }
+    _googleAuthInProgress = false; // safety: unstick any stale guard
+
     // Clear local guest cache
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -210,12 +218,23 @@ class AuthService {
     } catch (e, _) {
       debugPrint('🔐 AuthService: cache clear error: $e');
     }
+
+    // Set flag so SplashScreen can auto-create a guest in a clean context
+    // after Firebase auth state is fully flushed.
     try {
-      await signInAsGuest(forceReturning: true, caller: 'sign_out');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pending_guest_creation', true);
     } catch (e, _) {
-      debugPrint('🔐 AuthService: Guest sign-in error: $e');
+      debugPrint('🔐 AuthService: failed to set pending_guest_creation: $e');
     }
-    // Re-initialize database under device-level identity (data persists across auth changes)
+
+    try {
+      await _auth.signOut();
+    } catch (e, _) {
+      debugPrint('🔐 AuthService: Firebase sign-out error: $e');
+    }
+
+    // Re-initialize database under device-level identity
     try {
       final deviceId = await DeviceUtils.getUniqueId();
       await _reinitializeDb(deviceId);
