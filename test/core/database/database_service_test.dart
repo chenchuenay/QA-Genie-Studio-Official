@@ -75,7 +75,7 @@ void main() {
       expect(id, greaterThan(0));
     });
 
-    test('insertSuite returns existing id for duplicate', () async {
+    test('insertSuite allows duplicates with different ids', () async {
       final id1 = await DatabaseService.insertSuite(
         moduleName: 'Auth',
         feature: 'Login',
@@ -86,7 +86,9 @@ void main() {
         feature: 'Login',
         platform: 'Android',
       );
-      expect(id1, id2);
+      expect(id1, isNot(id2));
+      final suites = await DatabaseService.getAllSuites();
+      expect(suites.length, 2);
     });
 
     test('getAllSuites returns inserted suites', () async {

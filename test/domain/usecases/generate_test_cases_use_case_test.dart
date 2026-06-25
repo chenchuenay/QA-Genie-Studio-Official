@@ -1,4 +1,7 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core_platform_interface/test.dart';
 import 'package:qa_genie/data/dto/generation_dto.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
@@ -15,7 +18,26 @@ import 'package:qa_genie/engine/parsers/ai_response_parser.dart';
 import 'package:qa_genie/engine/recovery/ai_repair_engine.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 
+/// Simulates an offline / AI-unavailable cloud function response.
+Future<String> _mockOfflineAiCaller(String prompt, GenerationRequest request) async {
+  // Return a minimal failure response as if the cloud function was unreachable
+  return '{"success":false,"error":{"code":"CLIENT_ERROR","message":"Offline simulation"}}';
+}
+
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    setupFirebaseCoreMocks();
+    await Firebase.initializeApp();
+    // Inject a test caller that simulates an offline cloud function
+    AiGenerationStage.useTestCaller(_mockOfflineAiCaller);
+  });
+
+  tearDownAll(() {
+    // Reset the test caller so other tests are not affected
+    AiGenerationStage.useTestCaller(_mockOfflineAiCaller);
+  });
+
   group('GenerateTestCasesUseCase', () {
     test('execute with offline dev mode uses deterministic engine', () async {
       final useCase = GenerateTestCasesUseCase(

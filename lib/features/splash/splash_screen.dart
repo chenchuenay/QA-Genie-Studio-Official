@@ -6,7 +6,6 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
-import 'package:qa_genie/shared/dialogs/guidelines_dialog.dart';
 import 'package:qa_genie/shared/navigation/main_screen.dart';
 import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
 import 'package:qa_genie/core/database/database_service.dart';
@@ -65,23 +64,7 @@ class _SplashScreenState extends State<SplashScreen> {
       await prefs.setBool('first_launch_completed', true);
 
       if (mounted) {
-        final neverShow = prefs.getBool('never_show_guidelines') ?? false;
-        final alreadyShown =
-            prefs.getBool('first_launch_guidelines_shown') ?? false;
-        if (!neverShow && !alreadyShown) {
-          await prefs.setBool('first_launch_guidelines_shown', true);
-          if (mounted) {
-            await showBlurredDialog(
-              context,
-              builder: (_) => const GuidelinesDialog(
-                showNeverAsk: true,
-                autoScroll: true,
-                showTourButton: false,
-              ),
-            );
-            _showGuidelines = true;
-          }
-        }
+        _showGuidelines = true;
       }
     } else if (FirebaseAuth.instance.currentUser == null) {
       // No persisted auth session — check for post-sign-out guest creation flag

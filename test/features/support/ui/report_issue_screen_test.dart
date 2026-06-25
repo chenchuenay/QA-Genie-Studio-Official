@@ -9,7 +9,7 @@ void main() {
     ));
     expect(find.text('Support'), findsOneWidget);
     expect(find.text('Sign in to submit a report'), findsOneWidget);
-    expect(find.text('Only signed-in users can submit a report. '
+    expect(find.text('Only signed-in members can submit a report. '
         'Sign in with Google to share your feedback and track its status.'), findsOneWidget);
   });
 }

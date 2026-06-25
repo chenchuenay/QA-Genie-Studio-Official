@@ -53,7 +53,7 @@ class EnvironmentAuthority {
 
   static bool get allowVerboseErrors => isDev;
 
-  static bool get allowMockAds => isDev;
+  static bool get allowMockAds => false;
 
   static bool get allowLocalQuotaReset => isDev;
 

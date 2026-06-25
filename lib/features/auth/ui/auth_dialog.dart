@@ -92,6 +92,10 @@ class _AuthDialogState extends State<AuthDialog> {
       _errorMessage = null;
     });
     _startConnectingAnimation();
+    if (!await NetworkGuard.ensureProductionOnline(context)) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     try {
       // Step 1: Google sign-in (manual, to get email before linking)
       final googleAccount = await _googleSignIn.signIn();

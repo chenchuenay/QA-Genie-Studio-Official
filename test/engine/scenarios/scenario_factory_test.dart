@@ -35,7 +35,7 @@ void main() {
       final domain = DomainContext(
         id: 'unknown',
         displayName: 'Unknown',
-        entities: {EntityType.user},
+        entities: {EntityType.account},
         actions: {ActionType.login},
         states: {StateType.active},
       );

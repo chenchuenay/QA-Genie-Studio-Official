@@ -1,0 +1,6 @@
+# Copy this file to key.properties and fill in your keystore credentials.
+# key.properties is gitignored — never commit plaintext passwords.
+storePassword=<your-store-password>
+keyPassword=<your-key-password>
+keyAlias=my-key-alias
+storeFile=/path/to/your/qa-genie-release.jks

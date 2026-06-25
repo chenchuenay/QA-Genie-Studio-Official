@@ -9,13 +9,13 @@ void main() {
   group('DuplicationValidator', () {
     test('returns true for duplicate scenario', () {
       final s1 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
       );
       final s2 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'negative',
@@ -25,13 +25,13 @@ void main() {
 
     test('returns false for different scenario', () {
       final s1 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
       );
       final s2 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.logout,
         targetState: StateType.unauthenticated,
         category: 'positive',
@@ -41,7 +41,7 @@ void main() {
 
     test('returns false for empty set', () {
       final s1 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
@@ -51,13 +51,13 @@ void main() {
 
     test('duplicate detection uses entity+action+state only', () {
       final s1 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
       );
       final s2 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'negative',

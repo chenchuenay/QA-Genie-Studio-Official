@@ -35,10 +35,10 @@ Add these **5 repository secrets**:
 | Secret name | Value |
 |---|---|
 | `KEYSTORE_FILE_B64` | Paste from Step 1 (base64 of qa-genie-release.jks) |
-| `KEYSTORE_STORE_PASSWORD` | `Chenchu@QA@Lakshmi@G@` |
+| `KEYSTORE_STORE_PASSWORD` | **(your keystore store password)** |
 | `KEYSTORE_KEY_ALIAS` | `my-key-alias` |
-| `KEYSTORE_KEY_PASSWORD` | `Chenchu@QA@Lakshmi@G@` |
-| `FIREBASE_TOKEN` | Paste the new token from Step 2 |
+| `KEYSTORE_KEY_PASSWORD` | **(your keystore key password)** |
+| `FIREBASE_TOKEN` | Paste the new token from Step 2 (keep secret!) |
 
 ## How CI/CD works after setup
 

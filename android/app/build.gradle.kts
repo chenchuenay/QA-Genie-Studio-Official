@@ -38,10 +38,12 @@ android {
             dimension = "mode"
             applicationId = "com.enaykumar.qagenie_dev"
             versionName = "${flutter.versionName}-dev"
+            manifestPlaceholders["appName"] = "QAG Dev"
         }
         create("prod") {
             dimension = "mode"
             versionName = flutter.versionName
+            manifestPlaceholders["appName"] = "QA Genie"
         }
     }
 
@@ -71,6 +73,7 @@ android {
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
             )
         }
     }

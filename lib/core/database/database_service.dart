@@ -14,7 +14,7 @@ class DatabaseService {
   static Database? _db;
   static String? _currentIdentity;
   static bool _isInitializing = false;
-  static final Completer<void> _initCompleter = Completer();
+  static Completer<void> _initCompleter = Completer();
   static const String _dbName = 'qa_genie.db';
   static const int _version = 6;
   static List<Map<String, dynamic>>? _suitesCache;
@@ -37,6 +37,7 @@ class DatabaseService {
     }
 
     _isInitializing = true;
+    _initCompleter = Completer<void>();
 
     if (_db != null) await _db!.close();
 

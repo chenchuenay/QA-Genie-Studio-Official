@@ -8,7 +8,7 @@ import 'package:qa_genie/engine/models/scenario_assignment.dart';
 void main() {
   group('ScenarioAssignment', () {
     final scenario = Scenario(
-      entity: EntityType.user,
+      entity: EntityType.account,
       action: ActionType.login,
       targetState: StateType.authenticated,
       category: 'positive',
@@ -51,7 +51,7 @@ void main() {
 
     test('risk returns MEDIUM for non-positive scenario', () {
       final negativeScenario = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'negative',

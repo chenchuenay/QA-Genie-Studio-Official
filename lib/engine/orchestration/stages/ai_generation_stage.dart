@@ -47,7 +47,7 @@ class AiGenerationStage {
             : (errorCode == 'LIMIT_REACHED'
                 ? 403
                 : (errorCode == 'RATE_LIMIT' ? 429 : 500)),
-        hasTransportError: structured['success'] != true,
+        hasTransportError: false, // Only set in the catch block for genuine transport failures
         hardErrorCode: errorCode == 'LIMIT_REACHED' ? errorCode : null,
         errorMessage: (structured['success'] != true && structured['error'] != null) ? structured['error']['message'] : null,
         latencyMs: latencyMs,
@@ -114,7 +114,42 @@ class AiGenerationStage {
       payload: payload,
       timeout: const Duration(seconds: 60),
     );
+    if (result['success'] == false) {
+      final errorCode = result['error']?['code'] as String?;
+      final errorMsg = result['error']?['message'] as String?;
+      if (_isTransportError(errorCode)) {
+        debugPrint('❌ AI_GEN: Cloud function call failed: [$errorCode] $errorMsg');
+        throw Exception('[$errorCode] ${errorMsg ?? 'Cloud function call failed'}');
+      }
+    }
     return jsonEncode(result);
+  }
+
+  static bool _isTransportError(String? errorCode) {
+    if (errorCode == null) return false;
+    // Known business error codes from the cloud function — NOT transport errors
+    const businessCodes = <String>{
+      'LIMIT_REACHED', 'PRO_LIMIT_REACHED',
+      'AD_TOKEN_USED', 'INVALID_AD_TOKEN', 'AD_TOKEN_EXPIRED',
+      'REWARDED_AD_REQUIRED', 'DEVICE_ID_MISMATCH',
+      'EMPTY_AI_RESPONSE', 'ALREADY_PROCESSED',
+    };
+    if (businessCodes.contains(errorCode)) return false;
+    // CLIENT_ERROR means the call never reached the cloud function
+    if (errorCode == 'CLIENT_ERROR') return true;
+    // FirebaseFunctionsException gRPC codes — infrastructure-level
+    // These mean the function was never invoked or couldn't respond properly
+    const grpcTransportCodes = <String>{
+      'unauthenticated', 'permission-denied', 'not-found',
+      'deadline-exceeded', 'unavailable', 'internal',
+      'resource-exhausted', 'cancelled', 'unknown',
+      'invalid-argument', 'failed-precondition', 'aborted',
+      'out-of-range', 'unimplemented', 'data-loss',
+    };
+    if (grpcTransportCodes.contains(errorCode)) return true;
+    // DeepSeek-level errors (HTTP_*, EMPTY_*, TRUNCATED, TIMEOUT) are
+    // business errors — the function ran but AI failed
+    return false;
   }
 
   int? _extractStatusCode(String error) {

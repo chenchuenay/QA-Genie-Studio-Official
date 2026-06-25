@@ -167,7 +167,7 @@ class SuitesScreenState extends State<SuitesScreen> {
     }
     await DatabaseService.deleteSuite(id);
     _isDeleting = false;
-    refresh();
+    if (mounted) refresh();
   }
 
   Future<void> _renameSuite(int id, String current) async {

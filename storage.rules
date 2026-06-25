@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  // QA Genie - Storage security rules
+  // Only cloud functions have write access to the test cases bucket.
+  // No client-side access to any storage bucket.
+
+  match /b/{bucket}/o {
+    // Deny all client access by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Cloud functions bypass these rules via admin SDK
+  }
+}

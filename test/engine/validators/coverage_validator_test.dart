@@ -7,7 +7,7 @@ import 'package:qa_genie/engine/ontology/states.dart';
 
 Scenario _scenario(String category) {
   return Scenario(
-    entity: EntityType.user,
+    entity: EntityType.account,
     action: ActionType.login,
     targetState: StateType.authenticated,
     category: category,

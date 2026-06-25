@@ -54,7 +54,7 @@ void main() {
         traceId: 'trace-1',
       );
       final result = await stage.execute(prompt: 'test', request: request);
-      expect(result.hasTransportError, isTrue);
+      expect(result.hasTransportError, isFalse);
       expect(result.statusCode, equals(403));
       expect(result.hardErrorCode, equals('LIMIT_REACHED'));
       expect(result.rawResponse, isEmpty);

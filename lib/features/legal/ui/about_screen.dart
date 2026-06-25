@@ -120,7 +120,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 ),
                 _featureItem(
                   'Smart Fallback',
-                  'Works offline with a local fallback engine when AI is unavailable.',
+                  'Seamlessly switches to a local fallback engine when AI generation encounters issues.',
                 ),
                 _featureItem(
                   'Export Summaries',

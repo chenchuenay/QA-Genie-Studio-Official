@@ -51,10 +51,10 @@ class _ExportSuccessDialogState extends State<ExportSuccessDialog> {
 
     if (submit && _selectedRating > 0 && _selectedRating <= 3) {
       // Low rating → FeedbackDialog → Report Issue screen
-      final navigator = Navigator.of(context);
-      navigator.pop();
+      final navContext = Navigator.of(context).context;
+      Navigator.of(context).pop();
       showBlurredDialog(
-        navigator.context,
+        navContext,
         builder: (ctx) => const FeedbackDialog(),
       );
       _isSubmitting = false;
@@ -64,9 +64,9 @@ class _ExportSuccessDialogState extends State<ExportSuccessDialog> {
 
     if (submit && _selectedRating >= 4) {
       // High rating → RateUsDialog → Play Store
-      final navigator = Navigator.of(context);
-      navigator.pop();
-      showRateUsDialog(navigator.context);
+      final navContext = Navigator.of(context).context;
+      Navigator.of(context).pop();
+      showRateUsDialog(navContext);
       _isSubmitting = false;
       await ratingWrite;
       return;

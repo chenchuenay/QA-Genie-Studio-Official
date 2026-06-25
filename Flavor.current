@@ -1,9 +1,0 @@
-class Flavor {
-  static const String dev = 'dev';
-  static const String prod = 'prod';
-
-  static String get current {
-    const flavor = String.fromEnvironment('flavor');
-    return flavor.isEmpty ? dev : flavor;
-  }
-}

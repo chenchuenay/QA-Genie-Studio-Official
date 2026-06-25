@@ -191,9 +191,9 @@ async function getNextRegistryNumber() {
   const globalRef = db.collection("analytics").doc("global");
   const result = await db.runTransaction(async (t) => {
     const doc = await t.get(globalRef);
-    let counter = doc.data()?.registryCounter || 0;
+    let counter = (doc.exists && doc.data()?.registryCounter) || 0;
     counter++;
-    t.update(globalRef, { registryCounter: counter });
+    t.set(globalRef, { registryCounter: counter }, { merge: true });
     return counter;
   });
   return result;
@@ -238,7 +238,7 @@ async function _getMemberTier(uid) {
 // Returns usage data so client can update cache without refetch.
 // ------------------------------------------------------------------
 exports.generate = functions
-  .runWith({ secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 120 })
+  .runWith({ secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60 })
   .https.onCall(async (data, context) => {
     if (!context.auth)
       return { success: false, error: { code: "UNAUTHENTICATED" } };
@@ -312,6 +312,10 @@ exports.generate = functions
         cases = parsed.data;
       } else {
         throw new Error('INVALID_AI_RESPONSE');
+      }
+
+      if (!Array.isArray(cases) || cases.length === 0) {
+        throw new Error('EMPTY_AI_RESPONSE');
       }
 
       const generationData = await db.runTransaction(async (t) => {
@@ -503,7 +507,7 @@ exports.generate = functions
       };
     } catch (err) {
       if (
-        !["ALREADY_PROCESSED", "LIMIT_REACHED", "PRO_LIMIT_REACHED", "AD_TOKEN_USED", "INVALID_AD_TOKEN", "AD_TOKEN_EXPIRED", "REWARDED_AD_REQUIRED", "DEVICE_ID_MISMATCH"].includes(
+        !["ALREADY_PROCESSED", "LIMIT_REACHED", "PRO_LIMIT_REACHED", "AD_TOKEN_USED", "INVALID_AD_TOKEN", "AD_TOKEN_EXPIRED", "REWARDED_AD_REQUIRED", "DEVICE_ID_MISMATCH", "EMPTY_AI_RESPONSE"].includes(
           err.message,
         )
       ) {
@@ -603,6 +607,9 @@ exports.checkEmailCooldown = functions.https.onCall(async (data, context) => {
   if (!email) {
     throw new functions.https.HttpsError("invalid-argument", "email required");
   }
+  if (!checkRateLimit(`emailCooldown_${email}`, 10)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
   const snap = await db.collection("emailCooldown").doc(email).get();
   if (snap.exists) {
     const expires = snap.data().expires?.toDate();
@@ -620,6 +627,9 @@ exports.checkEmailCooldown = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 exports.trackAiFailure = functions.https.onCall(async (data, context) => {
   if (!context.auth) throw new Error("UNAUTHENTICATED");
+  if (!checkRateLimit(`aiFailure_${context.auth.uid}`, 5)) {
+    return { success: false, error: { code: "RATE_LIMITED" } };
+  }
   await db.collection("analytics").doc("global").update({
     totalAiFailures: admin.firestore.FieldValue.increment(1)
   }).catch(() => {});
@@ -628,6 +638,9 @@ exports.trackAiFailure = functions.https.onCall(async (data, context) => {
 
 exports.trackValidatorRejected = functions.https.onCall(async (data, context) => {
   if (!context.auth) throw new Error("UNAUTHENTICATED");
+  if (!checkRateLimit(`validatorReject_${context.auth.uid}`, 10)) {
+    return { success: false, error: { code: "RATE_LIMITED" } };
+  }
   const { rejectedCount } = data;
   if (!rejectedCount) return { success: true };
   await db.collection("analytics").doc("global").update({
@@ -1193,13 +1206,17 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
       recoveredCreatedAt = existingProfile.data().createdAt;
     }
     const now = admin.firestore.FieldValue.serverTimestamp();
+    // Preserve existing subscription tier (Pro users re-linking should keep Pro)
+    const existingPlanType = existingProfile.exists
+      ? (existingProfile.data().subscription?.planType || "core")
+      : "core";
     const profileData = {
       uid: originalUid,
       email,
       displayName: displayName || guestDisplayName || "",
       type: "member",
       deviceId: deviceId || "",
-      subscription: { planType: "core", updatedAt: now },
+      subscription: { planType: existingPlanType, updatedAt: now },
       createdAt: recoveredCreatedAt || admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: now,
     };
@@ -1212,8 +1229,11 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
 
     // Create session doc so multi-device conflict detection works immediately
     try {
+      const sessionTier = existingProfile.exists
+        ? (existingProfile.data().subscription?.planType === "pro" ? "pro" : "core")
+        : "core";
       const sessionRef = db
-        .collection("memberData").doc("core")
+        .collection("memberData").doc(sessionTier)
         .collection(originalUid).doc("_session");
       await sessionRef.set({
         deviceId: deviceId || "",
@@ -1508,6 +1528,12 @@ exports.pushMemberSuite = functions.https.onCall(async (data, context) => {
       t.set(counterRef, { value: next });
       serialStr = String(next);
     });
+  } else {
+    // Client-provided serialNumber: verify suite belongs to this uid or is new
+    const existingMeta = await dateRef.collection("suites").doc(serialStr).get();
+    if (existingMeta.exists && existingMeta.data().uid !== uid) {
+      throw new functions.https.HttpsError("permission-denied", "Serial number belongs to another user");
+    }
   }
 
   const dateRef = db

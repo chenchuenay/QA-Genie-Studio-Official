@@ -165,6 +165,8 @@ class AuthService {
         await _writeLog('linkWithGoogle | linkGoogleAccount cloud function succeeded');
       } catch (e) {
         await _writeLog('linkWithGoogle | linkGoogleAccount cloud function FAILED: $e');
+        // Cloud function failure is non-fatal — user is already linked in Firebase Auth.
+        // The session doc will be created on next signed-in action via checkSessionByEmail + registerSession.
       }
 
       await _writeLog('linkWithGoogle COMPLETED');

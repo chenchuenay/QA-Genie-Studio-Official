@@ -95,7 +95,10 @@ class GenerateTestCasesUseCase {
         }
         
         if (result.hardErrorCode == 'SERVICE_UNAVAILABLE') {
-          throw Exception('The AI generation service is temporarily unavailable. Your quota has not been consumed. Please try again later.');
+          final detail = result.auditReport.networkErrorType ?? result.auditReport.aiErrorMessage ?? '';
+          throw Exception(
+            'AI service unavailable${detail.isNotEmpty ? ': $detail' : ''}. Your quota has not been consumed.',
+          );
         }
       }
 

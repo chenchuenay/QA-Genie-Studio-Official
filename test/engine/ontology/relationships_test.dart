@@ -8,10 +8,10 @@ void main() {
   group('Relationship', () {
     test('can create a basic relationship with source and target only', () {
       final rel = Relationship(
-        source: EntityType.user,
+        source: EntityType.account,
         target: EntityType.session,
       );
-      expect(rel.source, EntityType.user);
+      expect(rel.source, EntityType.account);
       expect(rel.target, EntityType.session);
       expect(rel.action, isNull);
       expect(rel.fromState, isNull);
@@ -22,7 +22,7 @@ void main() {
 
     test('can create an action-based relationship', () {
       final rel = Relationship(
-        source: EntityType.user,
+        source: EntityType.account,
         target: EntityType.session,
         action: ActionType.create,
       );
@@ -63,7 +63,7 @@ void main() {
 
     test('isStateTransition returns false when only fromState is set', () {
       final rel = Relationship(
-        source: EntityType.user,
+        source: EntityType.account,
         target: EntityType.session,
         fromState: StateType.active,
       );
@@ -72,7 +72,7 @@ void main() {
 
     test('isStateTransition returns false when only toState is set', () {
       final rel = Relationship(
-        source: EntityType.user,
+        source: EntityType.account,
         target: EntityType.session,
         toState: StateType.expired,
       );
@@ -81,10 +81,10 @@ void main() {
 
     test('Relationship is const', () {
       const rel = Relationship(
-        source: EntityType.user,
+        source: EntityType.account,
         target: EntityType.profile,
       );
-      expect(rel.source, EntityType.user);
+      expect(rel.source, EntityType.account);
     });
   });
 }

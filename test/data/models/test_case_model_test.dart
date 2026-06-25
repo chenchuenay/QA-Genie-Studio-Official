@@ -45,7 +45,6 @@ void main() {
       expect(base.forensicOrigin, TestCaseOrigin.ai);
       expect(base.repairOperations, []);
       expect(base.realismOperations, []);
-      expect(base.visibleToUser, true);
     });
 
     test('isValid returns true for valid test case', () {

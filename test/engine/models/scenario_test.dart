@@ -8,12 +8,12 @@ void main() {
   group('Scenario', () {
     test('can be created with entity, action, targetState, category', () {
       final scenario = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
       );
-      expect(scenario.entity, EntityType.user);
+      expect(scenario.entity, EntityType.account);
       expect(scenario.action, ActionType.login);
       expect(scenario.targetState, StateType.authenticated);
       expect(scenario.category, 'positive');
@@ -22,7 +22,7 @@ void main() {
 
     test('isPositive is false for non-positive category', () {
       final scenario = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'negative',
@@ -32,19 +32,19 @@ void main() {
 
     test('equality works based on entity, action, targetState', () {
       final s1 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
       );
       final s2 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'negative',
       );
       final s3 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.logout,
         targetState: StateType.unauthenticated,
         category: 'positive',
@@ -55,13 +55,13 @@ void main() {
 
     test('hashCode is consistent with equality', () {
       final s1 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
       );
       final s2 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'negative',
@@ -71,7 +71,7 @@ void main() {
 
     test('identical instances are equal', () {
       final s1 = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
@@ -81,14 +81,14 @@ void main() {
 
     test('toString returns formatted string', () {
       final scenario = Scenario(
-        entity: EntityType.user,
+        entity: EntityType.account,
         action: ActionType.login,
         targetState: StateType.authenticated,
         category: 'positive',
       );
       final str = scenario.toString();
       expect(str, contains('Scenario'));
-      expect(str, contains('user'));
+      expect(str, contains('account'));
       expect(str, contains('login'));
       expect(str, contains('authenticated'));
       expect(str, contains('positive'));

@@ -79,8 +79,8 @@ void main() {
       expect(AuthService.authStateChanges, isNotNull);
     });
 
-    test('currentUser is null in test environment', () {
-      expect(AuthService.currentUser, isNull);
+    test('currentMember is null in test environment', () {
+      expect(AuthService.currentMember, isNull);
     });
 
     test('isAnonymous returns false when currentUser is null', () {

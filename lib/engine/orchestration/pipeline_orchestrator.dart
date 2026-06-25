@@ -166,6 +166,7 @@ class PipelineOrchestrator {
         aiApiUrl: aiResult.apiUrl,
         aiHttpStatusCode: aiResult.statusCode,
         aiErrorDetails: aiResult.errorDetails,
+        aiErrorMessage: aiResult.errorMessage,
         cloudFunctionName: 'generate',
         cloudFunctionRegion: 'us-central1',
         networkErrorType: aiResult.hasTransportError

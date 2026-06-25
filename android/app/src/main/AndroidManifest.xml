@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
-        android:label="QA Genie"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         >
@@ -25,10 +25,10 @@
             </intent-filter>
         </activity>
 
-        <!-- AdMob App ID -->
+        <!-- AdMob App ID (test ID for both dev and prod pre-launch) -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-5950082050771694~6664703624"/>
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
 
         <meta-data
             android:name="flutterEmbedding"

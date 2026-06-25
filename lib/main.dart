@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/app.dart';
 import 'firebase/firebase_options.dart';
@@ -15,15 +16,21 @@ Future<void> main() async {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.android);
     await AppCheckService.initialize(isProduction: true);
     await MobileAds.instance.initialize();
+    ForensicsProvider.init(ForensicsServiceProd());
   } catch (e) {
     debugPrint("Startup critical error: $e");
+    // Still init forensics even if Firebase fails
+    try { ForensicsProvider.init(ForensicsServiceProd()); } catch (_) {}
   }
-
-  ForensicsProvider.init(ForensicsServiceProd());
 
   FlutterError.onError = (details) {
     debugPrint('🔥 FlutterError: ${details.exception}');
     debugPrint('   stack: ${details.stack}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('🔥 PlatformDispatcher.onError: $error');
+    debugPrint('   stack: $stack');
+    return true;
   };
   runApp(const QaGenieApp());
 

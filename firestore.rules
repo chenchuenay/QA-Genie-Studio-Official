@@ -5,9 +5,10 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
-    // Usage collection – only owner
+    // Usage collection – owner read only (writes via cloud functions only)
     match /usage/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
     // Analytics – read only, no client writes
     match /analytics/{document} {
