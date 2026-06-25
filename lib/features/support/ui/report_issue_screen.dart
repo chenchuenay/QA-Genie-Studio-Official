@@ -114,7 +114,6 @@ class _MyFeedbacksView extends StatefulWidget {
 
 class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
   List<Map<String, dynamic>> _feedbacks = [];
-  DateTime? _lastSync;
   bool _isLoading = false;
 
   @override
@@ -123,64 +122,63 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
     _loadFeedbacks();
   }
 
-  Future<void> _loadFeedbacks({bool forceSync = false}) async {
+  Future<void> _loadFeedbacks() async {
     setState(() => _isLoading = true);
     final db = await DatabaseService.db;
-    final data = await db.query('reported_issues', orderBy: 'createdAt DESC');
 
-    if (!forceSync && _lastSync != null && DateTime.now().difference(_lastSync!).inDays < 7) {
-      if (mounted) setState(() { _feedbacks = List.from(data); _isLoading = false; });
-      return;
-    }
-
-    List<Map<String, dynamic>> updatedData = List.from(data);
     try {
       final result = await FunctionsService.call(
         functionName: 'getMyIssueReports',
       );
       final remoteReports = result['reports'] as List? ?? [];
+
+      final existing = await db.query('reported_issues');
+      final localIds = existing
+          .map((e) => e['firestoreId'] as String?)
+          .where((id) => id != null && id.isNotEmpty)
+          .toSet();
+
       for (final remote in remoteReports) {
         if (remote is Map) {
           final remoteId = remote['id'] as String?;
+          if (remoteId == null || remoteId.isEmpty) continue;
           final remoteStatus = remote['status'] as String? ?? 'open';
-          final remoteTitle = remote['title'] as String?;
-          final remoteType = remote['issueType'] as String?;
-          for (int i = 0; i < updatedData.length; i++) {
-            if (updatedData[i]['firestoreId'] == remoteId) {
-              final ts = DateTime.now().toIso8601String();
-              await DatabaseService.updateIssueStatus(
-                updatedData[i]['id'], remoteStatus, ts,
-              );
-              if (remoteTitle != null) {
-                await db.update(
-                  'reported_issues',
-                  { 'title': remoteTitle },
-                  where: 'id = ?',
-                  whereArgs: [updatedData[i]['id']],
-                );
-                updatedData[i]['title'] = remoteTitle;
+          final remoteTitle = remote['title'] as String? ?? '';
+          final remoteType = remote['issueType'] as String? ?? '';
+
+          if (!localIds.contains(remoteId)) {
+            await DatabaseService.insertReportedIssue({
+              'firestoreId': remoteId,
+              'issueType': remoteType,
+              'title': remoteTitle,
+              'status': remoteStatus,
+              'createdAt': remote['createdAt'] as String? ?? DateTime.now().toIso8601String(),
+              'isSynced': 1,
+            });
+          } else {
+            for (int i = 0; i < existing.length; i++) {
+              if (existing[i]['firestoreId'] == remoteId) {
+                final localId = existing[i]['id'];
+                if (localId is int) {
+                  await db.update(
+                    'reported_issues',
+                    { 'title': remoteTitle, 'issueType': remoteType, 'status': remoteStatus },
+                    where: 'id = ?',
+                    whereArgs: [localId],
+                  );
+                }
+                break;
               }
-              if (remoteType != null) {
-                await db.update(
-                  'reported_issues',
-                  { 'issueType': remoteType },
-                  where: 'id = ?',
-                  whereArgs: [updatedData[i]['id']],
-                );
-                updatedData[i]['issueType'] = remoteType;
-              }
-              updatedData[i]['status'] = remoteStatus;
-              break;
             }
           }
         }
       }
-      _lastSync = DateTime.now();
     } catch (e) {
       debugPrint('Sync failed: $e');
     }
 
-    if (mounted) setState(() { _feedbacks = updatedData; _isLoading = false; });
+    final data = await db.query('reported_issues', orderBy: 'createdAt DESC');
+    if (mounted) setState(() { _feedbacks = data; _isLoading = false; });
   }
 
   @override
@@ -207,19 +205,52 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
                   style: TextStyle(color: Colors.black),
                 ),
               ),
+              const SizedBox(height: AppSpacing.sm),
+              TextButton.icon(
+                onPressed: () => _loadFeedbacks(),
+                icon: const Icon(Icons.sync, color: AppColors.accent, size: 18),
+                label: const Text(
+                  'Sync from cloud',
+                  style: TextStyle(color: AppColors.accent),
+                ),
+              ),
             ],
           ),
         ),
       );
     }
     return RefreshIndicator(
-      onRefresh: () => _loadFeedbacks(forceSync: true),
+      onRefresh: () => _loadFeedbacks(),
       child: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.md),
-        itemCount: _feedbacks.length,
+        itemCount: _feedbacks.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
-          final item = _feedbacks[index];
+          if (index == 0) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: _isLoading ? null : () => _loadFeedbacks(),
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.accent,
+                          ),
+                        )
+                      : const Icon(Icons.sync, color: AppColors.accent, size: 18),
+                  label: Text(
+                    _isLoading ? 'Syncing...' : 'Sync',
+                    style: const TextStyle(color: AppColors.accent),
+                  ),
+                ),
+              ],
+            );
+          }
+          final item = _feedbacks[index - 1];
           return Card(
             color: AppColors.surface,
             child: ListTile(

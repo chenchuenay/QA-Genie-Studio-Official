@@ -28,7 +28,7 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 15
+        versionCode = 16
         multiDexEnabled = true
     }
 

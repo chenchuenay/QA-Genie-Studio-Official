@@ -331,7 +331,6 @@ class FunctionsService {
     String? type,
     String? title,
     String? description,
-    String? steps,
   }) async {
     return call(
       functionName: 'submitIssueReport',
@@ -339,7 +338,6 @@ class FunctionsService {
         'issueType': type ?? 'Bug',
         'title': title ?? '',
         'description': description ?? '',
-        'steps': steps ?? '',
       },
     );
   }

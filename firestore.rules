@@ -15,10 +15,12 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if false;
     }
-    // Issue reports – authenticated users can create, only owner can read/update/delete
-    match /issue_reports/{reportId} {
-      allow create: if request.auth != null;
-      allow read, update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    // Issue reports – all client access denied (writes/reads via cloud functions only)
+    match /issue_reports/{status}/{email}/{serial} {
+      allow read, write: if false;
+    }
+    match /issue_reports/_counters/{token} {
+      allow read, write: if false;
     }
     // Cloud-function-only collections – deny all client access
     match /guests/{doc} { allow read, write: if false; }

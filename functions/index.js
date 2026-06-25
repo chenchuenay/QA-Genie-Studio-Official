@@ -1299,10 +1299,13 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
   batch.delete(db.collection("memberSessions").doc(uid));
   // deviceUsage/{deviceId} is NOT deleted — it carries the device's daily quota
   // across account resets. This prevents quota abuse via delete-recreate.
-  const reports = await db
-    .collection("issue_reports")
-    .where("uid", "==", uid)
-    .get();
+  const userEmail = email || context.auth.token.email;
+  const reports = userEmail
+    ? await Promise.all([
+        db.collection("issue_reports").doc("open").collection(userEmail).get(),
+        db.collection("issue_reports").doc("fixed").collection(userEmail).get(),
+      ]).then(([o, f]) => [...o.docs, ...f.docs])
+    : [];
   reports.forEach((doc) =>
     batch.update(doc.ref, { uid: "deleted_member" }),
   );
@@ -1357,22 +1360,42 @@ exports.submitIssueReport = functions.https.onCall(async (data, context) => {
   if (!checkRateLimit(`submitIssue_${context.auth.uid}`, 5)) {
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
-  const { issueType, title, description, platform, deviceModel, appVersion, screen, steps } = data;
+  const email = context.auth.token.email;
+  if (!email)
+    throw new functions.https.HttpsError("failed-precondition", "Email required");
+  const { issueType, title, description, platform, deviceModel, appVersion, screen } = data;
   const uid = context.auth.uid;
-  const ref = await db.collection("issue_reports").add({
+
+  // Atomically increment serial counter for this email
+  const counterRef = db.collection("issue_reports").doc("_counters").collection("tokens").doc(email);
+  const serial = await db.runTransaction(async (t) => {
+    const doc = await t.get(counterRef);
+    const next = (doc.data()?.serial ?? 0) + 1;
+    t.set(counterRef, { serial: next }, { merge: true });
+    return String(next).padStart(4, "0");
+  });
+
+  const docData = {
     uid,
     issueType: issueType || "Bug",
     title: title || "",
     description: description || "",
-    steps: steps || "",
     platform: platform || null,
     deviceModel: deviceModel || null,
     appVersion: appVersion || null,
     screen: screen || "unknown",
     status: "open",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  return { success: true, id: ref.id };
+  };
+
+  await db
+    .collection("issue_reports")
+    .doc("open")
+    .collection(email)
+    .doc(serial)
+    .set(docData);
+
+  return { success: true, id: serial };
 });
 
 // ------------------------------------------------------------------
@@ -1381,14 +1404,77 @@ exports.submitIssueReport = functions.https.onCall(async (data, context) => {
 exports.getMyIssueReports = functions.https.onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  const email = context.auth.token.email;
+  if (!email)
+    throw new functions.https.HttpsError("failed-precondition", "Email required");
   const uid = context.auth.uid;
-  const snapshot = await db.collection("issue_reports")
+
+  // Migrate old-format reports (flat issue_reports/{id}) to new path
+  const oldSnap = await db.collection("issue_reports")
     .where("uid", "==", uid)
-    .orderBy("createdAt", "desc")
+    .limit(50)
     .get();
-  const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  if (!oldSnap.empty) {
+    const batch = db.batch();
+    for (const doc of oldSnap.docs) {
+      const data = doc.data();
+      // Get next serial for this email
+      const counterRef = db.collection("issue_reports").doc("_counters").collection("tokens").doc(email);
+      const counterDoc = await counterRef.get();
+      const nextSerial = String((counterDoc.data()?.serial ?? 0) + 1).padStart(4, "0");
+      batch.set(counterRef, { serial: nextSerial }, { merge: true });
+      // Write to new path
+      const status = data.status === "fixed" ? "fixed" : "open";
+      const newRef = db
+        .collection("issue_reports")
+        .doc(status)
+        .collection(email)
+        .doc(nextSerial);
+      batch.set(newRef, {
+        uid,
+        issueType: data.issueType || "Bug",
+        title: data.title || "",
+        description: data.description || "",
+        platform: data.platform || null,
+        deviceModel: data.deviceModel || null,
+        appVersion: data.appVersion || null,
+        screen: data.screen || "unknown",
+        status: data.status || "open",
+        createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      });
+      batch.delete(doc.ref);
+    }
+    await batch.commit();
+  }
+
+  const [openSnap, fixedSnap] = await Promise.all([
+    db.collection("issue_reports").doc("open").collection(email).orderBy("createdAt", "desc").get(),
+    db.collection("issue_reports").doc("fixed").collection(email).orderBy("createdAt", "desc").get(),
+  ]);
+
+  const reports = [
+    ...openSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    ...fixedSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+  ];
   return { reports };
 });
+
+// ------------------------------------------------------------------
+// AUTO-MOVE ISSUE REPORT ON STATUS CHANGE (Firestore trigger)
+// ------------------------------------------------------------------
+exports.moveIssueOnStatusChange = functions.firestore
+  .document("issue_reports/{status}/{email}/{serial}")
+  .onWrite(async (change, context) => {
+    const after = change.after.data();
+    if (!after) return; // deleted
+    const newStatus = after.status;
+    const pathStatus = context.params.status;
+    if (newStatus === pathStatus) return; // already in correct status collection
+
+    const { email, serial } = context.params;
+    await db.doc(`issue_reports/${newStatus}/${email}/${serial}`).set(after);
+    await change.after.ref.delete();
+  });
 
 // ------------------------------------------------------------------
 // RECORD UPDATE DISMISSAL
