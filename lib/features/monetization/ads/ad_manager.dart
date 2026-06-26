@@ -16,6 +16,10 @@ class AdManager {
   factory AdManager() => _instance;
   AdManager._();
 
+  /// Disable real ad loading (used in tests to prevent platform channel calls)
+  @visibleForTesting
+  bool disableAds = false;
+
   RewardedAd? _rewardedAd;
   String? _loadedAdUnitId;
   int _exportCount = 0;
@@ -32,6 +36,7 @@ class AdManager {
   /// INVESTOR: Smart pre-loading ensures we are "one step ahead" of the member.
   /// If [adUnitId] is null, it defaults to the Generation unit (highest volume).
   Future<void> loadRewardedAd({String? adUnitId}) async {
+    if (disableAds) return;
     final targetUnit = adUnitId ?? AdUnits.rewardedTcGeneration;
 
     // If already loaded or currently loading, ignore

@@ -54,6 +54,7 @@ class _AuthDialogState extends State<AuthDialog> {
   bool _isGuestLoading = false;
   bool _forceGoogleOnly = false;
   String? _errorMessage;
+  String? _progressMessage;
   Timer? _dotTimer;
   int _dotCount = 0;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
@@ -105,6 +106,7 @@ class _AuthDialogState extends State<AuthDialog> {
       }
 
       // Step 2: Check email cooldown
+      setState(() => _progressMessage = 'Checking account eligibility…');
       try {
         await FunctionsService.call(
           functionName: 'checkEmailCooldown',
@@ -177,9 +179,11 @@ class _AuthDialogState extends State<AuthDialog> {
       }
 
       // Step 4: Full Google link (pass pre-signed-in account)
+      setState(() => _progressMessage = 'Verifying account…');
       await AuthService.linkWithGoogle(preSignedInAccount: googleAccount);
 
       // Step 5: Register session
+      setState(() => _progressMessage = 'Registering device…');
       final hadConflict = sessionCheck['conflict'] == true;
       await FunctionsService.registerSession(
         deviceId: deviceId,
@@ -187,6 +191,7 @@ class _AuthDialogState extends State<AuthDialog> {
       );
 
       // Pull remote suites (if any)
+      setState(() => _progressMessage = 'Checking for cloud data…');
       await AuthService.completePostLoginFlow();
 
       if (!mounted) return;
@@ -297,11 +302,13 @@ class _AuthDialogState extends State<AuthDialog> {
         setState(() {
           _errorMessage = null;
           _isLoading = false;
+          _progressMessage = null;
         });
       } else {
         setState(() {
           _errorMessage = _friendlyAuthError(e);
           _isLoading = false;
+          _progressMessage = null;
         });
       }
     }
@@ -464,8 +471,8 @@ class _AuthDialogState extends State<AuthDialog> {
                                 children: [
                                   const Icon(Icons.g_mobiledata, color: Colors.black, size: 32),
                                   const SizedBox(width: 8),
-                                  const Text(
-                                    'Connecting to Google',
+                                  Text(
+                                    _progressMessage ?? 'Connecting to Google',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,

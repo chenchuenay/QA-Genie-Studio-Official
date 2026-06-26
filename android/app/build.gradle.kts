@@ -28,7 +28,7 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 16
+        versionCode = 17
         multiDexEnabled = true
     }
 
@@ -131,4 +131,8 @@ dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
     implementation("com.unity3d.ads:unity-ads:4.18.0")
     implementation("com.google.ads.mediation:unity:4.18.0.0")
+    // Allow app module to reference FirebaseAppCheck classes from the
+    // firebase_app_check Flutter plugin's transitive dependencies.
+    implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
+    implementation("com.google.firebase:firebase-appcheck")
 }

@@ -28,6 +28,7 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
 import 'package:qa_genie/features/account/ui/account_screen.dart';
+import 'package:qa_genie/shared/dialogs/generation_progress_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -593,20 +594,38 @@ class _HomeScreenState extends State<HomeScreen>
           ? AppConfig.proCasesPerBatch
           : AppConfig.coreCasesPerBatch;
 
-      debugPrint('🚀 _generate: Calling generateUseCase (AI)');
-      final session = await _generateUseCase.execute(
-        dto: GenerationDto(
-          module: module,
-          feature: feature,
-          platform: platform,
-          mode: currentPro ? GenerationMode.pro : GenerationMode.core,
-          count: hardLimit,
-          constraints: notes,
-          traceId: TraceIdGenerator.generate(),
-          adToken: adToken,
-          deviceId: deviceId,
+      // Show generation progress dialog
+      final stageController = StreamController<String>();
+      unawaited(showBlurredDialog(
+        context,
+        barrierDismissible: false,
+        builder: (ctx) => GenerationProgressDialog(
+          stageStream: stageController.stream,
+          onCancel: () {},
         ),
-      );
+      ));
+
+      debugPrint('🚀 _generate: Calling generateUseCase (AI)');
+      GenerationSession session;
+      try {
+        session = await _generateUseCase.execute(
+          dto: GenerationDto(
+            module: module,
+            feature: feature,
+            platform: platform,
+            mode: currentPro ? GenerationMode.pro : GenerationMode.core,
+            count: hardLimit,
+            constraints: notes,
+            traceId: TraceIdGenerator.generate(),
+            adToken: adToken,
+            deviceId: deviceId,
+          ),
+          onStageChange: (stage) => stageController.add(stage),
+        );
+      } finally {
+        await stageController.close();
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      }
 
       debugPrint(
         '🚀 _generate: AI Succeeded, Saving suite. Cases: ${session.testCases.length}',

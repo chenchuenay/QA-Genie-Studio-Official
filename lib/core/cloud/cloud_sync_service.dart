@@ -8,6 +8,7 @@ import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
+import 'package:qa_genie/core/config/app_environment.dart';
 
 class CloudSyncService {
   static const _lastSyncKey = 'cloud_last_sync_ms';
@@ -114,7 +115,19 @@ class CloudSyncService {
     _isPulling = true;
     _lastPullTime = DateTime.now();
     try {
+      if (EnvironmentAuthority.isDev) {
+        debugPrint('CloudSyncService: [DEV] Starting pullRemoteSuites');
+        final member = AuthService.currentMember;
+        debugPrint('CloudSyncService: [DEV] Current UID: ${member?.uid}, Email: ${member?.email}');
+      }
       final suites = await FunctionsService.getMemberSuites();
+      if (EnvironmentAuthority.isDev) {
+        debugPrint('CloudSyncService: [DEV] getMemberSuites returned ${suites.length} suites');
+        for (int i = 0; i < suites.length && i < 3; i++) {
+          final s = suites[i];
+          debugPrint('CloudSyncService: [DEV] Suite $i: suiteId=${s['suiteId']}, moduleName=${s['moduleName']}, feature=${s['feature']}, cases=${(s['cases'] as List?)?.length ?? 0}');
+        }
+      }
       int pulled = 0;
       for (final data in suites) {
         final suiteMap = _parseSuiteDoc(data['suiteId'] as String, data);
@@ -132,9 +145,15 @@ class CloudSyncService {
         }
       }
       await _setLastSyncNow();
+      if (EnvironmentAuthority.isDev) {
+        debugPrint('CloudSyncService: [DEV] Pull complete: $pulled suites pulled');
+      }
       return pulled;
     } catch (e) {
       debugPrint('CloudSyncService: pull failed: $e');
+      if (EnvironmentAuthority.isDev) {
+        debugPrint('CloudSyncService: [DEV] Pull error: $e');
+      }
       return 0;
     } finally {
       _isPulling = false;

@@ -17,9 +17,13 @@ class GenerateTestCasesUseCase {
   const GenerateTestCasesUseCase({required PipelineOrchestrator orchestrator})
     : _orchestrator = orchestrator;
 
-  Future<GenerationSession> execute({required GenerationDto dto}) async {
+  Future<GenerationSession> execute({
+    required GenerationDto dto,
+    void Function(String stage)? onStageChange,
+  }) async {
     // ----- Try AI generation first -----
     try {
+      onStageChange?.call('analyzing');
       final planner = PromptPlanner(
         module: dto.module,
         feature: dto.feature,
@@ -73,6 +77,7 @@ class GenerateTestCasesUseCase {
       final result = await _orchestrator.execute(
         prompt: safePrompt,
         request: request,
+        onStageChange: onStageChange,
       );
 
       // Check for hard errors before any fallback can happen
@@ -133,6 +138,9 @@ class GenerateTestCasesUseCase {
       // ----- AI failed – fall back to deterministic engine (both prod and dev) -----
       debugPrint('AI generation failed, using deterministic engine: $e');
       
+      onStageChange?.call('analyzing');
+      onStageChange?.call('generating');
+
       final engine = DeterministicEngine(
         module: ContentFilter.sanitizeField(dto.module),
         feature: ContentFilter.sanitizeField(dto.feature),
@@ -142,6 +150,9 @@ class GenerateTestCasesUseCase {
         mode: dto.mode,
       );
       final testCases = await engine.generate();
+
+      onStageChange?.call('validating');
+      onStageChange?.call('polishing');
 
       // Populate rich audit report for forensics
       final auditReport = PipelineAuditReport(

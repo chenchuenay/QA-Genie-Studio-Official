@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
@@ -22,6 +24,7 @@ class ReportIssueScreen extends StatefulWidget {
 class _ReportIssueScreenState extends State<ReportIssueScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final _myFeedbacksKey = GlobalKey<_MyFeedbacksViewState>();
 
   @override
   void initState() {
@@ -33,6 +36,11 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _onReportSubmitted() {
+    _tabController.animateTo(1);
+    _myFeedbacksKey.currentState?._loadFeedbacks();
   }
 
   @override
@@ -96,8 +104,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _ReportFormView(screen: widget.screen),
-          _MyFeedbacksView(onShareFeedback: () => _tabController.animateTo(0)),
+          _ReportFormView(screen: widget.screen, onSubmitted: _onReportSubmitted),
+          _MyFeedbacksView(key: _myFeedbacksKey, onShareFeedback: () => _tabController.animateTo(0)),
         ],
       ),
     );
@@ -106,7 +114,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
 
 class _MyFeedbacksView extends StatefulWidget {
   final VoidCallback? onShareFeedback;
-  const _MyFeedbacksView({this.onShareFeedback});
+  const _MyFeedbacksView({super.key, this.onShareFeedback});
 
   @override
   State<_MyFeedbacksView> createState() => _MyFeedbacksViewState();
@@ -115,6 +123,19 @@ class _MyFeedbacksView extends StatefulWidget {
 class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
   List<Map<String, dynamic>> _feedbacks = [];
   bool _isLoading = false;
+
+  /// Converts a Firestore Timestamp (serialized as Map with _seconds on the
+  /// wire) or an ISO string to a stable ISO string. Falls back to now.
+  String _parseTimestamp(dynamic ts) {
+    if (ts is String) return ts;
+    if (ts is Map) {
+      final secs = ts['_seconds'];
+      if (secs is int) {
+        return DateTime.fromMillisecondsSinceEpoch(secs * 1000, isUtc: true).toIso8601String();
+      }
+    }
+    return DateTime.now().toIso8601String();
+  }
 
   @override
   void initState() {
@@ -126,55 +147,156 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
     setState(() => _isLoading = true);
     final db = await DatabaseService.db;
 
+    // Show "taking longer" feedback after 5s
+    Timer? slowTimer;
+    if (mounted) {
+      slowTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted && _isLoading) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Taking longer than expected...'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      });
+    }
+
     try {
       final result = await FunctionsService.call(
         functionName: 'getMyIssueReports',
+        timeout: const Duration(seconds: 10),
       );
-      final remoteReports = result['reports'] as List? ?? [];
 
-      final existing = await db.query('reported_issues');
-      final localIds = existing
-          .map((e) => e['firestoreId'] as String?)
-          .where((id) => id != null && id.isNotEmpty)
-          .toSet();
+      if (result['success'] == false) {
+        final errorMsg = result['error']?['message'] ?? 'Unknown error';
+        if (mounted) {
+          showBlurredDialog(
+            context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Sync Failed', style: TextStyle(color: Colors.white)),
+              content: Text(
+                errorMsg,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        final remoteReports = result['reports'] as List? ?? [];
 
-      for (final remote in remoteReports) {
-        if (remote is Map) {
-          final remoteId = remote['id'] as String?;
-          if (remoteId == null || remoteId.isEmpty) continue;
-          final remoteStatus = remote['status'] as String? ?? 'open';
-          final remoteTitle = remote['title'] as String? ?? '';
-          final remoteType = remote['issueType'] as String? ?? '';
+        final existing = await db.query('reported_issues');
+        final localIds = existing
+            .map((e) => e['firestoreId'] as String?)
+            .where((id) => id != null && id.isNotEmpty)
+            .toSet();
 
-          if (!localIds.contains(remoteId)) {
-            await DatabaseService.insertReportedIssue({
-              'firestoreId': remoteId,
-              'issueType': remoteType,
-              'title': remoteTitle,
-              'status': remoteStatus,
-              'createdAt': remote['createdAt'] as String? ?? DateTime.now().toIso8601String(),
-              'isSynced': 1,
-            });
-          } else {
-            for (int i = 0; i < existing.length; i++) {
-              if (existing[i]['firestoreId'] == remoteId) {
-                final localId = existing[i]['id'];
+        for (final remote in remoteReports) {
+          if (remote is Map) {
+            final remoteId = remote['id'] as String?;
+            if (remoteId == null || remoteId.isEmpty) continue;
+            final remoteStatus = remote['status'] as String? ?? 'open';
+            final remoteTitle = remote['title'] as String? ?? '';
+            final remoteType = remote['issueType'] as String? ?? '';
+
+            if (!localIds.contains(remoteId)) {
+              // Check if we already have an unsynced row for this report
+              // (created by a local submission that succeeded on the server
+              // but didn't receive the firestoreId back)
+              int? matchIndex;
+              for (int i = 0; i < existing.length; i++) {
+                final fsId = existing[i]['firestoreId'] as String?;
+                if ((fsId == null || fsId.isEmpty) &&
+                    existing[i]['title'] == remoteTitle &&
+                    existing[i]['issueType'] == remoteType) {
+                  matchIndex = i;
+                  break;
+                }
+              }
+
+              if (matchIndex != null) {
+                final localId = existing[matchIndex]['id'];
                 if (localId is int) {
                   await db.update(
                     'reported_issues',
-                    { 'title': remoteTitle, 'issueType': remoteType, 'status': remoteStatus },
+                    {
+                      'firestoreId': remoteId,
+                      'title': remoteTitle,
+                      'issueType': remoteType,
+                      'status': remoteStatus,
+                      'isSynced': 1,
+                    },
                     where: 'id = ?',
                     whereArgs: [localId],
                   );
                 }
-                break;
+              } else {
+                await DatabaseService.insertReportedIssue({
+                  'firestoreId': remoteId,
+                  'issueType': remoteType,
+                  'title': remoteTitle,
+                  'description': remote['description'] ?? '',
+                  'status': remoteStatus,
+                  'createdAt': _parseTimestamp(remote['createdAt']),
+                  'isSynced': 1,
+                });
+              }
+            } else {
+              for (int i = 0; i < existing.length; i++) {
+                if (existing[i]['firestoreId'] == remoteId) {
+                  final localId = existing[i]['id'];
+                  if (localId is int) {
+                    await db.update(
+                      'reported_issues',
+                      {
+                        'title': remoteTitle,
+                        'issueType': remoteType,
+                        'status': remoteStatus,
+                        'isSynced': 1,
+                      },
+                      where: 'id = ?',
+                      whereArgs: [localId],
+                    );
+                  }
+                  break;
+                }
               }
             }
           }
         }
       }
     } catch (e) {
-      debugPrint('Sync failed: $e');
+      if (mounted) {
+        showBlurredDialog(
+          context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Sync Failed', style: TextStyle(color: Colors.white)),
+            content: Text(
+              e.toString(),
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      slowTimer?.cancel();
     }
 
     final data = await db.query('reported_issues', orderBy: 'createdAt DESC');
@@ -226,41 +348,88 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
         itemCount: _feedbacks.length + 1,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
-          if (index == 0) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: _isLoading ? null : () => _loadFeedbacks(),
-                  icon: _isLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.accent,
-                          ),
-                        )
-                      : const Icon(Icons.sync, color: AppColors.accent, size: 18),
-                  label: Text(
-                    _isLoading ? 'Syncing...' : 'Sync',
-                    style: const TextStyle(color: AppColors.accent),
-                  ),
+          if (index < _feedbacks.length) {
+            final item = _feedbacks[index];
+            final status = item['status'] as String? ?? 'open';
+            final statusColor = switch (status) {
+              'working' => const Color(0xFF42A5F5),
+              'fixed' => const Color(0xFF66BB6A),
+              _ => const Color(0xFFFFCA28),
+            };
+            final helperText = switch ((item['issueType'] as String?) ?? '') {
+              'Bug' => status == 'fixed' ? 'Reflects in next update' : status == 'working' ? 'Being investigated' : 'Awaiting review',
+              'Feedback' => status == 'fixed' ? 'Reflects in next update' : status == 'working' ? 'Under review' : 'Awaiting review',
+              'Feature Request' => status == 'fixed' ? 'Planned for upcoming release' : status == 'working' ? 'Being evaluated' : 'Under consideration',
+              'Generation Issue' => status == 'fixed' ? 'Improvement shipped' : status == 'working' ? 'Being investigated' : 'Awaiting review',
+              'Export Issue' => status == 'fixed' ? 'Fix shipped' : status == 'working' ? 'Being investigated' : 'Awaiting review',
+              'UI Issue' => status == 'fixed' ? 'Fix shipped' : status == 'working' ? 'Being investigated' : 'Awaiting review',
+              _ => status == 'fixed' ? 'Resolved' : status == 'working' ? 'In progress' : 'Pending',
+            };
+            return Card(
+              color: AppColors.surface,
+              child: ListTile(
+                title: Text(
+                  item['title'] ?? '',
+                  style: const TextStyle(color: Colors.white),
                 ),
-              ],
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          '${item['issueType']}',
+                          style: const TextStyle(color: AppColors.textHint),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            status.substring(0, 1).toUpperCase() + status.substring(1),
+                            style: TextStyle(
+                              color: statusColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      helperText,
+                      style: TextStyle(color: statusColor.withValues(alpha: 0.7), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
             );
           }
-          final item = _feedbacks[index - 1];
-          return Card(
-            color: AppColors.surface,
-            child: ListTile(
-              title: Text(
-                item['title'] ?? '',
-                style: const TextStyle(color: Colors.white),
-              ),
-              subtitle: Text(
-                '${item['issueType']} • Status: ${item['status']}',
-                style: const TextStyle(color: AppColors.textHint),
+          // Last item: sync button at bottom
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: TextButton.icon(
+                onPressed: _isLoading ? null : () => _loadFeedbacks(),
+                icon: _isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.accent,
+                        ),
+                      )
+                    : const Icon(Icons.sync, color: AppColors.accent, size: 18),
+                label: Text(
+                  _isLoading ? 'Syncing...' : 'Sync',
+                  style: const TextStyle(color: AppColors.accent),
+                ),
               ),
             ),
           );
@@ -272,7 +441,8 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
 
 class _ReportFormView extends StatefulWidget {
   final String? screen;
-  const _ReportFormView({this.screen});
+  final VoidCallback? onSubmitted;
+  const _ReportFormView({this.screen, this.onSubmitted});
 
   @override
   State<_ReportFormView> createState() => _ReportFormViewState();
@@ -358,9 +528,11 @@ class _ReportFormViewState extends State<_ReportFormView> {
             'screen': widget.screen ?? 'ReportIssueScreen',
           },
         );
+
+        final success = result['success'] != false;
         final firestoreId = result['id'] as String?;
         await DatabaseService.insertReportedIssue({
-          'firestoreId': firestoreId ?? '',
+          'firestoreId': success ? (firestoreId ?? '') : '',
           'issueType': _issueType,
           'title': _titleController.text.trim(),
           'description': _descriptionController.text.trim(),
@@ -369,11 +541,15 @@ class _ReportFormViewState extends State<_ReportFormView> {
           'deviceModel': deviceModel,
           'appVersion': appVersion,
           'screen': widget.screen ?? 'ReportIssueScreen',
-          'isSynced': 1,
+          'isSynced': success ? 1 : 0,
           'createdAt': DateTime.now().toIso8601String(),
         });
+
+        // Refresh the parent's My Feedbacks list
+        widget.onSubmitted?.call();
       } catch (e) {
         await DatabaseService.insertReportedIssue({
+          'firestoreId': '',
           'issueType': _issueType,
           'title': _titleController.text.trim(),
           'description': _descriptionController.text.trim(),
@@ -403,7 +579,10 @@ class _ReportFormViewState extends State<_ReportFormView> {
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                Navigator.pop(context);
+                _titleController.clear();
+                _descriptionController.clear();
+                setState(() => _issueType = 'Feedback');
+                widget.onSubmitted?.call();
               },
               child: const Text(
                 'Close',

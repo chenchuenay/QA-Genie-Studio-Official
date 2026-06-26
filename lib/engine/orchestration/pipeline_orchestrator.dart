@@ -60,7 +60,9 @@ class PipelineOrchestrator {
   Future<PipelineExecutionResult> execute({
     required String prompt,
     required GenerationRequest request,
+    void Function(String stage)? onStageChange,
   }) async {
+    onStageChange?.call('analyzing');
     final aiResult = await _aiGenerationStage.execute(
       prompt: prompt,
       request: request,
@@ -80,6 +82,8 @@ class PipelineOrchestrator {
     PipelineForensics.instance.onTraceEvent(
       'PARSER_INPUT_FIRST_1000=${aiResult.rawResponse.length > 1000 ? aiResult.rawResponse.substring(0, 1000) : aiResult.rawResponse}',
     );
+
+    onStageChange?.call('generating');
 
     final parsingResult = _parsingStage.execute(
       rawResponse: aiResult.rawResponse,
@@ -112,6 +116,7 @@ class PipelineOrchestrator {
       'repairOutputCount=${repairResult.cases.length}',
     );
 
+    onStageChange?.call('validating');
     final validationResult = _validationStage.execute(
       cases: repairResult.cases,
       constraints: request.constraints,
@@ -236,6 +241,7 @@ class PipelineOrchestrator {
       finalWorkingCases = acceptedAiCases;
     }
 
+    onStageChange?.call('polishing');
     final finalized = _finalizationStage.execute(
       cases: finalWorkingCases,
       module: request.module,

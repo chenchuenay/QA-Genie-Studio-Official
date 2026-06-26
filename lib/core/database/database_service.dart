@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 
 class DatabaseService {
   static Database? _db;
@@ -95,7 +96,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE reported_issues (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        firestoreId TEXT,
+        firestoreId TEXT UNIQUE,
         issueType TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
@@ -309,6 +310,11 @@ class DatabaseService {
   
   static Future<int> insertReportedIssue(Map<String, dynamic> issue) async {
     final db = await DatabaseService.db;
+    final firestoreId = issue['firestoreId'] as String?;
+    if (firestoreId != null && firestoreId.isNotEmpty) {
+      await db.delete('reported_issues',
+        where: 'firestoreId = ?', whereArgs: [firestoreId]);
+    }
     return await db.insert('reported_issues', issue);
   }
   
@@ -505,25 +511,20 @@ class DatabaseService {
     if (lastSync >= todayStart) return;
     await prefs.setInt('last_status_sync_day', todayStart);
 
-    final db = await DatabaseService.db;
-    final rows = await db.query('reported_issues', where: 'firestoreId IS NOT NULL AND firestoreId != ?', whereArgs: ['']);
-    for (final row in rows) {
-      final firestoreId = row['firestoreId'] as String?;
-      if (firestoreId == null || firestoreId.isEmpty) continue;
-      try {
-        final snap = await FirebaseFirestore.instance
-            .collection('issue_reports')
-            .doc(firestoreId)
-            .get();
-        if (snap.exists) {
-          final remoteStatus = snap.data()?['status'] as String? ?? 'open';
-          await db.update('reported_issues',
-            {'status': remoteStatus, 'lastSyncAttempt': DateTime.now().toIso8601String()},
-            where: 'id = ?', whereArgs: [row['id']]);
-        }
-      } catch (_) {
-        // Will retry next week
+    try {
+      final result = await FunctionsService.call(functionName: 'getMyIssueReports');
+      if (result['success'] == false) return;
+      final remoteReports = result['reports'] as List? ?? [];
+      final db = await DatabaseService.db;
+      for (final remote in remoteReports) {
+        if (remote is! Map) continue;
+        final remoteId = remote['id'] as String?;
+        if (remoteId == null || remoteId.isEmpty) continue;
+        final remoteStatus = remote['status'] as String? ?? 'open';
+        await db.update('reported_issues',
+          {'status': remoteStatus, 'lastSyncAttempt': DateTime.now().toIso8601String()},
+          where: 'firestoreId = ?', whereArgs: [remoteId]);
       }
-    }
+    } catch (_) {}
   }
 }

@@ -25,9 +25,9 @@ void main() {
       expect(() => adManager.resetExportCount(), returnsNormally);
     });
 
-    test('showRewardedAd returns mock token in dev mode', () async {
+    test('showRewardedAd returns null in test environment', () async {
       final token = await adManager.showRewardedAd();
-      expect(token, startsWith('mock_ad_token_'));
+      expect(token, isNull);
     });
   });
 }

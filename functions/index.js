@@ -23,6 +23,21 @@ const PRO_CASES_PER_BATCH = 20;
 const EXPORT_LIMIT_PER_DAY = 50; // 50 exports per day for all non-pro members
 const COOLDOWN_HOURS = 24; // 24h cooldown after Google account deletion
 
+// ------------------------------------------------------------------
+// APP CHECK — conditionally disable enforcement in dev
+// ------------------------------------------------------------------
+const IS_DEV_PROJECT = process.env.GCLOUD_PROJECT === 'qa-genie-ai-dev';
+
+function onCall(handler, options = {}) {
+  if (IS_DEV_PROJECT) {
+    return functions.runWith({ ...options, enforceAppCheck: false }).https.onCall(handler);
+  }
+  if (Object.keys(options).length > 0) {
+    return functions.runWith(options).https.onCall(handler);
+  }
+  return onCall(handler);
+}
+
 function today() {
   return new Date().toISOString().split("T")[0];
 }
@@ -97,7 +112,7 @@ function sanitisePrompt(prompt) {
 // --------------------------------------------------------------
 // CHECK SESSION BY EMAIL (before linking, auth dialog)
 // --------------------------------------------------------------
-exports.checkSessionByEmail = functions.https.onCall(async (data, context) => {
+exports.checkSessionByEmail = onCall(async (data, context) => {
   // No auth required — called before the user is signed in (auth dialog flow).
   const { email, deviceId } = data;
   if (!email || !deviceId)
@@ -138,7 +153,7 @@ exports.checkSessionByEmail = functions.https.onCall(async (data, context) => {
 // Uses profile uid (not auth uid) for session path to handle
 // uid changes after reinstall.
 // --------------------------------------------------------------
-exports.registerSession = functions.https.onCall(async (data, context) => {
+exports.registerSession = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   if (!checkRateLimit(`registerSession_${context.auth.uid}`, 20)) {
@@ -237,9 +252,7 @@ async function _getMemberTier(uid) {
 // AI call runs BEFORE transaction so ad is only consumed on success.
 // Returns usage data so client can update cache without refetch.
 // ------------------------------------------------------------------
-exports.generate = functions
-  .runWith({ secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60 })
-  .https.onCall(async (data, context) => {
+exports.generate = onCall(async (data, context) => {
     if (!context.auth)
       return { success: false, error: { code: "UNAUTHENTICATED" } };
     const { module, feature, platform, prompt, deviceId, requestId, adToken, rewardToken } =
@@ -518,12 +531,12 @@ exports.generate = functions
       }
       return { success: false, error: { code: err.message } };
     }
-  });
+}, { secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60 });
 
 // ------------------------------------------------------------------
 // EXPORT TRACKING (respects core daily export limit)
 // ------------------------------------------------------------------
-exports.trackExport = functions.https.onCall(async (data, context) => {
+exports.trackExport = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -583,7 +596,7 @@ exports.trackExport = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // RATING (unchanged)
 // ------------------------------------------------------------------
-exports.trackRating = functions.https.onCall(async (data, context) => {
+exports.trackRating = onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
   if (!checkRateLimit(`rating_${context.auth.uid}`, 3)) {
     return { success: false, error: { code: "RATE_LIMITED" } };
@@ -602,7 +615,7 @@ exports.trackRating = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // COOLDOWN CHECK (called before Google sign-in to enforce 24h cooldown)
 // ------------------------------------------------------------------
-exports.checkEmailCooldown = functions.https.onCall(async (data, context) => {
+exports.checkEmailCooldown = onCall(async (data, context) => {
   const { email } = data;
   if (!email) {
     throw new functions.https.HttpsError("invalid-argument", "email required");
@@ -625,7 +638,7 @@ exports.checkEmailCooldown = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // ANALYTICS & MONITORING
 // ------------------------------------------------------------------
-exports.trackAiFailure = functions.https.onCall(async (data, context) => {
+exports.trackAiFailure = onCall(async (data, context) => {
   if (!context.auth) throw new Error("UNAUTHENTICATED");
   if (!checkRateLimit(`aiFailure_${context.auth.uid}`, 5)) {
     return { success: false, error: { code: "RATE_LIMITED" } };
@@ -636,7 +649,7 @@ exports.trackAiFailure = functions.https.onCall(async (data, context) => {
   return { success: true };
 });
 
-exports.trackValidatorRejected = functions.https.onCall(async (data, context) => {
+exports.trackValidatorRejected = onCall(async (data, context) => {
   if (!context.auth) throw new Error("UNAUTHENTICATED");
   if (!checkRateLimit(`validatorReject_${context.auth.uid}`, 10)) {
     return { success: false, error: { code: "RATE_LIMITED" } };
@@ -652,9 +665,8 @@ exports.trackValidatorRejected = functions.https.onCall(async (data, context) =>
 // ------------------------------------------------------------------
 // GET OR CREATE GUEST TOKEN (for "Continue as guest" button)
 // ------------------------------------------------------------------
-exports.getOrCreateGuestToken = functions.runWith({
-  enforceAppCheck: false,
-}).https.onCall(async (data) => {
+exports.getOrCreateGuestToken = onCall(async (data) => {
+  // enforceAppCheck: false baked into onCall helper for both dev & prod
   const { deviceId, forceReturning, caller, androidId } = data;
   console.log(`[getOrCreateGuestToken] CALLED | deviceId=${deviceId} | androidId=${androidId} | forceReturning=${forceReturning} | caller=${caller}`);
   if (!deviceId || typeof deviceId !== "string" || deviceId.length < 8 || deviceId.length > 128 || !/^[a-zA-Z0-9_\-]+$/.test(deviceId))
@@ -810,7 +822,7 @@ exports.getOrCreateGuestToken = functions.runWith({
 // ------------------------------------------------------------------
 // CHECK EXPORT QUOTA
 // ------------------------------------------------------------------
-exports.checkExportQuota = functions.https.onCall(async (data, context) => {
+exports.checkExportQuota = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -838,7 +850,7 @@ exports.checkExportQuota = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // RESET DAILY LIMITS (debug only — used by dev menu)
 // ------------------------------------------------------------------
-exports.resetDailyLimits = functions.https.onCall(async (data, context) => {
+exports.resetDailyLimits = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -857,7 +869,7 @@ exports.resetDailyLimits = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // GET MEMBER DASHBOARD
 // ------------------------------------------------------------------
-exports.getMemberDashboard = functions.https.onCall(async (data, context) => {
+exports.getMemberDashboard = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -936,7 +948,7 @@ exports.getMemberDashboard = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // SET MEMBER PRO
 // ------------------------------------------------------------------
-exports.setMemberPro = functions.https.onCall(async (data, context) => {
+exports.setMemberPro = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const { isPro } = data;
@@ -961,7 +973,7 @@ exports.setMemberPro = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // TRACK PRO INTEREST
 // ------------------------------------------------------------------
-exports.trackProInterest = functions.https.onCall(async (data, context) => {
+exports.trackProInterest = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -997,7 +1009,7 @@ exports.trackProInterest = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // HEALTH CHECK
 // ------------------------------------------------------------------
-exports.healthCheck = functions.https.onCall(async () => ({
+exports.healthCheck = onCall(async () => ({
   status: "ok",
   timestamp: new Date().toISOString(),
 }));
@@ -1005,7 +1017,7 @@ exports.healthCheck = functions.https.onCall(async () => ({
 // ------------------------------------------------------------------
 // CHECK GENERATION QUOTA (client uses before showing ad)
 // ------------------------------------------------------------------
-exports.checkGenerationQuota = functions.https.onCall(async (data, context) => {
+exports.checkGenerationQuota = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -1062,7 +1074,7 @@ exports.checkGenerationQuota = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // VERIFY REWARDED AD (stores token)
 // ------------------------------------------------------------------
-exports.verifyRewardAd = functions.https.onCall(async (data, context) => {
+exports.verifyRewardAd = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -1089,7 +1101,7 @@ exports.verifyRewardAd = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // LINK GOOGLE ACCOUNT (with cooldown)
 // ------------------------------------------------------------------
-exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
+exports.linkGoogleAccount = onCall(async (data, context) => {
   if (!context.auth) {
     console.log(`[linkGoogleAccount] UNAUTHENTICATED`);
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
@@ -1250,7 +1262,7 @@ exports.linkGoogleAccount = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // DELETE ACCOUNT (with cooldown for Google accounts)
 // ------------------------------------------------------------------
-exports.deleteAccount = functions.https.onCall(async (data, context) => {
+exports.deleteAccount = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -1303,8 +1315,9 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
   const reports = userEmail
     ? await Promise.all([
         db.collection("issue_reports").doc("open").collection(userEmail).get(),
+        db.collection("issue_reports").doc("working").collection(userEmail).get(),
         db.collection("issue_reports").doc("fixed").collection(userEmail).get(),
-      ]).then(([o, f]) => [...o.docs, ...f.docs])
+      ]).then(([o, w, f]) => [...o.docs, ...w.docs, ...f.docs])
     : [];
   reports.forEach((doc) =>
     batch.update(doc.ref, { uid: "deleted_member" }),
@@ -1354,7 +1367,7 @@ exports.deleteAccount = functions.https.onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // SUBMIT ISSUE REPORT
 // ------------------------------------------------------------------
-exports.submitIssueReport = functions.https.onCall(async (data, context) => {
+exports.submitIssueReport = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   if (!checkRateLimit(`submitIssue_${context.auth.uid}`, 5)) {
@@ -1366,17 +1379,9 @@ exports.submitIssueReport = functions.https.onCall(async (data, context) => {
   const { issueType, title, description, platform, deviceModel, appVersion, screen } = data;
   const uid = context.auth.uid;
 
-  // Atomically increment serial counter for this email
-  const counterRef = db.collection("issue_reports").doc("_counters").collection("tokens").doc(email);
-  const serial = await db.runTransaction(async (t) => {
-    const doc = await t.get(counterRef);
-    const next = (doc.data()?.serial ?? 0) + 1;
-    t.set(counterRef, { serial: next }, { merge: true });
-    return String(next).padStart(4, "0");
-  });
-
   const docData = {
     uid,
+    email,
     issueType: issueType || "Bug",
     title: title || "",
     description: description || "",
@@ -1388,26 +1393,25 @@ exports.submitIssueReport = functions.https.onCall(async (data, context) => {
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
-  await db
+  const docRef = await db
     .collection("issue_reports")
     .doc("open")
     .collection(email)
-    .doc(serial)
-    .set(docData);
+    .add(docData);
 
-  return { success: true, id: serial };
+  return { success: true, id: docRef.id };
 });
 
 // ------------------------------------------------------------------
 // GET MY ISSUE REPORTS
 // ------------------------------------------------------------------
-exports.getMyIssueReports = functions.https.onCall(async (data, context) => {
+exports.getMyIssueReports = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  const uid = context.auth.uid;
   const email = context.auth.token.email;
   if (!email)
     throw new functions.https.HttpsError("failed-precondition", "Email required");
-  const uid = context.auth.uid;
 
   // Migrate old-format reports (flat issue_reports/{id}) to new path
   const oldSnap = await db.collection("issue_reports")
@@ -1415,47 +1419,53 @@ exports.getMyIssueReports = functions.https.onCall(async (data, context) => {
     .limit(50)
     .get();
   if (!oldSnap.empty) {
-    const batch = db.batch();
     for (const doc of oldSnap.docs) {
       const data = doc.data();
-      // Get next serial for this email
-      const counterRef = db.collection("issue_reports").doc("_counters").collection("tokens").doc(email);
-      const counterDoc = await counterRef.get();
-      const nextSerial = String((counterDoc.data()?.serial ?? 0) + 1).padStart(4, "0");
-      batch.set(counterRef, { serial: nextSerial }, { merge: true });
-      // Write to new path
-      const status = data.status === "fixed" ? "fixed" : "open";
-      const newRef = db
+      const status = data.status === "fixed" ? "fixed" : data.status === "working" ? "working" : "open";
+      await db
         .collection("issue_reports")
         .doc(status)
         .collection(email)
-        .doc(nextSerial);
-      batch.set(newRef, {
-        uid,
-        issueType: data.issueType || "Bug",
-        title: data.title || "",
-        description: data.description || "",
-        platform: data.platform || null,
-        deviceModel: data.deviceModel || null,
-        appVersion: data.appVersion || null,
-        screen: data.screen || "unknown",
-        status: data.status || "open",
-        createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
-      });
-      batch.delete(doc.ref);
+        .add({
+          uid,
+          email,
+          issueType: data.issueType || "Bug",
+          title: data.title || "",
+          description: data.description || "",
+          platform: data.platform || null,
+          deviceModel: data.deviceModel || null,
+          appVersion: data.appVersion || null,
+          screen: data.screen || "unknown",
+          status: data.status || "open",
+          createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+        });
+      await doc.ref.delete();
     }
-    await batch.commit();
   }
 
-  const [openSnap, fixedSnap] = await Promise.all([
-    db.collection("issue_reports").doc("open").collection(email).orderBy("createdAt", "desc").get(),
-    db.collection("issue_reports").doc("fixed").collection(email).orderBy("createdAt", "desc").get(),
-  ]);
+  // Query new-format reports by email per status subcollection.
+  // No collectionGroup needed — avoids requiring composite indexes.
+  // Old-format docs were already migrated above, so no leftovers to handle.
+  const statuses = ["open", "working", "fixed"];
+  const reports = [];
 
-  const reports = [
-    ...openSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-    ...fixedSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-  ];
+  for (const status of statuses) {
+    const snap = await db.collection("issue_reports")
+      .doc(status)
+      .collection(email)
+      .where("uid", "==", uid)
+      .get();
+    for (const doc of snap.docs) {
+      reports.push({ id: doc.id, ...doc.data() });
+    }
+  }
+
+  // Sort descending by createdAt (no server-side orderBy to keep queries simple)
+  reports.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+    const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    return bTime - aTime;
+  });
   return { reports };
 });
 
@@ -1467,6 +1477,7 @@ exports.moveIssueOnStatusChange = functions.firestore
   .onWrite(async (change, context) => {
     const after = change.after.data();
     if (!after) return; // deleted
+    if (context.params.status === "_counters") return; // internal doc, not a report
     const newStatus = after.status;
     const pathStatus = context.params.status;
     if (newStatus === pathStatus) return; // already in correct status collection
@@ -1479,7 +1490,7 @@ exports.moveIssueOnStatusChange = functions.firestore
 // ------------------------------------------------------------------
 // RECORD UPDATE DISMISSAL
 // ------------------------------------------------------------------
-exports.recordUpdateDismissal = functions.https.onCall(async (data, context) => {
+exports.recordUpdateDismissal = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -1585,7 +1596,7 @@ async function callDeepSeek(prompt) {
 // Push a suite under memberData/{tier}/{uid}/{date}/suites/{serialNumber}
 // Cases go to GCS (best-effort), metadata always persists to Firestore.
 // --------------------------------------------------------------
-exports.pushMemberSuite = functions.https.onCall(async (data, context) => {
+exports.pushMemberSuite = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -1677,7 +1688,7 @@ async function _getMemberSuites(uid, tier) {
 // Get all synced suites: metadata from Firestore, cases from GCS.
 // Uses memberData/{tier}/{uid}/{date}/suites/{serialNumber}.
 // --------------------------------------------------------------
-exports.getMemberSuites = functions.https.onCall(async (data, context) => {
+exports.getMemberSuites = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -1739,7 +1750,7 @@ exports.getMemberSuites = functions.https.onCall(async (data, context) => {
 // Delete a suite: Firestore metadata + GCS cases.
 // suiteId format: "date/serialNumber"
 // --------------------------------------------------------------
-exports.deleteMemberSuite = functions.https.onCall(async (data, context) => {
+exports.deleteMemberSuite = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
