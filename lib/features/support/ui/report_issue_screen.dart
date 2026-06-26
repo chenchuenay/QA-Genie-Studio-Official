@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
@@ -147,22 +145,6 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
     setState(() => _isLoading = true);
     final db = await DatabaseService.db;
 
-    // Show "taking longer" feedback after 5s
-    Timer? slowTimer;
-    if (mounted) {
-      slowTimer = Timer(const Duration(seconds: 5), () {
-        if (mounted && _isLoading) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Taking longer than expected...'),
-              duration: Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      });
-    }
-
     try {
       final result = await FunctionsService.call(
         functionName: 'getMyIssueReports',
@@ -194,6 +176,12 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
       } else {
         final remoteReports = result['reports'] as List? ?? [];
 
+        // Collect all remote IDs for orphan detection
+        final remoteIds = remoteReports
+            .where((r) => r is Map && r['id'] is String)
+            .map((r) => r['id'] as String)
+            .toSet();
+
         final existing = await db.query('reported_issues');
         final localIds = existing
             .map((e) => e['firestoreId'] as String?)
@@ -209,47 +197,15 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
             final remoteType = remote['issueType'] as String? ?? '';
 
             if (!localIds.contains(remoteId)) {
-              // Check if we already have an unsynced row for this report
-              // (created by a local submission that succeeded on the server
-              // but didn't receive the firestoreId back)
-              int? matchIndex;
-              for (int i = 0; i < existing.length; i++) {
-                final fsId = existing[i]['firestoreId'] as String?;
-                if ((fsId == null || fsId.isEmpty) &&
-                    existing[i]['title'] == remoteTitle &&
-                    existing[i]['issueType'] == remoteType) {
-                  matchIndex = i;
-                  break;
-                }
-              }
-
-              if (matchIndex != null) {
-                final localId = existing[matchIndex]['id'];
-                if (localId is int) {
-                  await db.update(
-                    'reported_issues',
-                    {
-                      'firestoreId': remoteId,
-                      'title': remoteTitle,
-                      'issueType': remoteType,
-                      'status': remoteStatus,
-                      'isSynced': 1,
-                    },
-                    where: 'id = ?',
-                    whereArgs: [localId],
-                  );
-                }
-              } else {
-                await DatabaseService.insertReportedIssue({
-                  'firestoreId': remoteId,
-                  'issueType': remoteType,
-                  'title': remoteTitle,
-                  'description': remote['description'] ?? '',
-                  'status': remoteStatus,
-                  'createdAt': _parseTimestamp(remote['createdAt']),
-                  'isSynced': 1,
-                });
-              }
+              await DatabaseService.insertReportedIssue({
+                'firestoreId': remoteId,
+                'issueType': remoteType,
+                'title': remoteTitle,
+                'description': remote['description'] ?? '',
+                'status': remoteStatus,
+                'createdAt': _parseTimestamp(remote['createdAt']),
+                'isSynced': 1,
+              });
             } else {
               for (int i = 0; i < existing.length; i++) {
                 if (existing[i]['firestoreId'] == remoteId) {
@@ -271,6 +227,14 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
                 }
               }
             }
+          }
+        }
+
+        // Delete orphaned local reports (e.g. when a report is re-serialized on move)
+        for (final local in existing) {
+          final localId = local['firestoreId'] as String?;
+          if (localId != null && localId.isNotEmpty && !remoteIds.contains(localId)) {
+            await db.delete('reported_issues', where: 'id = ?', whereArgs: [local['id']]);
           }
         }
       }
@@ -295,8 +259,6 @@ class _MyFeedbacksViewState extends State<_MyFeedbacksView> {
           ),
         );
       }
-    } finally {
-      slowTimer?.cancel();
     }
 
     final data = await db.query('reported_issues', orderBy: 'createdAt DESC');
@@ -531,69 +493,55 @@ class _ReportFormViewState extends State<_ReportFormView> {
 
         final success = result['success'] != false;
         final firestoreId = result['id'] as String?;
-        await DatabaseService.insertReportedIssue({
-          'firestoreId': success ? (firestoreId ?? '') : '',
-          'issueType': _issueType,
-          'title': _titleController.text.trim(),
-          'description': _descriptionController.text.trim(),
-          'status': 'open',
-          'platform': platform,
-          'deviceModel': deviceModel,
-          'appVersion': appVersion,
-          'screen': widget.screen ?? 'ReportIssueScreen',
-          'isSynced': success ? 1 : 0,
-          'createdAt': DateTime.now().toIso8601String(),
-        });
+        if (success && firestoreId != null && firestoreId.isNotEmpty) {
+          await DatabaseService.insertReportedIssue({
+            'firestoreId': firestoreId,
+            'issueType': _issueType,
+            'title': _titleController.text.trim(),
+            'description': _descriptionController.text.trim(),
+            'status': 'open',
+            'platform': platform,
+            'deviceModel': deviceModel,
+            'appVersion': appVersion,
+            'screen': widget.screen ?? 'ReportIssueScreen',
+            'isSynced': 1,
+            'createdAt': DateTime.now().toIso8601String(),
+          });
+          widget.onSubmitted?.call();
 
-        // Refresh the parent's My Feedbacks list
-        widget.onSubmitted?.call();
-      } catch (e) {
-        await DatabaseService.insertReportedIssue({
-          'firestoreId': '',
-          'issueType': _issueType,
-          'title': _titleController.text.trim(),
-          'description': _descriptionController.text.trim(),
-          'status': 'open',
-          'platform': platform,
-          'deviceModel': deviceModel,
-          'appVersion': appVersion,
-          'screen': widget.screen ?? 'ReportIssueScreen',
-          'isSynced': 0,
-          'createdAt': DateTime.now().toIso8601String(),
-        });
-      }
-
-      if (!mounted) return;
-      await showBlurredDialog(context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: const Text(
-            'Thank you!',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: const Text(
-            'Your feedback has been submitted successfully.',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _titleController.clear();
-                _descriptionController.clear();
-                setState(() => _issueType = 'Feedback');
-                widget.onSubmitted?.call();
-              },
-              child: const Text(
-                'Close',
-                style: TextStyle(color: AppColors.accent),
+          if (!mounted) return;
+          await showBlurredDialog(context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: const Text(
+                'Thank you!',
+                style: TextStyle(color: Colors.white),
               ),
+              content: const Text(
+                'Your feedback has been submitted successfully.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _titleController.clear();
+                    _descriptionController.clear();
+                    setState(() => _issueType = 'Feedback');
+                    widget.onSubmitted?.call();
+                  },
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(color: AppColors.accent),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
-    } catch (e) {
-      debugPrint('Failed to submit: $e');
+          );
+        }
+      } catch (e) {
+        debugPrint('Failed to submit: $e');
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

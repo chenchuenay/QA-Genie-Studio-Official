@@ -559,16 +559,6 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                     maxLines: 1,
                     style: AppText.subheading,
                   ),
-                  if (!AppConfig.isProduction) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Trace ID: ${widget.session.traceId}',
-                      style: const TextStyle(
-                        color: AppColors.textHint,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

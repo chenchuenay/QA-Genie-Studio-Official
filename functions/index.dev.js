@@ -35,7 +35,7 @@ function onCall(handler, options = {}) {
   if (Object.keys(options).length > 0) {
     return functions.runWith(options).https.onCall(handler);
   }
-  return onCall(handler);
+  return functions.https.onCall(handler);
 }
 
 function today() {
@@ -1307,8 +1307,6 @@ exports.deleteAccount = onCall(async (data, context) => {
   }
   batch.delete(db.collection("usage").doc(uid));
   batch.delete(db.collection("the_qag_registry").doc(uid));
-  // memberSessions cleanup
-  batch.delete(db.collection("memberSessions").doc(uid));
   // deviceUsage/{deviceId} is NOT deleted — it carries the device's daily quota
   // across account resets. This prevents quota abuse via delete-recreate.
   const userEmail = email || context.auth.token.email;
@@ -1379,6 +1377,19 @@ exports.submitIssueReport = onCall(async (data, context) => {
   const { issueType, title, description, platform, deviceModel, appVersion, screen } = data;
   const uid = context.auth.uid;
 
+  // Atomically get next serial in open (per-status sequential)
+  const counterRef = db.collection("issue_reports").doc("_counters");
+  const serial = await db.runTransaction(async (t) => {
+    const snap = await t.get(counterRef);
+    const current = snap.exists && typeof snap.data().openMax === "number" ? snap.data().openMax : 0;
+    const next = current + 1;
+    t.set(counterRef, {
+      openMax: next,
+      openCount: admin.firestore.FieldValue.increment(1),
+    }, { merge: true });
+    return next;
+  });
+
   const docData = {
     uid,
     email,
@@ -1390,16 +1401,14 @@ exports.submitIssueReport = onCall(async (data, context) => {
     appVersion: appVersion || null,
     screen: screen || "unknown",
     status: "open",
+    serial,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
-  const docRef = await db
-    .collection("issue_reports")
-    .doc("open")
-    .collection(email)
-    .add(docData);
+  const serialStr = String(serial);
+  await db.collection("issue_reports").doc("open").collection(email).doc(serialStr).set(docData);
 
-  return { success: true, id: docRef.id };
+  return { success: true, id: serialStr };
 });
 
 // ------------------------------------------------------------------
@@ -1412,6 +1421,8 @@ exports.getMyIssueReports = onCall(async (data, context) => {
   const email = context.auth.token.email;
   if (!email)
     throw new functions.https.HttpsError("failed-precondition", "Email required");
+
+  const counterRef = db.collection("issue_reports").doc("_counters");
 
   // Migrate old-format reports (flat issue_reports/{id}) to new path
   const oldSnap = await db.collection("issue_reports")
@@ -1443,9 +1454,30 @@ exports.getMyIssueReports = onCall(async (data, context) => {
     }
   }
 
+  // Migrate fixea-path docs to correct status subcollection with new serial
+  const fixeaSnap = await db.collection("issue_reports").doc("fixea").collection(email).get();
+  if (!fixeaSnap.empty) {
+    for (const doc of fixeaSnap.docs) {
+      const d = doc.data();
+      const targetStatus = ["open", "working", "fixed"].includes(d.status) ? d.status : "open";
+      const newSerial = await db.runTransaction(async (t) => {
+        const counterSnap = await t.get(counterRef);
+        const c = counterSnap.data() || {};
+        const nextMax = (c[targetStatus + "Max"] || 0) + 1;
+        const destRef = db.collection("issue_reports").doc(targetStatus).collection(email).doc(String(nextMax));
+        t.set(destRef, { ...d, status: targetStatus, serial: nextMax });
+        t.set(counterRef, {
+          [targetStatus + "Max"]: nextMax,
+          [targetStatus + "Count"]: (c[targetStatus + "Count"] || 0) + 1,
+        }, { merge: true });
+        return nextMax;
+      });
+      await doc.ref.delete();
+    }
+  }
+
   // Query new-format reports by email per status subcollection.
   // No collectionGroup needed — avoids requiring composite indexes.
-  // Old-format docs were already migrated above, so no leftovers to handle.
   const statuses = ["open", "working", "fixed"];
   const reports = [];
 
@@ -1470,21 +1502,103 @@ exports.getMyIssueReports = onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// AUTO-MOVE ISSUE REPORT ON STATUS CHANGE (Firestore trigger)
+// UPDATE ISSUE REPORT STATUS (admin callable — use from Functions Test tab)
+// ------------------------------------------------------------------
+exports.updateIssueReportStatus = onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  if (!checkRateLimit(`updateIssueStatus_${context.auth.uid}`, 10)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+
+  const { email, serial, newStatus } = data;
+  if (!email || !serial || !newStatus)
+    throw new functions.https.HttpsError("invalid-argument", "email, serial, and newStatus required");
+  if (!["open", "working", "fixed"].includes(newStatus))
+    throw new functions.https.HttpsError("invalid-argument", "newStatus must be one of: open, working, fixed");
+
+  // Find the doc across all 3 status subcollections
+  const statuses = ["open", "working", "fixed"];
+  let foundRef = null;
+  let foundStatus = null;
+
+  for (const s of statuses) {
+    const ref = db.collection("issue_reports").doc(s).collection(email).doc(serial);
+    const snap = await ref.get();
+    if (snap.exists) {
+      foundRef = ref;
+      foundStatus = s;
+      break;
+    }
+  }
+
+  if (!foundRef)
+    throw new functions.https.HttpsError("not-found", `Report ${serial} for ${email} not found in any status`);
+
+  if (foundStatus === newStatus)
+    return { success: true, message: `Already ${newStatus}` };
+
+  // Atomically: assign new serial (per-status), move doc, update counters
+  const counterRef = db.collection("issue_reports").doc("_counters");
+  const newSerial = await db.runTransaction(async (t) => {
+    const snap = await t.get(foundRef);
+    if (!snap.exists) throw new functions.https.HttpsError("not-found", "Report deleted before move");
+
+    const counterSnap = await t.get(counterRef);
+    const c = counterSnap.data() || {};
+    const nextMax = (c[newStatus + "Max"] || 0) + 1;
+
+    const destRef = db.collection("issue_reports").doc(newStatus).collection(email).doc(String(nextMax));
+    t.set(destRef, { ...snap.data(), status: newStatus, serial: nextMax });
+    t.delete(foundRef);
+    t.set(counterRef, {
+      [foundStatus + "Count"]: Math.max(0, (c[foundStatus + "Count"] || 1) - 1),
+      [newStatus + "Count"]: (c[newStatus + "Count"] || 0) + 1,
+      [newStatus + "Max"]: nextMax,
+    }, { merge: true });
+
+    return nextMax;
+  });
+
+  return { success: true, serial: newSerial, newStatus };
+});
+
+// ------------------------------------------------------------------
+// MOVE ISSUE ON STATUS CHANGE (Firestore trigger)
+// Validates status — invalid values (e.g. "fixea") are IGNORED, not moved.
 // ------------------------------------------------------------------
 exports.moveIssueOnStatusChange = functions.firestore
   .document("issue_reports/{status}/{email}/{serial}")
   .onWrite(async (change, context) => {
     const after = change.after.data();
-    if (!after) return; // deleted
-    if (context.params.status === "_counters") return; // internal doc, not a report
-    const newStatus = after.status;
-    const pathStatus = context.params.status;
-    if (newStatus === pathStatus) return; // already in correct status collection
+    if (!after) return;
 
-    const { email, serial } = context.params;
-    await db.doc(`issue_reports/${newStatus}/${email}/${serial}`).set(after);
-    await change.after.ref.delete();
+    const { status: pathStatus, email, serial } = context.params;
+    if (pathStatus === "_counters" || pathStatus === "fixea") return;
+
+    const newStatus = after.status;
+    if (!["open", "working", "fixed"].includes(newStatus)) return;
+    if (newStatus === pathStatus) return;
+
+    const counterRef = db.collection("issue_reports").doc("_counters");
+
+    const data = after;
+
+    await db.runTransaction(async (t) => {
+      const counterSnap = await t.get(counterRef);
+      const c = counterSnap.data() || {};
+      const nextMax = (c[newStatus + "Max"] || 0) + 1;
+
+      const destRef = db.collection("issue_reports").doc(newStatus).collection(email).doc(String(nextMax));
+      t.set(destRef, { ...data, status: newStatus, serial: nextMax });
+      t.delete(change.after.ref);
+
+      t.set(counterRef, {
+        [pathStatus + "Count"]: Math.max(0, (c[pathStatus + "Count"] || 1) - 1),
+        [newStatus + "Count"]: (c[newStatus + "Count"] || 0) + 1,
+        [newStatus + "Max"]: nextMax,
+      }, { merge: true });
+    });
   });
 
 // ------------------------------------------------------------------

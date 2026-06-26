@@ -5,9 +5,9 @@
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
-    "deploy": "firebase deploy --only functions",
-    "deploy:prod": "firebase deploy --project qa-genie-ai --only functions",
-    "deploy:dev": "firebase deploy --project qa-genie-ai-dev --only functions",
+    "deploy": "cp index.prod.js index.js && firebase deploy --only functions",
+    "deploy:prod": "cp index.prod.js index.js && firebase deploy --project qa-genie-ai --only functions",
+    "deploy:dev": "cp index.dev.js index.js && firebase deploy --project qa-genie-ai-dev --only functions",
     "logs": "firebase functions:log"
   },
   "engines": {

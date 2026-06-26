@@ -19,7 +19,7 @@ service cloud.firestore {
     match /issue_reports/{status}/{email}/{serial} {
       allow read, write: if false;
     }
-    match /issue_reports/_counters/{token} {
+    match /issue_reports/_counters {
       allow read, write: if false;
     }
     // Cloud-function-only collections – deny all client access
@@ -50,10 +50,6 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
     }
-    // User session (active device tracking) – only owner
-    match /userSessions/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if request.auth != null && request.auth.uid == uid;
-    }
+    // (removed: sessions now at memberData/{tier}/{uid}/_session)
   }
 }

@@ -4,10 +4,12 @@
 //
 // ☝️ SINGLE SOURCE OF TRUTH for dev vs prod environment.
 //
-// Example:
-//   flutter run                      → dev (default)
-//   flutter run  --dart-define=MODE=prod
-//   flutter build appbundle --dart-define=MODE=prod
+// Derives from --dart-define=IS_DEV (same flag that selects
+// Firebase project in lib/app_config.dart).
+//
+// Examples:
+//   flutter run  --dart-define=IS_DEV=true  → dev
+//   flutter run                              → prod (default)
 //
 // ============================================================
 
@@ -22,18 +24,18 @@ class EnvironmentAuthority {
   // COMPILE-TIME MODE
   // ============================================================
 
-  static const String _mode = String.fromEnvironment(
-    'MODE',
-    defaultValue: 'dev',
+  static const bool _isDev = bool.fromEnvironment(
+    'IS_DEV',
+    defaultValue: false,
   );
 
   // ============================================================
   // CURRENT ENVIRONMENT
   // ============================================================
 
-  static const AppEnvironment current = _mode == 'prod'
-      ? AppEnvironment.prod
-      : AppEnvironment.dev;
+  static const AppEnvironment current = _isDev
+      ? AppEnvironment.dev
+      : AppEnvironment.prod;
 
   // ============================================================
   // HELPERS

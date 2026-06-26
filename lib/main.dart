@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/app.dart';
+import 'package:qa_genie/app_config.dart';
 import 'firebase/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -13,13 +14,16 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.android);
-    await AppCheckService.initialize(isProduction: true);
+    if (AppConfig.isDev) {
+      await Firebase.initializeApp(options: _devFirebaseOptions);
+    } else {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.android);
+    }
+    await AppCheckService.initialize();
     await MobileAds.instance.initialize();
     ForensicsProvider.init(ForensicsServiceProd());
   } catch (e) {
     debugPrint("Startup critical error: $e");
-    // Still init forensics even if Firebase fails
     try { ForensicsProvider.init(ForensicsServiceProd()); } catch (_) {}
   }
 
@@ -40,3 +44,11 @@ Future<void> main() async {
     } catch (_) {}
   });
 }
+
+const FirebaseOptions _devFirebaseOptions = FirebaseOptions(
+  apiKey: 'AIzaSyClNIMloB5GvcDuxdllXlh41JSj0aW26EY',
+  appId: '1:113750340081:android:64a9e770deaaec18677add',
+  messagingSenderId: '113750340081',
+  projectId: 'qa-genie-ai-dev',
+  storageBucket: 'qa-genie-ai-dev.firebasestorage.app',
+);

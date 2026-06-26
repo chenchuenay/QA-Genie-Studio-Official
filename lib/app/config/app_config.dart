@@ -9,10 +9,8 @@
 // numeric/string constants you may want to tweak day-to-day.
 //
 // HOW TO RUN:
-//   flutter run  --dart-define=MODE=dev   (default)
-//   flutter run  --dart-define=MODE=prod  (production-like behaviour
-//                                          even in debug builds)
-//   flutter build appbundle --dart-define=MODE=prod
+//   flutter run  --dart-define=IS_DEV=true   → dev Firebase + dev features
+//   flutter run                               → prod Firebase + prod features
 // ==================================================================
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,13 +47,8 @@ class AppConfig {
   // ============================================================
   // FEATURE FLAGS & MISC
   // ============================================================
-  static bool _testProMode = false;
-  static bool get testProMode => !isProduction && _testProMode;
-  static void initTestProMode(bool value) => _testProMode = value;
   static const int maxConstraintsLength = 100;
 
-  // Dev-mode toggles (all read-only, determined by compile-time env)
-  static bool get allowDebugTools => !isProduction;
   static bool get allowMockAds => EnvironmentAuthority.allowMockAds;
 
   // ============================================================

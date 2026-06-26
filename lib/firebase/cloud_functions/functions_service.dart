@@ -341,4 +341,19 @@ class FunctionsService {
       },
     );
   }
+
+  static Future<Map<String, dynamic>> updateIssueReportStatus({
+    required String email,
+    required String serial,
+    required String newStatus,
+  }) async {
+    return call(
+      functionName: 'updateIssueReportStatus',
+      payload: {
+        'email': email,
+        'serial': serial,
+        'newStatus': newStatus,
+      },
+    );
+  }
 }

@@ -196,7 +196,7 @@ class _AboutScreenState extends State<AboutScreen> {
             ),
             const SizedBox(height: 28),
             const Text(
-              '© 2026 QA Genie · Enay Kumar. All rights reserved.',
+              '© 2026 QA Genie • Enay Kumar • All rights reserved',
               style: TextStyle(fontSize: 12, color: AppColors.textHint),
             ),
             const SizedBox(height: 32),

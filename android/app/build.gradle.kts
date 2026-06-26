@@ -28,23 +28,9 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 17
+        versionCode = 18
         multiDexEnabled = true
-    }
-
-    flavorDimensions.add("mode")
-    productFlavors {
-        create("dev") {
-            dimension = "mode"
-            applicationId = "com.enaykumar.qagenie_dev"
-            versionName = "${flutter.versionName}-dev"
-            manifestPlaceholders["appName"] = "QAG Dev"
-        }
-        create("prod") {
-            dimension = "mode"
-            versionName = flutter.versionName
-            manifestPlaceholders["appName"] = "QA Genie"
-        }
+        manifestPlaceholders["appName"] = "QA Genie"
     }
 
     compileOptions {
@@ -79,44 +65,19 @@ android {
     }
 
     tasks.whenTaskAdded {
-        if (name == "extractDeepLinksProdRelease") {
-            mustRunAfter("processProdReleaseGoogleServices")
-        }
-        if (name == "extractDeepLinksDevRelease") {
-            mustRunAfter("processDevReleaseGoogleServices")
-        }
-    }
-
-    tasks.whenTaskAdded {
-        if (name == "bundleProdRelease") {
+        if (name == "bundleRelease") {
             doLast {
-                val dir = file("${project.buildDir}/outputs/bundle/prodRelease")
-                val src = dir.resolve("app-prod-release.aab")
+                val dir = file("${project.buildDir}/outputs/bundle/release")
+                val src = dir.resolve("app-release.aab")
                 val dst = dir.resolve("QA-Genie_release-v${flutter.versionName}.aab")
                 if (src.exists()) { src.renameTo(dst) }
             }
         }
-        if (name == "assembleProdRelease") {
+        if (name == "assembleRelease") {
             doLast {
                 val dir = file("${project.buildDir}/outputs/flutter-apk")
-                val src = dir.resolve("app-prod-release.apk")
+                val src = dir.resolve("app-release.apk")
                 val dst = dir.resolve("QA-Genie_release-v${flutter.versionName}.apk")
-                if (src.exists()) { src.renameTo(dst) }
-            }
-        }
-        if (name == "bundleDevRelease") {
-            doLast {
-                val dir = file("${project.buildDir}/outputs/bundle/devRelease")
-                val src = dir.resolve("app-dev-release.aab")
-                val dst = dir.resolve("QA-Genie_dev-v${flutter.versionName}.aab")
-                if (src.exists()) { src.renameTo(dst) }
-            }
-        }
-        if (name == "assembleDevRelease") {
-            doLast {
-                val dir = file("${project.buildDir}/outputs/flutter-apk")
-                val src = dir.resolve("app-dev-release.apk")
-                val dst = dir.resolve("QA-Genie_dev-v${flutter.versionName}.apk")
                 if (src.exists()) { src.renameTo(dst) }
             }
         }
@@ -131,8 +92,4 @@ dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
     implementation("com.unity3d.ads:unity-ads:4.18.0")
     implementation("com.google.ads.mediation:unity:4.18.0.0")
-    // Allow app module to reference FirebaseAppCheck classes from the
-    // firebase_app_check Flutter plugin's transitive dependencies.
-    implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
-    implementation("com.google.firebase:firebase-appcheck")
 }

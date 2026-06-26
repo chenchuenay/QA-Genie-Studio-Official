@@ -124,10 +124,7 @@ class _HomeScreenState extends State<HomeScreen>
           resetText = ' • Resets in${h > 0 ? ' ${h}h ${m}m' : ' ${m}m'}';
         }
       }
-      final suffix = AppConfig.isProduction
-          ? ''
-          : ' Use Test mode to reset limits.';
-      return 'Daily limit reached${resetText.isNotEmpty ? resetText : ''}.$suffix';
+      return 'Daily limit reached${resetText.isNotEmpty ? resetText : ''}.';
     }
   }
 

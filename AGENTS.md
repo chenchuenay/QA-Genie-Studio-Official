@@ -11,10 +11,10 @@
 
 ## Run Commands
 
-- `run prod` = `flutter run --flavor prod -t lib/main.dart --dart-define=MODE=prod`
-- `run dev` = `flutter run --flavor dev -t lib/dev_main.dart --dart-define=MODE=dev`
-- Build APK dev release = `flutter build apk --flavor dev -t lib/dev_main.dart --dart-define=MODE=dev --release`
-- Build AAB prod release = `flutter build appbundle --flavor prod -t lib/main.dart --dart-define=MODE=prod --release`
+- `run dev` = `flutter run --dart-define=IS_DEV=true`
+- `run prod` = `flutter run`
+- Build APK dev = `flutter build apk --release --dart-define=IS_DEV=true --obfuscate --split-debug-info=build/debug-info`
+- Build AAB prod = `flutter build appbundle --release --obfuscate --split-debug-info=build/debug-info`
 - Deploy functions prod = `cd functions && npm run deploy:prod`
 - Deploy functions dev = `cd functions && npm run deploy:dev`
 
@@ -49,7 +49,8 @@
 ├────────────────────────┼─────────────────────────────────┤
 │  Firebase Cloud Functions (Node 22)                      │
 │  ┌─────────────────────┼──────────────────────────────┐  │
-│  │  26 functions in functions/index.js                 │  │
+│  │  Two files: index.prod.js / index.dev.js              │  │
+│  │  Selected at deploy via `cp *.js index.js`           │  │
 │  │  Key groups: Auth(3), Generation(2), Quota(5),     │  │
 │  │  Suite sync(3), Account(3), Analytics(5), Misc(5)  │  │
 │  └──────┬──────────────┼──────────────┬───────────────┘  │
@@ -202,7 +203,7 @@ Exactly **one ad must always be preloaded** so ads appear instantly when needed.
 
 - Quota constants in **two places** (must keep in sync):
   - `lib/app/config/app_config.dart` (client)
-  - `functions/index.js` (server, lines 13-23)
+  - `functions/index.prod.js` / `index.dev.js` (server, lines 13-23)
 - Guest quotas tracked by `deviceUsage/{deviceId}` (survives account deletion).
 - Member quotas tracked by `usage/{uid}`.
 - Ad reward tokens stored in `usage/{uid}/usedRewards/{token}`.
@@ -275,7 +276,7 @@ All 4 policies must be **identical** in-app (`legal_documents.dart`) and on webs
 | `lib/features/monetization/ads/ad_manager.dart`            | Ad preloading + showing rewarded ads                    |
 | `lib/features/monetization/ads/ad_units.dart`              | Test (active) + real (commented) ad unit IDs            |
 | `lib/features/monetization/logic/usage_manager.dart`       | Quota checks, tier resolution, dashboard caching        |
-| `lib/app/config/app_config.dart`                           | Client-side quota constants, feature flags              |
+| `lib/app_config.dart`                                      | IS_DEV compile-time switch (--dart-define)             |
 | `lib/firebase/cloud_functions/functions_service.dart`      | All 18+ cloud function Dart bindings                    |
 | `lib/shared/dialogs/export_success_dialog.dart`            | Star rating + feedback trigger                          |
 | `lib/shared/dialogs/feedback_dialog.dart`                  | Guest-locked feedback prompt                            |
@@ -285,7 +286,9 @@ All 4 policies must be **identical** in-app (`legal_documents.dart`) and on webs
 | `lib/engine/orchestration/pipeline_orchestrator.dart`      | AI → Parse → Repair → Validate → Fallback → Finalize    |
 | `lib/engine/orchestrator/deterministic_engine.dart`        | Local fallback generator (no AI)                        |
 | `website/*.html`                                           | All policy pages + delete-account.html                  |
-| `functions/index.js`                                       | All 25 cloud functions                                  |
+| `functions/index.js`                                       | Generated — copied from *.prod.js or *.dev.js at deploy |
+| `functions/index.prod.js`                                  | Production cloud functions (deployed to qa-genie-ai)    |
+| `functions/index.dev.js`                                   | Dev cloud functions (deployed to qa-genie-ai-dev)       |
 | `firestore.rules`                                          | Security rules for all collections                      |
 | `firestore.indexes.json`                                   | Composite indexes                                       |
 

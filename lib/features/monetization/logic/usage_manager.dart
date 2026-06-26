@@ -1,48 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:qa_genie/app/config/app_config.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
 
 class UsageManager {
-  static const _proKey = 'is_pro';
   static Map<String, dynamic>? _dashboardCache;
   static DateTime? _dashboardCacheTime;
   static String? _dashboardCacheUid;
   static const Duration _cacheDuration = Duration(seconds: 10);
 
-  static Future<SharedPreferences> _prefs() async => SharedPreferences.getInstance();
-
   static Future<bool> isPro() async {
-    // Dev override via test mode screen
-    if (AppConfig.testProMode) return true;
-
-    // Read from Firestore (server-authoritative) via dashboard
     final dashboard = await _getDashboard();
-    if (dashboard['isPro'] == true) return true;
-
-    // Fallback: SharedPreferences (dev mode only; production is server-authoritative)
-    if (!AppConfig.isProduction) {
-      final prefs = await _prefs();
-      return prefs.getBool(_proKey) ?? false;
-    }
-    return false;
-  }
-
-  static Future<void> setPro(bool value) async {
-    if (!AppConfig.allowDebugTools) {
-      if (value) {
-        debugPrint('⚠️ UsageManager.setPro: blocked in production; grant via Firestore console');
-      }
-      return;
-    }
-    final prefs = await _prefs();
-    await prefs.setBool(_proKey, value);
-    try {
-      await FunctionsService.call(functionName: 'setMemberPro', payload: {'isPro': value});
-    } catch (e) {
-      debugPrint('UsageManager.setPro error: $e');
-    }
+    return dashboard['isPro'] == true;
   }
 
   static int _clampRemaining(num limit, num used) =>
@@ -93,15 +62,6 @@ class UsageManager {
       await FunctionsService.trackProInterest(source);
     } catch (e) {
       debugPrint('UsageManager.trackProInterest error: $e');
-    }
-  }
-
-  static Future<void> resetLimits() async {
-    if (!AppConfig.allowDebugTools) return;
-    try {
-      await FunctionsService.call(functionName: 'resetDailyLimits');
-    } catch (e) {
-      debugPrint('UsageManager.resetLimits error: $e');
     }
   }
 
