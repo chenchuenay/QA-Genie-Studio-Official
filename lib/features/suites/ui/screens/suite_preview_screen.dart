@@ -144,7 +144,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     }
   }
 
-  Future<void> _export(String type, String? adToken) async {
+  Future<void> _export(String type, String? adToken, {bool hideEmptyColumns = false}) async {
     if (_isExporting) return;
     _isExporting = true;
     try {
@@ -155,6 +155,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         moduleName: widget.moduleName,
         featureName: widget.feature,
         adToken: adToken,
+        hideEmptyColumns: hideEmptyColumns,
       );
       if (!mounted) return;
       AccountScreen.markForRefresh();
@@ -214,14 +215,14 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
             setState(() {});
           }
         },
-        onExport: (type, updated, adToken) async {
+        onExport: (type, updated, adToken, {hideEmptyColumns = false}) async {
           widget.session.testCases = List.from(updated);
           await _saveUseCase.saveSuite(
             suiteId: widget.suiteId,
             cases: widget.session.testCases,
           );
           // Trigger the export
-          await _export(type, adToken);
+          await _export(type, adToken, hideEmptyColumns: hideEmptyColumns);
           // Finally pop the bottom sheet
           if (mounted) Navigator.of(context).pop();
         },

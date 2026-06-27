@@ -12,7 +12,7 @@ void main() {
           moduleName: 'M',
           featureName: 'F',
           onSave: (_) {},
-          onShare: (_, __) async {},
+          onShare: (_, __, {bool hideEmptyColumns = false}) async {},
         )),
         child: const Text('show'),
       )),

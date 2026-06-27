@@ -69,7 +69,7 @@ class EnvironmentAuthority {
 
   static bool get requireForensicTracing => isProd;
 
-  static bool get enforceServerQuota => isProd;
+  static bool get enforceServerQuota => true;
 
   // ============================================================
   // RATE LIMITING
@@ -88,7 +88,7 @@ class EnvironmentAuthority {
   // TOKEN LIMITS
   // ============================================================
 
-  static int get maxPromptCharacters => isProd ? 12000 : 20000;
+  static int get maxPromptCharacters => 12000;
 
   static int get maxConstraintsLength => 100;
 

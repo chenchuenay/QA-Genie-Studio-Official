@@ -190,12 +190,10 @@ class PipelineOrchestrator {
     }
 
     if (rejectedCount > 0) {
-      unawaited(FunctionsService.trackValidatorRejected(rejectedCount));
+      unawaited(FunctionsService.recordValidatorRejected(rejectedCount));
     }
 
-    if (acceptedAiCases.isEmpty && aiResult.hasTransportError) {
-      unawaited(FunctionsService.trackAiFailure());
-    }
+    // aiFailures tracked server-side in generate() catch block
 
     final outcomeType = _responseClassifier.classify(
       rawResponse: aiResult.rawResponse,
@@ -336,7 +334,7 @@ class PipelineOrchestrator {
           : const <String, dynamic>{};
       final raw = Map<String, dynamic>.from(parsedCases[i]);
       final category = _normalizeCategory(
-        _firstText(plan['category'], raw['categoryLock'], raw['category']),
+        _firstText(raw['categoryLock'], raw['category'], plan['category']),
       );
       raw['id'] = _firstText(raw['id'], _buildAiCaseId(request.module, i + 1));
       raw['module'] = _firstText(raw['module'], request.module);

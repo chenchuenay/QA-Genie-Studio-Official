@@ -539,7 +539,7 @@ class _AuthDialogState extends State<AuthDialog> {
                       style: TextStyle(fontSize: 11),
                       children: [
                         TextSpan(
-                          text: 'By continuing, you agree to our ',
+                          text: 'By continuing, you agree to the ',
                           style: TextStyle(color: AppColors.textHint),
                         ),
                         TextSpan(

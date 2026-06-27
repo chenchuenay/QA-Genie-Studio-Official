@@ -53,13 +53,13 @@ class CoveragePlanner {
   }
 
   String? _parseConstraintIntent(String c) {
-    // Exact overrides
-    if (c.contains('only security') || c == 'security') return 'security';
-    if (c.contains('only validation') || c == 'validation') return 'validation';
-    if (c.contains('only boundary') || c == 'boundary') return 'boundary';
-    if (c.contains('only session') || c == 'session') return 'session';
-    if (c.contains('only positive') || c == 'positive') return 'positive';
-    if (c.contains('only negative') || c == 'negative') return 'negative';
+    // Exact overrides — only "only X" triggers hard override
+    if (c.contains('only security')) return 'security';
+    if (c.contains('only validation')) return 'validation';
+    if (c.contains('only boundary')) return 'boundary';
+    if (c.contains('only session')) return 'session';
+    if (c.contains('only positive')) return 'positive';
+    if (c.contains('only negative')) return 'negative';
     if (c.contains('oauth') || c.contains('social login')) return 'oauth';
     if (c.contains('expiry') || c.contains('concurrent'))
       return 'session_expiry';
@@ -121,107 +121,31 @@ class CoveragePlanner {
   }
 
   CoverageRequest _defaultPlan() {
-    final securityFocused = constraints.toLowerCase().contains('security');
-    final negativeFocused = constraints.toLowerCase().contains('negative');
-    final sessionFocused = constraints.toLowerCase().contains('session');
-    final validationFocused = constraints.toLowerCase().contains('validation');
-    final boundaryFocused = constraints.toLowerCase().contains('boundary');
+    final nonHappyCount = (totalCount * 30 + 50) ~/ 100;
+    final happyCount = totalCount - nonHappyCount;
+    final categoryCounts = <String, int>{'positive': happyCount};
 
-    Map<String, int> categoryCounts = {};
-
-    // Constraint overrides (if only one type is requested, honor it)
-    if (securityFocused &&
-        !negativeFocused &&
-        !sessionFocused &&
-        !validationFocused &&
-        !boundaryFocused) {
-      categoryCounts = {'security': totalCount};
-    } else if (negativeFocused &&
-        !securityFocused &&
-        !sessionFocused &&
-        !validationFocused &&
-        !boundaryFocused) {
-      categoryCounts = {'negative': totalCount};
-    } else if (validationFocused &&
-        !securityFocused &&
-        !negativeFocused &&
-        !sessionFocused &&
-        !boundaryFocused) {
-      categoryCounts = {'validation': totalCount};
-    } else if (boundaryFocused &&
-        !securityFocused &&
-        !negativeFocused &&
-        !sessionFocused &&
-        !validationFocused) {
-      categoryCounts = {'boundary': totalCount};
-    } else if (sessionFocused &&
-        !securityFocused &&
-        !negativeFocused &&
-        !validationFocused &&
-        !boundaryFocused) {
-      categoryCounts = {'session': totalCount};
-    } else {
-      // Default distribution based on mode (Core vs Pro)
-      // AI-like diversity: positive + negative + boundary + validation + security + session
-      if (mode == GenerationMode.core) {
-        if (totalCount == 10) {
-          categoryCounts = {
-            'positive': 4, 'negative': 2, 'boundary': 1,
-            'validation': 1, 'security': 1, 'session': 1,
-          };
-        } else {
-          final base = totalCount ~/ 6;
-          final rem = totalCount % 6;
-          categoryCounts = {
-            'positive': base + rem, 'negative': base, 'boundary': base,
-            'validation': base, 'security': base, 'session': base,
-          };
-        }
-        if (constraints.toLowerCase().contains('security')) {
-          categoryCounts['security'] = (categoryCounts['security'] ?? 0) + 1;
-        }
-      } else {
-        if (totalCount == 20) {
-          categoryCounts = {
-            'positive': 8, 'negative': 4, 'boundary': 2,
-            'validation': 2, 'security': 2, 'session': 2,
-          };
-        } else {
-          final base = totalCount ~/ 6;
-          final rem = totalCount % 6;
-          categoryCounts = {
-            'positive': base + rem, 'negative': base, 'boundary': base,
-            'validation': base, 'security': base, 'session': base,
-          };
-        }
+    if (nonHappyCount > 0) {
+      const cats = ['negative', 'boundary', 'validation', 'security', 'session'];
+      final base = nonHappyCount ~/ 5;
+      final rem = nonHappyCount % 5;
+      for (int i = 0; i < cats.length; i++) {
+        categoryCounts[cats[i]] = base + (i < rem ? 1 : 0);
       }
     }
 
-    // Remove any zero counts (optional but cleaner)
-    categoryCounts.removeWhere((key, value) => value <= 0);
+    categoryCounts.removeWhere((key, v) => v <= 0);
 
-    // Ensure total matches totalCount (adjust positive up/down if necessary)
-    int sum = categoryCounts.values.reduce((a, b) => a + b);
+    final sum = categoryCounts.values.reduce((a, b) => a + b);
     if (sum != totalCount) {
-      int diff = totalCount - sum;
-      categoryCounts['positive'] = (categoryCounts['positive'] ?? 0) + diff;
-      // Clamp positive to non-negative
-      if (categoryCounts['positive']! < 0) {
-        categoryCounts['positive'] = 0;
-        // If still not matching, fallback to all positive (should not happen)
-        if (categoryCounts.values.reduce((a, b) => a + b) != totalCount) {
-          categoryCounts = {'positive': totalCount};
-        }
-      }
+      categoryCounts['positive'] = (categoryCounts['positive'] ?? 0) + (totalCount - sum);
     }
-
-    // Final cleanup: remove zeros again after adjustment
-    categoryCounts.removeWhere((key, value) => value <= 0);
+    categoryCounts.removeWhere((key, v) => v <= 0);
 
     return CoverageRequest(
       totalCount: totalCount,
       categoryCounts: categoryCounts,
-      riskFocus: securityFocused ? ['HIGH'] : [],
+      riskFocus: [],
     );
   }
 }

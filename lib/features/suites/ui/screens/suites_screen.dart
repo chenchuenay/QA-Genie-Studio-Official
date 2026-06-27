@@ -479,9 +479,11 @@ class SuitesScreenState extends State<SuitesScreen> {
 
   String _fmtDate(String? iso) {
     if (iso == null) return '';
-    final d = DateTime.tryParse(iso);
+    // SQLite CURRENT_TIMESTAMP is UTC but stored without timezone marker
+    final d = DateTime.tryParse('${iso}Z');
     if (d == null) return '';
-    return '${d.day}/${d.month}/${d.year}';
+    final local = d.toLocal();
+    return '${local.day}/${local.month}/${local.year}';
   }
 }
 

@@ -47,7 +47,7 @@ class UsageManager {
 
   static Future<void> incrementExport({bool summary = false, String target = 'unknown', String extension = ''}) async {
     try {
-      await FunctionsService.call(functionName: 'trackExport', payload: {'summary': summary, 'target': target, 'extension': extension});
+      await FunctionsService.recordExportMetrics(summary: summary, target: target, extension: extension);
       _invalidateCache();
     } catch (e) {
       debugPrint('UsageManager.incrementExport error: $e');
@@ -59,7 +59,7 @@ class UsageManager {
 
   static Future<void> trackProInterest(String source) async {
     try {
-      await FunctionsService.trackProInterest(source);
+      await FunctionsService.recordProInterest(source);
     } catch (e) {
       debugPrint('UsageManager.trackProInterest error: $e');
     }

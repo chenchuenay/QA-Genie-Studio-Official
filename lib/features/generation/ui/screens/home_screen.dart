@@ -527,7 +527,7 @@ class _HomeScreenState extends State<HomeScreen>
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 title: const Text('Ad Unavailable', style: TextStyle(color: Colors.white)),
                 content: const Text(
-                  'We couldn\'t load an ad. Please check for ad blockers or network issues and try again.',
+                  'Couldn\'t load an ad. Please check for ad blockers or network issues and try again.',
                   style: TextStyle(color: Colors.white70),
                 ),
                 actions: [
@@ -571,7 +571,7 @@ class _HomeScreenState extends State<HomeScreen>
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: const Text('Input Guidelines', style: TextStyle(color: Colors.white)),
               content: const Text(
-                'Please revise your input. Some content doesn\'t meet our guidelines.',
+                'Please revise your input. Some content doesn\'t meet the guidelines.',
                 style: TextStyle(color: AppColors.textSecondary),
               ),
               actions: [
@@ -604,6 +604,8 @@ class _HomeScreenState extends State<HomeScreen>
 
       debugPrint('🚀 _generate: Calling generateUseCase (AI)');
       GenerationSession session;
+      int? suiteId;
+      bool dialogPopped = false;
       try {
         session = await _generateUseCase.execute(
           dto: GenerationDto(
@@ -619,89 +621,88 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           onStageChange: (stage) => stageController.add(stage),
         );
+
+        debugPrint('🚀 _generate: AI succeeded, saving suite locally');
+        suiteId = await _saveSuiteUseCase.createSuite(
+          module: module,
+          feature: feature,
+          platform: platform,
+        );
+        await _saveSuiteUseCase.saveSuite(
+          suiteId: suiteId,
+          cases: session.testCases,
+        );
+
+        // Pop dialog BEFORE pushing SuitePreviewScreen.
+        // Both are on the same root navigator — if we push first,
+        // the finally block's pop() would pop SuitePreviewScreen instead.
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+          dialogPopped = true;
+          if (session.testCases.isNotEmpty) {
+            debugPrint('🚀 _generate: Navigating to SuitePreviewScreen');
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SuitePreviewScreen(
+                  session: session,
+                  moduleName: module,
+                  feature: feature,
+                  platform: platform,
+                  suiteId: suiteId!,
+                ),
+              ),
+            );
+          } else {
+            debugPrint('⚠️ _generate: No test cases returned');
+          }
+        }
       } finally {
         await stageController.close();
-        if (mounted) Navigator.of(context, rootNavigator: true).pop();
-      }
-
-      debugPrint(
-        '🚀 _generate: AI Succeeded, Saving suite. Cases: ${session.testCases.length}',
-      );
-      // Removed SnackBar
-
-      debugPrint('🚀 _generate: Calling createSuite');
-      final suiteId = await _saveSuiteUseCase.createSuite(
-        module: module,
-        feature: feature,
-        platform: platform,
-      );
-      debugPrint('🚀 _generate: Suite created: $suiteId, calling saveSuite');
-      await _saveSuiteUseCase.saveSuite(
-        suiteId: suiteId,
-        cases: session.testCases,
-      );
-      debugPrint('🚀 _generate: Suite saved');
-
-      // Push to cloud for members
-      if (!AuthService.isGuest) {
-        try {
-          await CloudSyncService.pushPendingSuites();
-          debugPrint('🚀 _generate: cloud push completed');
-        } catch (e) {
-          debugPrint('❌ _generate: cloud push failed: $e');
+        // Only pop if the dialog wasn't already dismissed above
+        if (mounted && !dialogPopped) {
+          Navigator.of(context, rootNavigator: true).pop();
         }
       }
 
-      debugPrint('🚀 _generate: Invalidating usage cache');
+      if (session.testCases.isEmpty && mounted && context.mounted) {
+        showBlurredDialog(
+          context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text(
+              'No Cases Generated',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: const Text(
+              'Generation produced no cases. Try a different input.',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // Background cloud sync + cache refresh (non-blocking)
+      if (!AuthService.isGuest) {
+        unawaited(CloudSyncService.pushPendingSuites().then((_) {
+          debugPrint('🚀 _generate: cloud push completed');
+        }).catchError((e) {
+          debugPrint('❌ _generate: cloud push failed: $e');
+        }));
+      }
+
       UsageManager.invalidateCache();
-      // Optimistic local decrement so hint updates immediately
       if (!isPro && adToken != null) {
         setState(() { _rewardedRemaining = (_rewardedRemaining - 1).clamp(0, 999); });
       }
-      await _refreshStatus();
+      unawaited(_refreshStatus());
       AccountScreen.markForRefresh();
-
-      if (mounted) {
-        if (session.testCases.isNotEmpty) {
-          debugPrint('🚀 _generate: Navigating to SuitePreviewScreen');
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SuitePreviewScreen(
-                session: session,
-                moduleName: module,
-                feature: feature,
-                platform: platform,
-                suiteId: suiteId,
-              ),
-            ),
-          );
-        } else {
-          debugPrint('⚠️ _generate: No test cases returned');
-          if (context.mounted) {
-            showBlurredDialog(
-              context,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: AppColors.surface,
-                title: const Text(
-                  'No Cases Generated',
-                  style: TextStyle(color: Colors.white),
-                ),
-                content: const Text(
-                  'Generation produced no cases. Try a different input.',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('OK', style: TextStyle(color: AppColors.accent)),
-                  ),
-                ],
-              ),
-            );
-          }
-        }
-      }
     } on QuotaExceededException catch (e) {
       debugPrint('❌ _generate: Quota exceeded: $e');
       if (mounted) _showLimitReachedDialog(e);

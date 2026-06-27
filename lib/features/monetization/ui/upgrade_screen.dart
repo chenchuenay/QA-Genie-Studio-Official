@@ -271,6 +271,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                 ),
               );
               unawaited(UsageManager.trackProInterest('upgrade_screen_cta'));
+
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accent,

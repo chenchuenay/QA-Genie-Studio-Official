@@ -114,6 +114,15 @@ void main() {
       expect(result.errors.any((e) => e.contains('unsafe')), isTrue);
     });
 
+    test('does not flag benign hyphenated text', () {
+      final result = validator.validate([
+        _makeCase(title: 'end-to-end encryption test'),
+        _makeCase(title: 'well-tested, well-documented feature'),
+      ]);
+      expect(result.isSuccessful, isTrue);
+      expect(result.errors, isEmpty);
+    });
+
     test('collects multiple errors', () {
       final result = validator.validate([
         _makeCase(

@@ -194,28 +194,28 @@ class FunctionsService {
     return '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}';
   }
 
-  static Future<void> trackExport({
+  static Future<void> recordExportMetrics({
     required bool summary,
     required String target,
     required String extension,
   }) async {
     await call(
-      functionName: 'trackExport',
+      functionName: 'recordExportMetrics',
       payload: {'summary': summary, 'target': target, 'extension': extension},
     );
   }
 
-  static Future<void> trackProInterest(String source) async {
-    await call(functionName: 'trackProInterest', payload: {'source': source});
+  static Future<void> recordProInterest(String source) async {
+    await call(functionName: 'recordProInterest', payload: {'source': source});
   }
 
-  static Future<void> trackAiFailure() async {
-    await call(functionName: 'trackAiFailure', payload: {});
+  static Future<void> recordRating(int rating) async {
+    await call(functionName: 'recordRating', payload: {'rating': rating});
   }
 
-  static Future<void> trackValidatorRejected(int rejectedCount) async {
+  static Future<void> recordValidatorRejected(int rejectedCount) async {
     await call(
-      functionName: 'trackValidatorRejected',
+      functionName: 'recordValidatorRejected',
       payload: {'rejectedCount': rejectedCount},
     );
   }

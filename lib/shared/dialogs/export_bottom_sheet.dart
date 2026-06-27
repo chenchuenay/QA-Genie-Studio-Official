@@ -13,8 +13,9 @@ class ExportBottomSheet extends StatefulWidget {
   final Function(
     String type,
     List<FinalizedTestCase> updatedCases,
-    String? adToken,
-  )
+    String? adToken, {
+    bool hideEmptyColumns,
+  })
   onExport;
 
   const ExportBottomSheet({
@@ -43,9 +44,9 @@ class _ExportBottomSheetState extends State<ExportBottomSheet> {
           widget.onSave(updated);
           // Do NOT close the dialog here; the dialog itself will close after calling onSave
         },
-        onShare: (updated, adToken) async {
+        onShare: (updated, adToken, {hideEmptyColumns = false}) async {
           // Pass the share request to the parent without popping yet
-          await widget.onExport(type, updated, adToken);
+          await widget.onExport(type, updated, adToken, hideEmptyColumns: hideEmptyColumns);
         },
       ),
     );

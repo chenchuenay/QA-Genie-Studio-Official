@@ -24,18 +24,28 @@ const EXPORT_LIMIT_PER_DAY = 50; // 50 exports per day for all non-pro members
 const COOLDOWN_HOURS = 24; // 24h cooldown after Google account deletion
 
 // ------------------------------------------------------------------
-// APP CHECK — conditionally disable enforcement in dev
+// APP CHECK — enforce in prod, allow debug tokens in dev
 // ------------------------------------------------------------------
 const IS_DEV_PROJECT = process.env.GCLOUD_PROJECT === 'qa-genie-ai-dev';
 
-function onCall(handler, options = {}) {
-  if (IS_DEV_PROJECT) {
-    return functions.runWith({ ...options, enforceAppCheck: false }).https.onCall(handler);
-  }
-  if (Object.keys(options).length > 0) {
-    return functions.runWith(options).https.onCall(handler);
-  }
-  return functions.https.onCall(handler);
+function onCall(handler, runWithOpts = {}) {
+  const fn = Object.keys(runWithOpts).length > 0
+    ? functions.runWith(runWithOpts).https.onCall
+    : functions.https.onCall;
+  const wrappedHandler = async (data, context) => {
+    // 1st gen onCall doesn't support enforceAppCheck option,
+    // so we enforce it manually here
+    if (!IS_DEV_PROJECT) {
+      if (!context.app || !context.app.appId) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "App Check verification required"
+        );
+      }
+    }
+    return handler(data, context);
+  };
+  return fn(wrappedHandler);
 }
 
 function today() {
@@ -200,15 +210,15 @@ exports.registerSession = onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// HELPER: Get or create registry counter (total members+guests ever)
+// HELPER: Get or create registry counter (total users ever)
 // ------------------------------------------------------------------
 async function getNextRegistryNumber() {
-  const globalRef = db.collection("analytics").doc("global");
+  const counterRef = db.collection("counters").doc("registry");
   const result = await db.runTransaction(async (t) => {
-    const doc = await t.get(globalRef);
-    let counter = (doc.exists && doc.data()?.registryCounter) || 0;
+    const doc = await t.get(counterRef);
+    let counter = doc.exists ? (doc.data().value || 0) : 0;
     counter++;
-    t.set(globalRef, { registryCounter: counter }, { merge: true });
+    t.set(counterRef, { value: counter }, { merge: true });
     return counter;
   });
   return result;
@@ -219,6 +229,16 @@ function getResetISO() {
   const reset = new Date();
   reset.setUTCHours(24, 0, 0, 0);
   return reset.toISOString();
+}
+
+// ------------------------------------------------------------------
+// HELPER: Usage doc path — usage/{email} for members, usage/{uid} for guests
+// ------------------------------------------------------------------
+function usageRef(context) {
+  const email = context.auth?.token?.email;
+  const uid = context.auth?.uid;
+  if (email) return { ref: db.collection("usage").doc(email), uid, email };
+  return { ref: db.collection("usage").doc(uid), uid, email: null };
 }
 
 // --------------------------------------------------------------
@@ -292,8 +312,7 @@ exports.generate = onCall(async (data, context) => {
     } catch (_) {}
 
     try {
-      const uRef = db.collection("usage").doc(uid);
-      const gRef = db.collection("analytics").doc("global");
+      const { ref: uRef, email: memberEmail } = usageRef(context);
       const reqRef = db.collection("processed_requests").doc(requestId);
       const memberProfileRef = memberProfileEmail
         ? db.collection("memberProfiles").doc(memberProfileEmail)
@@ -344,7 +363,7 @@ exports.generate = onCall(async (data, context) => {
 
         // Handle rewardToken (new flow): create + consume atomically
         if (rewardToken) {
-          const tokenRef = db.collection("usage").doc(uid).collection("usedRewards").doc(rewardToken);
+          const tokenRef = uRef.collection("usedRewards").doc(rewardToken);
           const tokenSnap = await t.get(tokenRef);
           if (tokenSnap.exists) throw new Error("AD_TOKEN_USED");
           t.set(tokenRef, {
@@ -355,7 +374,7 @@ exports.generate = onCall(async (data, context) => {
 
         // Handle adToken (legacy flow): verify + consume atomically
         if (adToken) {
-          const tokenRef = db.collection("usage").doc(uid).collection("usedRewards").doc(adToken);
+          const tokenRef = uRef.collection("usedRewards").doc(adToken);
           const tokenSnap = await t.get(tokenRef);
           if (!tokenSnap.exists) throw new Error("INVALID_AD_TOKEN");
           const tokenData = tokenSnap.data();
@@ -417,10 +436,10 @@ exports.generate = onCall(async (data, context) => {
 
         // Consume ad token(s)
         if (rewardToken) {
-          t.delete(db.collection("usage").doc(uid).collection("usedRewards").doc(rewardToken));
+          t.delete(uRef.collection("usedRewards").doc(rewardToken));
         }
         if (adToken) {
-          t.delete(db.collection("usage").doc(uid).collection("usedRewards").doc(adToken));
+          t.delete(uRef.collection("usedRewards").doc(adToken));
         }
 
         // Increment counters
@@ -433,11 +452,20 @@ exports.generate = onCall(async (data, context) => {
           metrics.lifetimeGeneratedCases =
             (metrics.lifetimeGeneratedCases || 0) + caseCount;
           metrics.lastReset = nowStr;
+          const prevGen = metrics.generations || {};
           t.set(uRef, {
             uid,
             type: "member",
             metrics: {
               ...metrics,
+              generations: {
+                total: (prevGen.total || 0) + 1,
+                totalCases: (prevGen.totalCases || 0) + caseCount,
+                coreCases: isPro ? (prevGen.coreCases || 0) : (prevGen.coreCases || 0) + caseCount,
+                proCases: isPro ? (prevGen.proCases || 0) + caseCount : (prevGen.proCases || 0),
+                aiFailures: prevGen.aiFailures || 0,
+                validatorRejections: prevGen.validatorRejections || 0,
+              },
               exportCount: uDoc.data()?.metrics?.exportCount ?? 0,
               updateDismissals: uDoc.data()?.metrics?.updateDismissals ?? 0,
             },
@@ -461,11 +489,20 @@ exports.generate = onCall(async (data, context) => {
           guestMetrics.lifetimeGeneratedCases = lifetimeCases + caseCount;
           guestMetrics.rewardedGenCount = devData.rewardedGenCount;
           guestMetrics.lastReset = nowStr;
+          const guestPrevGen = guestMetrics.generations || {};
           t.set(uRef, {
             uid,
             type: "guest",
             metrics: {
               ...guestMetrics,
+              generations: {
+                total: (guestPrevGen.total || 0) + 1,
+                totalCases: (guestPrevGen.totalCases || 0) + caseCount,
+                coreCases: (guestPrevGen.coreCases || 0) + caseCount,
+                proCases: guestPrevGen.proCases || 0,
+                aiFailures: guestPrevGen.aiFailures || 0,
+                validatorRejections: guestPrevGen.validatorRejections || 0,
+              },
               exportCount: uDoc.data()?.metrics?.exportCount ?? 0,
               updateDismissals: uDoc.data()?.metrics?.updateDismissals ?? 0,
             },
@@ -493,13 +530,6 @@ exports.generate = onCall(async (data, context) => {
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
           // No response field — never store test case content per data policy
         });
-        t.set(gRef, {
-          totalGenerations: admin.firestore.FieldValue.increment(1),
-          totalTestCaseGenerated:
-            admin.firestore.FieldValue.increment(caseCount),
-          [isPro ? "proGeneratedCases" : "coreGeneratedCases"]:
-            admin.firestore.FieldValue.increment(caseCount),
-        }, { merge: true });
         return {
           isPro,
           caseCount,
@@ -524,36 +554,36 @@ exports.generate = onCall(async (data, context) => {
           err.message,
         )
       ) {
-        db.collection("analytics")
-          .doc("global")
-          .update({ totalAiFailures: admin.firestore.FieldValue.increment(1) })
-          .catch(() => {});
+        const { ref: failRef } = usageRef(context);
+        failRef.set({
+          metrics: { generations: { aiFailures: admin.firestore.FieldValue.increment(1) } },
+        }, { merge: true }).catch(() => {});
       }
       return { success: false, error: { code: err.message } };
     }
 }, { secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60 });
 
 // ------------------------------------------------------------------
-// EXPORT TRACKING (respects core daily export limit)
+// RECORD EXPORT METRICS (per-user, no analytics/global write)
 // ------------------------------------------------------------------
-exports.trackExport = onCall(async (data, context) => {
+exports.recordExportMetrics = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
-  const uid = context.auth.uid;
-  if (!checkRateLimit(`trackExport_${uid}`, 10)) {
+  if (!checkRateLimit(`recordExport_${context.auth.uid}`, 10)) {
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
   const { summary, target, extension, exportType } = data;
   const type = exportType || target || (summary ? "summary" : "unknown");
   const ext = extension || (target === "pdf" ? "pdf" : target);
   const nowStr = today();
+  const { ref: uRef, uid } = usageRef(context);
 
   const profile = await _getMemberProfileByUid(uid);
   const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
 
   if (!isPro) {
     // Non-pro (core + guest): check daily export limit
-    const usageDoc = await db.collection("usage").doc(uid).get();
+    const usageDoc = await uRef.get();
     let metrics = usageDoc.exists ? usageDoc.data().metrics : {};
     if (metrics.lastReset !== nowStr) metrics.exportCount = 0;
     const exportCount = metrics.exportCount || 0;
@@ -571,44 +601,43 @@ exports.trackExport = onCall(async (data, context) => {
       [`exportTargets.${type}`]: admin.firestore.FieldValue.increment(1),
       [`fileExtensions.${ext}`]: admin.firestore.FieldValue.increment(1),
     },
+    metrics: {
+      exports: {
+        total: admin.firestore.FieldValue.increment(1),
+        [`targets.${type}`]: admin.firestore.FieldValue.increment(1),
+        [`extensions.${ext}`]: admin.firestore.FieldValue.increment(1),
+      },
+    },
   };
-  usageUpdate.type = profile ? "member" : "guest";
-  usageUpdate.uid = uid;
-  if (!isPro) {
-    usageUpdate.metrics = {
-      exportCount: admin.firestore.FieldValue.increment(1),
-      lastReset: nowStr,
-    };
+  if (summary) {
+    usageUpdate.metrics.exports.totalSummaryExports = admin.firestore.FieldValue.increment(1);
   }
-  await db.collection("usage").doc(uid).set(usageUpdate, { merge: true });
-
-  const globalUpdate = {
-    totalExports: admin.firestore.FieldValue.increment(1),
-    [`exportTargets.${type}`]: admin.firestore.FieldValue.increment(1),
-    [`fileExtensions.${ext}`]: admin.firestore.FieldValue.increment(1),
-  };
-  if (summary)
-    globalUpdate.totalSummaryExports = admin.firestore.FieldValue.increment(1);
-  await db.collection("analytics").doc("global").set(globalUpdate, { merge: true });
+  if (!isPro) {
+    usageUpdate.metrics.exportCount = admin.firestore.FieldValue.increment(1);
+    usageUpdate.metrics.lastReset = nowStr;
+  }
+  await uRef.set(usageUpdate, { merge: true });
   return { success: true };
 });
 
 // ------------------------------------------------------------------
 // RATING (unchanged)
 // ------------------------------------------------------------------
-exports.trackRating = onCall(async (data, context) => {
+exports.recordRating = onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Auth required");
   if (!checkRateLimit(`rating_${context.auth.uid}`, 3)) {
     return { success: false, error: { code: "RATE_LIMITED" } };
   }
   const { rating } = data;
-  await db
-    .collection("analytics")
-    .doc("global")
-    .set({
-      totalRatings: admin.firestore.FieldValue.increment(1),
-      [`ratingBreakdown.${rating}`]: admin.firestore.FieldValue.increment(1),
-    }, { merge: true });
+  const { ref: uRef } = usageRef(context);
+  await uRef.set({
+    metrics: {
+      ratings: {
+        total: admin.firestore.FieldValue.increment(1),
+        [`breakdown.${rating}`]: admin.firestore.FieldValue.increment(1),
+      },
+    },
+  }, { merge: true });
   return { success: true };
 });
 
@@ -636,29 +665,19 @@ exports.checkEmailCooldown = onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// ANALYTICS & MONITORING
+// RECORD VALIDATOR REJECTIONS (per-user, client-triggered)
 // ------------------------------------------------------------------
-exports.trackAiFailure = onCall(async (data, context) => {
-  if (!context.auth) throw new Error("UNAUTHENTICATED");
-  if (!checkRateLimit(`aiFailure_${context.auth.uid}`, 5)) {
-    return { success: false, error: { code: "RATE_LIMITED" } };
-  }
-  await db.collection("analytics").doc("global").update({
-    totalAiFailures: admin.firestore.FieldValue.increment(1)
-  }).catch(() => {});
-  return { success: true };
-});
-
-exports.trackValidatorRejected = onCall(async (data, context) => {
+exports.recordValidatorRejected = onCall(async (data, context) => {
   if (!context.auth) throw new Error("UNAUTHENTICATED");
   if (!checkRateLimit(`validatorReject_${context.auth.uid}`, 10)) {
     return { success: false, error: { code: "RATE_LIMITED" } };
   }
   const { rejectedCount } = data;
   if (!rejectedCount) return { success: true };
-  await db.collection("analytics").doc("global").update({
-    totalValidatorRejections: admin.firestore.FieldValue.increment(rejectedCount)
-  }).catch(() => {});
+  const { ref: uRef } = usageRef(context);
+  await uRef.set({
+    metrics: { generations: { validatorRejections: admin.firestore.FieldValue.increment(rejectedCount) } },
+  }, { merge: true }).catch(() => {});
   return { success: true };
 });
 
@@ -666,7 +685,7 @@ exports.trackValidatorRejected = onCall(async (data, context) => {
 // GET OR CREATE GUEST TOKEN (for "Continue as guest" button)
 // ------------------------------------------------------------------
 exports.getOrCreateGuestToken = onCall(async (data) => {
-  // enforceAppCheck: false baked into onCall helper for both dev & prod
+  // App Check enforced in onCall helper for prod
   const { deviceId, forceReturning, caller, androidId } = data;
   console.log(`[getOrCreateGuestToken] CALLED | deviceId=${deviceId} | androidId=${androidId} | forceReturning=${forceReturning} | caller=${caller}`);
   if (!deviceId || typeof deviceId !== "string" || deviceId.length < 8 || deviceId.length > 128 || !/^[a-zA-Z0-9_\-]+$/.test(deviceId))
@@ -723,6 +742,8 @@ exports.getOrCreateGuestToken = onCall(async (data) => {
     const registryNumber = await getNextRegistryNumber();
     const displayName = `Guest${registryNumber}`;
     const batch = db.batch();
+    // Delete old registry entry
+    batch.delete(db.collection("the_qag_registry").doc(existingUid));
     batch.set(db.collection("guests").doc(newUid), {
       identity: { uid: newUid, displayName, type: "guest", deviceId, createdAt: admin.firestore.FieldValue.serverTimestamp() },
       guestTier: "returning",
@@ -853,9 +874,9 @@ exports.checkExportQuota = onCall(async (data, context) => {
 exports.resetDailyLimits = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
-  const uid = context.auth.uid;
+  const { ref: uRef } = usageRef(context);
   const nowStr = today();
-  await db.collection("usage").doc(uid).set({
+  await uRef.set({
     metrics: {
       rewardedGenCount: 0,
       proFreeGenCount: 0,
@@ -863,6 +884,29 @@ exports.resetDailyLimits = onCall(async (data, context) => {
       lastReset: nowStr,
     },
   }, { merge: true });
+
+  // Cleanup processed_requests older than 24h (batch delete, max 500)
+  try {
+    const oldCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const snapshot = await db.collection("processed_requests").get();
+    const batch = db.batch();
+    let count = 0;
+    snapshot.forEach((doc) => {
+      if (count >= 500) return;
+      const processedAt = doc.data()?.processedAt?.toDate();
+      if (processedAt && processedAt < oldCutoff) {
+        batch.delete(doc.ref);
+        count++;
+      }
+    });
+    if (count > 0) {
+      await batch.commit();
+      console.log(`🧹 Cleaned up ${count} old processed_requests`);
+    }
+  } catch (e) {
+    console.error("❌ Failed to cleanup processed_requests:", e);
+  }
+
   return { success: true };
 });
 
@@ -880,7 +924,10 @@ exports.getMemberDashboard = onCall(async (data, context) => {
   }
   const profile = await _getMemberProfileByUid(uid);
   const isMember = !!profile;
-  const usageDoc = await db.collection("usage").doc(uid).get();
+  const usageDoc = await (isMember
+    ? db.collection("usage").doc(profile.data.email).get()
+    : db.collection("usage").doc(uid).get()
+  );
   let isGuest = false, guestDoc = null;
   if (!isMember) {
     guestDoc = await db.collection("guests").doc(uid).get();
@@ -971,39 +1018,147 @@ exports.setMemberPro = onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// TRACK PRO INTEREST
+// RECORD PRO INTEREST (per-user, no analytics/global write)
 // ------------------------------------------------------------------
-exports.trackProInterest = onCall(async (data, context) => {
+exports.recordProInterest = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
-  const uid = context.auth.uid;
+  const { ref: uRef, uid } = usageRef(context);
   const { source } = data;
   const now = admin.firestore.FieldValue.serverTimestamp();
-  const usageRef = db.collection("usage").doc(uid);
-  const globalRef = db.collection("analytics").doc("global");
   await db.runTransaction(async (t) => {
-    const uDoc = await t.get(usageRef);
+    const uDoc = await t.get(uRef);
     let interests = uDoc.data()?.interests || { proInterestCount: 0 };
-    const isFirst = (interests.proInterestCount || 0) === 0;
     interests.proInterestCount = (interests.proInterestCount || 0) + 1;
-    if (isFirst) interests.firstProInterestAt = now;
+    if (interests.proInterestCount === 1) interests.firstProInterestAt = now;
     interests.lastProInterestAt = now;
     if (!interests.proInterestSources) interests.proInterestSources = {};
     interests.proInterestSources[source] =
       (interests.proInterestSources[source] || 0) + 1;
-    t.set(usageRef, { uid, interests }, { merge: true });
-    const globalUpdate = {
-      totalProInterest: admin.firestore.FieldValue.increment(1),
-      proTabClicks: admin.firestore.FieldValue.increment(
-        source === "tab" ? 1 : 0,
-      ),
-    };
-    if (isFirst)
-      globalUpdate.uniqueProInterestedMembers =
-        admin.firestore.FieldValue.increment(1);
-    t.set(globalRef, globalUpdate, { merge: true });
+    t.set(uRef, { uid, interests }, { merge: true });
   });
   return { success: true };
+});
+
+// ------------------------------------------------------------------
+// RECOMPUTE ANALYTICS (aggregate from source docs into analytics/global)
+// ------------------------------------------------------------------
+exports.recomputeAnalytics = onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+
+  // 1. Count members from memberProfiles
+  const memberSnap = await db.collection("memberProfiles").get();
+  let totalMembers = 0;
+  memberSnap.forEach(d => {
+    const d2 = d.data();
+    if (!d2.deletedAt) totalMembers++;
+  });
+
+  // 2. Count guests from the_qag_registry
+  const regSnap = await db.collection("the_qag_registry").get();
+  let guestCounter = 0;
+  let registryCounter = 0;
+  regSnap.forEach(d => {
+    registryCounter++;
+    if (d.data().type === "guest") guestCounter++;
+  });
+
+  // 3. Aggregate from all usage docs
+  const usageSnap = await db.collection("usage").get();
+  const genTotals = {};
+  const exportTotals = {};
+  const ratingTotals = {};
+  let proInterestTotal = 0;
+  let proTabClicks = 0;
+  let uniqueProInterested = 0;
+  const seenProInterestUids = new Set();
+
+  usageSnap.forEach(d => {
+    const du = d.data();
+    const gen = du?.metrics?.generations;
+    const exp = du?.metrics?.exports;
+    const rat = du?.metrics?.ratings;
+    const ints = du?.interests;
+
+    if (gen) {
+      genTotals.total = (genTotals.total || 0) + (gen.total || 0);
+      genTotals.totalCases = (genTotals.totalCases || 0) + (gen.totalCases || 0);
+      genTotals.coreCases = (genTotals.coreCases || 0) + (gen.coreCases || 0);
+      genTotals.proCases = (genTotals.proCases || 0) + (gen.proCases || 0);
+      genTotals.aiFailures = (genTotals.aiFailures || 0) + (gen.aiFailures || 0);
+      genTotals.validatorRejections = (genTotals.validatorRejections || 0) + (gen.validatorRejections || 0);
+    }
+
+    if (exp) {
+      exportTotals.total = (exportTotals.total || 0) + (exp.total || 0);
+      exportTotals.summaryExports = (exportTotals.summaryExports || 0) + (exp.summaryExports || 0);
+      if (exp.targets) {
+        if (!exportTotals.targets) exportTotals.targets = {};
+        Object.keys(exp.targets).forEach(k => {
+          exportTotals.targets[k] = (exportTotals.targets[k] || 0) + (exp.targets[k] || 0);
+        });
+      }
+      if (exp.extensions) {
+        if (!exportTotals.extensions) exportTotals.extensions = {};
+        Object.keys(exp.extensions).forEach(k => {
+          exportTotals.extensions[k] = (exportTotals.extensions[k] || 0) + (exp.extensions[k] || 0);
+        });
+      }
+    }
+
+    if (rat) {
+      ratingTotals.total = (ratingTotals.total || 0) + (rat.total || 0);
+      if (rat.breakdown) {
+        if (!ratingTotals.breakdown) ratingTotals.breakdown = {};
+        Object.keys(rat.breakdown).forEach(k => {
+          ratingTotals.breakdown[k] = (ratingTotals.breakdown[k] || 0) + (rat.breakdown[k] || 0);
+        });
+      }
+    }
+
+    if (ints?.proInterestCount) {
+      proInterestTotal += ints.proInterestCount;
+      if (ints.proInterestSources?.tab) {
+        proTabClicks += ints.proInterestSources.tab;
+      }
+      if (du.uid) seenProInterestUids.add(du.uid);
+    }
+  });
+
+  const globalData = {
+    generation: {
+      totalGenerations: genTotals.total || 0,
+      totalTestCaseGenerated: genTotals.totalCases || 0,
+      coreGeneratedCases: genTotals.coreCases || 0,
+      proGeneratedCases: genTotals.proCases || 0,
+      totalAiFailures: genTotals.aiFailures || 0,
+      totalValidatorRejections: genTotals.validatorRejections || 0,
+    },
+    exports: {
+      totalExports: exportTotals.total || 0,
+      totalSummaryExports: exportTotals.summaryExports || 0,
+      targets: exportTotals.targets || {},
+      extensions: exportTotals.extensions || {},
+    },
+    ratings: {
+      totalRatings: ratingTotals.total || 0,
+      breakdown: ratingTotals.breakdown || {},
+    },
+    pro: {
+      totalProInterest: proInterestTotal,
+      proTabClicks: proTabClicks,
+      uniqueProInterestedMembers: seenProInterestUids.size,
+    },
+    other: {
+      totalMembers,
+      guestCounter,
+      registryCounter,
+    },
+  };
+
+  await db.collection("analytics").doc("global").set(globalData, { merge: true });
+  return { success: true, data: globalData };
 });
 
 // ------------------------------------------------------------------
@@ -1037,7 +1192,8 @@ exports.checkGenerationQuota = onCall(async (data, context) => {
     remaining = 0;
 
   if (isMember) {
-    const usageDoc = await db.collection("usage").doc(uid).get();
+    const { ref: memberURef } = usageRef(context);
+    const usageDoc = await memberURef.get();
     const metrics = usageDoc.exists ? usageDoc.data().metrics : {};
     let rewarded = 0,
       proFree = 0;
@@ -1077,18 +1233,14 @@ exports.checkGenerationQuota = onCall(async (data, context) => {
 exports.verifyRewardAd = onCall(async (data, context) => {
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
-  const uid = context.auth.uid;
+  const { ref: uRef } = usageRef(context);
   const { adTransactionId } = data;
   if (!adTransactionId)
     return { verified: false, reason: "Missing transaction ID" };
-  if (!checkRateLimit(`verifyRewardAd_${uid}`, 10)) {
+  if (!checkRateLimit(`verifyRewardAd_${context.auth.uid}`, 10)) {
     return { verified: false, reason: "Rate limited" };
   }
-  const usedRewardsRef = db
-    .collection("usage")
-    .doc(uid)
-    .collection("usedRewards")
-    .doc(adTransactionId);
+  const usedRewardsRef = uRef.collection("usedRewards").doc(adTransactionId);
   const usedDoc = await usedRewardsRef.get();
   if (usedDoc.exists) return { verified: false, reason: "Token already used" };
   await usedRewardsRef.set({
@@ -1135,6 +1287,7 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
     console.log(`[linkGoogleAccount] cleaning orphaned guest | previousGuestUid=${previousGuestUid}`);
     try {
       await db.collection("guests").doc(previousGuestUid).delete();
+      await db.collection("the_qag_registry").doc(previousGuestUid).delete();
       console.log(`[linkGoogleAccount] orphaned guest cleaned | previousGuestUid=${previousGuestUid}`);
     } catch (e) {
       console.warn(`[linkGoogleAccount] failed to clean orphaned guest: ${e.message}`);
@@ -1143,6 +1296,7 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
 
   const guestRef = db.collection("guests").doc(uid);
   const guestDoc = await guestRef.get();
+  const memberUsageRef = email ? db.collection("usage").doc(email) : db.collection("usage").doc(uid);
   const usageRef = db.collection("usage").doc(uid);
   console.log(`[linkGoogleAccount] guestDoc.exists=${guestDoc.exists}`);
 
@@ -1150,24 +1304,47 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
 
   if (guestDoc.exists) {
     console.log(`[linkGoogleAccount] GUEST EXISTS | upgrading to member`);
-    const guestData = guestDoc.data();
-    guestDisplayName = guestData?.identity?.displayName || "";
-    const guestTier = guestData?.guestTier || "first";
 
-    if (guestTier === "returning") {
-      // Returning guest upgrade → fresh start, reset usage
-      await usageRef.set({
-        type: "member",
-        metrics: {
-          rewardedGenCount: 0,
-          proFreeGenCount: 0,
-          lifetimeGeneratedCases: 0,
-          lastReset: today(),
-        },
-      });
+    // Check if this Google account is already a registered member
+    const existingMemberUsage = await memberUsageRef.get();
+    if (existingMemberUsage.exists && existingMemberUsage.data()?.type === "member") {
+      // Google account already has member data — just delete the guest, preserve member
+      console.log(`[linkGoogleAccount] Google account is already a member | preserving existing data`);
+      await guestRef.delete();
+      await db.collection("the_qag_registry").doc(uid).delete().catch(() => {});
+      await usageRef.delete().catch(() => {});
     } else {
-      // First-time guest upgrade — mark usage as member
-      await usageRef.set({ type: "member" }, { merge: true });
+      const guestData = guestDoc.data();
+      guestDisplayName = guestData?.identity?.displayName || "";
+      const guestTier = guestData?.guestTier || "first";
+
+      if (guestTier === "returning") {
+        // Returning guest upgrade → fresh start, reset usage at new email key
+        await memberUsageRef.set({
+          type: "member",
+          email,
+          uid,
+          metrics: {
+            rewardedGenCount: 0,
+            proFreeGenCount: 0,
+            lifetimeGeneratedCases: 0,
+            lastReset: today(),
+          },
+        });
+      } else {
+        // First-time guest upgrade — copy existing usage to email key
+        const oldData = await usageRef.get();
+        const oldUsage = oldData.exists ? oldData.data() : {};
+        await memberUsageRef.set({
+          ...oldUsage,
+          type: "member",
+          email,
+          uid,
+        });
+      }
+
+      // Delete old uid-based usage doc
+      if (email) await usageRef.delete().catch(() => {});
     }
 
     // Delete guest doc
@@ -1176,15 +1353,17 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
   }
 
   if (!guestDoc.exists) {
-    const existingUsage = await usageRef.get();
+    const existingUsage = await memberUsageRef.get();
     if (existingUsage.exists) {
       // Returning member — preserve existing metrics, don't nuke quota
       console.log(`[linkGoogleAccount] RETURNING MEMBER | preserving usage metrics`);
-      await usageRef.set({ type: "member" }, { merge: true });
+      await memberUsageRef.set({ type: "member", email, uid }, { merge: true });
     } else {
       console.log(`[linkGoogleAccount] FRESH MEMBER | creating usage doc`);
-      await usageRef.set({
+      await memberUsageRef.set({
         type: "member",
+        email,
+        uid,
         metrics: {
           rewardedGenCount: 0,
           proFreeGenCount: 0,
@@ -1305,7 +1484,10 @@ exports.deleteAccount = onCall(async (data, context) => {
       deletedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   }
-  batch.delete(db.collection("usage").doc(uid));
+  const usageDelete = isMember && profile.data.email
+    ? db.collection("usage").doc(profile.data.email)
+    : db.collection("usage").doc(uid);
+  batch.delete(usageDelete);
   batch.delete(db.collection("the_qag_registry").doc(uid));
   // deviceUsage/{deviceId} is NOT deleted — it carries the device's daily quota
   // across account resets. This prevents quota abuse via delete-recreate.
@@ -1655,55 +1837,73 @@ QUALITY RULES:
 - No markdown, no explanations, no code blocks
 - Each test case must be unique and execution-ready`;
 
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function callDeepSeek(prompt) {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
   const url = "https://api.deepseek.com/v1/chat/completions";
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "deepseek-v4-flash",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.15,
-        max_tokens: 8192,
-        response_format: { type: "json_object" },
-        extra_body: { thinking: { type: "disabled" } },
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    const json = await res.json();
-    if (!res.ok)
-      return { success: false, error: { code: `HTTP_${res.status}` } };
+  const MAX_RETRIES = 2;
+  let lastError = null;
 
-    const choice = json.choices && json.choices[0];
-    if (!choice)
-      return { success: false, error: { code: "EMPTY_CHOICES" } };
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 55000);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "deepseek-v4-flash",
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.15,
+          max_tokens: 8192,
+          response_format: { type: "json_object" },
+          extra_body: { thinking: { type: "disabled" } },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const json = await res.json();
+      if (!res.ok) {
+        const code = `HTTP_${res.status}`;
+        if (attempt < MAX_RETRIES && [429, 502, 503].includes(res.status)) {
+          lastError = { success: false, error: { code } };
+          await delay(Math.pow(2, attempt - 1) * 1000);
+          continue;
+        }
+        return { success: false, error: { code } };
+      }
 
-    const content = choice.message && choice.message.content;
-    if (!content || content.trim().length === 0)
-      return { success: false, error: { code: "EMPTY_RESPONSE" } };
+      const choice = json.choices && json.choices[0];
+      if (!choice)
+        return { success: false, error: { code: "EMPTY_CHOICES" } };
 
-    if (choice.finish_reason === "length")
-      return { success: false, error: { code: "TRUNCATED" } };
+      const content = choice.message && choice.message.content;
+      if (!content || content.trim().length === 0)
+        return { success: false, error: { code: "EMPTY_RESPONSE" } };
 
-    return { success: true, data: { text: content } };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err.name === "AbortError") {
-      return { success: false, error: { code: "TIMEOUT" } };
+      if (choice.finish_reason === "length")
+        return { success: false, error: { code: "TRUNCATED" } };
+
+      return { success: true, data: { text: content } };
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === "AbortError") {
+        // Timeout: DeepSeek already received & processed tokens → DO NOT RETRY (double bill)
+        return { success: false, error: { code: "TIMEOUT" } };
+      }
+      return { success: false, error: { code: "CLIENT_ERROR" } };
     }
-    return { success: false, error: { code: "CLIENT_ERROR" } };
   }
+  return lastError || { success: false, error: { code: "MAX_RETRIES" } };
 }
 
 // --------------------------------------------------------------
@@ -1912,6 +2112,7 @@ function transformTestCases(rawCases, module, feature, platform, limit) {
     id: `TC_${module.replace(/ /g, "").toUpperCase()}_${(i + 1).toString().padStart(3, "0")}`,
     title: tc.title || "Test Case",
     preconditions: Array.isArray(tc.preconditions) ? tc.preconditions : [],
+    testData: tc.testData || '',
     steps: (tc.steps || []).map((s) => ({
       action: s.action || "",
       data: s.data || "",

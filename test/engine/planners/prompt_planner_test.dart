@@ -75,7 +75,7 @@ void main() {
 
       test('assigns High priority for session category', () {
         final planner = PromptPlanner(
-          module: 'M', feature: 'F', platform: 'API', mode: GenerationMode.core, count: 2, constraints: 'session',
+          module: 'M', feature: 'F', platform: 'API', mode: GenerationMode.core, count: 2, constraints: 'only session',
         );
         final skeletons = planner.generateSkeletons();
         for (final s in skeletons) {

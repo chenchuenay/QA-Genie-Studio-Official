@@ -29,6 +29,7 @@ class ExportTestCasesUseCase {
     String? moduleName,
     String? featureName,
     String? adToken,
+    bool hideEmptyColumns = false,
   }) async {
     final startTime = DateTime.now();
     final exportId = '${DateTime.now().millisecondsSinceEpoch}_$type';
@@ -80,6 +81,7 @@ class ExportTestCasesUseCase {
             fileName: fileName,
             moduleName: effectiveModule,
             featureName: effectiveFeature,
+            hideEmptyColumns: hideEmptyColumns,
           );
           break;
         default:
@@ -111,6 +113,7 @@ class ExportTestCasesUseCase {
     required String environment,
     required BuildContext context,
     String? adToken,
+    bool hideEmptyColumns = false,
   }) async {
     final startTime = DateTime.now();
     final exportId = '${DateTime.now().millisecondsSinceEpoch}_summary';
@@ -144,7 +147,7 @@ class ExportTestCasesUseCase {
             pw.SizedBox(height: 20),
             _buildPriorityBreakdown(data),
             pw.SizedBox(height: 20),
-            _buildDetailedResults(data['details'] as List),
+            ..._buildDetailedResults(data['details'] as List, hideEmptyColumns: hideEmptyColumns),
             pw.SizedBox(height: 24),
             pw.Center(
               child: pw.Text(
@@ -210,11 +213,15 @@ class ExportTestCasesUseCase {
       children: [
         pw.SizedBox(
           width: 90,
-          child: pw.Text(
-            PdfTextSanitizer.sanitize('$label :'),
-            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+          child: pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text(
+              PdfTextSanitizer.sanitize('$label :'),
+              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+            ),
           ),
         ),
+        pw.SizedBox(width: 6),
         pw.Expanded(
           child: pw.Text(
             PdfTextSanitizer.sanitize(value),
@@ -298,50 +305,57 @@ class ExportTestCasesUseCase {
     ],
   );
 
-  pw.Widget _buildDetailedResults(List<dynamic> details) {
-    if (details.isEmpty) return pw.Container();
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          PdfTextSanitizer.sanitize('Detailed Results'),
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-        ),
-        pw.SizedBox(height: 8),
-        pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-          columnWidths: {
+  List<pw.Widget> _buildDetailedResults(List<dynamic> details, {bool hideEmptyColumns = false}) {
+    if (details.isEmpty) return [];
+    final headers = hideEmptyColumns
+        ? ['ID', 'Title', 'Priority']
+        : ['ID', 'Title', 'Priority', 'Status', 'Actual Result'];
+    final widths = hideEmptyColumns
+        ? {
+            0: const pw.FixedColumnWidth(90),
+            1: const pw.FlexColumnWidth(5),
+            2: const pw.FixedColumnWidth(60),
+          }
+        : {
             0: const pw.FixedColumnWidth(90),
             1: const pw.FlexColumnWidth(3),
             2: const pw.FixedColumnWidth(60),
             3: const pw.FixedColumnWidth(80),
             4: const pw.FlexColumnWidth(2),
-          },
-          children: [
+          };
+    return [
+      pw.Text(
+        PdfTextSanitizer.sanitize('Detailed Results'),
+        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+      ),
+      pw.SizedBox(height: 8),
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+        columnWidths: widths,
+        children: [
+          pw.TableRow(
+            decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            children: headers.map((h) => _cell(h, bold: true)).toList(),
+          ),
+          for (final item in details)
             pw.TableRow(
-              decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-              children: [
-                _cell('ID', bold: true),
-                _cell('Title', bold: true),
-                _cell('Priority', bold: true),
-                _cell('Status', bold: true),
-                _cell('Actual Result', bold: true),
-              ],
+              children: hideEmptyColumns
+                  ? [
+                      _cell(_toString(item['id'])),
+                      _cell(_toString(item['title'])),
+                      _cell(PriorityUtils.normalize(_toString(item['priority']))),
+                    ]
+                  : [
+                      _cell(_toString(item['id'])),
+                      _cell(_toString(item['title'])),
+                      _cell(PriorityUtils.normalize(_toString(item['priority']))),
+                      _cell(_toString(item['status']).toUpperCase()),
+                      _cell(_toString(item['actualResult'])),
+                    ],
             ),
-            for (final item in details)
-              pw.TableRow(
-                children: [
-                  _cell(_toString(item['id'])),
-                  _cell(_toString(item['title'])),
-                  _cell(PriorityUtils.normalize(_toString(item['priority']))),
-                  _cell(_toString(item['status']).toUpperCase()),
-                  _cell(_toString(item['actualResult'])),
-                ],
-              ),
-          ],
-        ),
-      ],
-    );
+        ],
+      ),
+    ];
   }
 
   String _toString(dynamic value) => (value ?? '').toString();

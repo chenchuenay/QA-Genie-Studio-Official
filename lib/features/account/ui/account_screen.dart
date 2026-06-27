@@ -358,7 +358,7 @@ class _AccountScreenState extends State<AccountScreen> {
           Text(
             _memberSince != null
                 ? 'Joined ${_formatDate(_memberSince!)} • ${_lastSyncedText ?? 'Syncing...'}'
-                : '${_lastSyncedText ?? 'N/A'}',
+                : _lastSyncedText ?? 'N/A',
             style: const TextStyle(fontSize: 11, color: AppColors.textHint),
           ),
           if (isGuest) ...[
@@ -375,7 +375,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: const Text('Continue with Google'),
+                child: const Text('Link Google'),
               ),
             ),
           ],
@@ -439,7 +439,7 @@ class _AccountScreenState extends State<AccountScreen> {
           _menuItem(
             icon: Icons.support_agent,
             title: 'Report an Issue',
-            subtitle: 'Help us improve QA Genie',
+            subtitle: 'Help improve QA Genie',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ReportIssueScreen()),

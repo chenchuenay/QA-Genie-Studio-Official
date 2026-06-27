@@ -556,7 +556,7 @@ class _ReportFormViewState extends State<_ReportFormView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Help us improve QA Genie.', style: AppText.body),
+            const Text('Help improve QA Genie.', style: AppText.body),
             const SizedBox(height: AppSpacing.md),
             const Text('Issue Type', style: AppText.label),
             const SizedBox(height: 8),

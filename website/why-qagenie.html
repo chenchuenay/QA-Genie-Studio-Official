@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why QA Genie — Test cases is just the start</title>
+    <meta name="description" content="Why QA Genie exists in a free AI world. The goal, vision, future features, and what makes QA Genie different.">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --bg: #05060A; --surface: #0D1018; --card: #141922; --border: #232938; --accent: #3DDCFF; --accent-light: #7BE7FF; --text: #FFFFFF; --text-secondary: #B8C0CF; --text-tertiary: #72798A; --radius-card: 24px; --radius-btn: 22px; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+
+        /* Nav */
+        nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(5, 6, 10, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+        nav .container { display: flex; align-items: center; justify-content: space-between; height: 64px; max-width: 1100px; }
+        .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 18px; }
+        .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+        .nav-links { display: flex; gap: 24px; align-items: center; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--accent); }
+        .nav-links a.active { color: var(--accent); }
+
+        /* Hero */
+        .hero { padding: 160px 0 80px; text-align: center; position: relative; overflow: hidden; }
+        .hero::before { content: ''; position: absolute; top: -50%; left: 50%; transform: translateX(-50%); width: 800px; height: 800px; background: radial-gradient(circle, rgba(61, 220, 255, 0.04) 0%, transparent 70%); pointer-events: none; }
+        .hero h1 { font-size: 48px; font-weight: 800; line-height: 1.15; letter-spacing: -0.5px; margin-bottom: 12px; }
+        .hero h1 span { background: linear-gradient(135deg, var(--accent), var(--accent-light)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .hero p { font-size: 17px; color: var(--text-secondary); max-width: 560px; margin: 0 auto 32px; line-height: 1.7; }
+
+        /* Sections */
+        section { padding: 80px 0; }
+        .section-header { margin-bottom: 48px; }
+        .section-header.center { text-align: center; }
+        .section-label { font-size: 13px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+        .section-title { font-size: 30px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 12px; }
+        .section-subtitle { font-size: 15px; color: var(--text-secondary); max-width: 540px; line-height: 1.7; }
+        .section-header.center .section-subtitle { margin: 0 auto; }
+
+        /* Card */
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 32px; margin-bottom: 20px; transition: border-color 0.3s; }
+        .card:hover { border-color: rgba(61, 220, 255, 0.15); }
+        .card h3 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+        .card p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+        .card .icon { font-size: 22px; margin-bottom: 16px; display: inline-block; }
+        .card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+        /* Value list */
+        .value-list { list-style: none; padding: 0; }
+        .value-list li { display: flex; gap: 14px; padding: 20px 24px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 12px; align-items: flex-start; transition: border-color 0.3s; }
+        .value-list li:hover { border-color: rgba(61, 220, 255, 0.15); }
+        .value-marker { width: 24px; height: 24px; min-width: 24px; border-radius: 50%; background: rgba(61, 220, 255, 0.1); display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+        .value-marker svg { width: 14px; height: 14px; fill: var(--accent); }
+        .value-text h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+        .value-text p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin: 0; }
+
+        /* Future grid */
+        .future-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .future-item { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 24px; transition: all 0.3s; }
+        .future-item:hover { border-color: rgba(61, 220, 255, 0.15); transform: translateY(-2px); }
+        .future-item .fi-icon { font-size: 20px; margin-bottom: 14px; display: block; }
+        .future-item h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+        .future-item p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 0; }
+
+        /* CTA */
+        .cta-section { text-align: center; padding: 60px 0 80px; position: relative; }
+        .cta-section::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 500px; height: 500px; background: radial-gradient(circle, rgba(61, 220, 255, 0.04) 0%, transparent 70%); pointer-events: none; }
+        .cta-section h2 { font-size: 32px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 12px; }
+        .cta-section p { font-size: 15px; color: var(--text-secondary); max-width: 440px; margin: 0 auto 28px; line-height: 1.7; }
+        .btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px; border-radius: var(--radius-btn); font-size: 16px; font-weight: 700; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-light)); color: #000; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(61, 220, 255, 0.2); }
+        .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+        /* Vision card */
+        .vision-card { background: linear-gradient(135deg, rgba(61, 220, 255, 0.04), rgba(123, 231, 255, 0.02)); border: 1px solid rgba(61, 220, 255, 0.12); border-radius: var(--radius-card); padding: 40px; text-align: center; margin-bottom: 20px; }
+        .vision-card .icon { font-size: 28px; margin-bottom: 16px; display: block; }
+        .vision-card h3 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+        .vision-card p { font-size: 15px; color: var(--text-secondary); max-width: 520px; margin: 0 auto; line-height: 1.7; }
+
+        /* Divider */
+        .divider { height: 1px; background: var(--border); max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+        /* Footer */
+        footer { border-top: 1px solid var(--border); padding: 40px 0; }
+        footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; max-width: 1100px; }
+        footer .footer-links { display: flex; gap: 24px; align-items: center; }
+        footer a { color: var(--text-tertiary); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+        footer a:hover { color: var(--accent); }
+        footer p { color: var(--text-tertiary); font-size: 13px; }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            nav .container { height: 56px; }
+            .nav-links a { display: none; }
+            .hero { padding: 120px 0 60px; }
+            .hero h1 { font-size: 30px; }
+            .hero p { font-size: 15px; }
+            section { padding: 50px 0; }
+            .section-title { font-size: 24px; }
+            .card-row { grid-template-columns: 1fr; }
+            .future-grid { grid-template-columns: 1fr; }
+            .vision-card { padding: 28px 20px; }
+            .cta-section h2 { font-size: 24px; }
+            footer .container { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo">
+                <img src="assets/logo.png" alt="QA Genie">
+                QA Genie
+            </a>
+            <div class="nav-links">
+                <a href="index.html#features">Features</a>
+                <a href="index.html#screenshots">Screenshots</a>
+                <a href="index.html#how-it-works">How It Works</a>
+                <a href="why-qagenie.html" class="active">Why QA Genie</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="container">
+            <h1>Test cases is <span>just the start</span>.</h1>
+            <p>QA Genie isn't just a test case generator. It's designed to support your QA workflow — from planning and generation to reporting.</p>
+            <a href="#goal" class="btn btn-primary">Learn More</a>
+            <a href="index.html" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- Goal & Vision -->
+    <section id="goal">
+        <div class="container">
+            <div class="section-header center">
+                <div class="section-label">Why I Built It</div>
+                <h2 class="section-title">The goal &amp; vision</h2>
+            </div>
+            <div class="card-row">
+                <div class="card">
+                    <span class="icon">&#127919;</span>
+                    <h3>The Goal</h3>
+                    <p>Make test case generation accessible, structured, and reliable. Not another AI chatbot wrapper — a purpose-built tool that generates structured test cases in seconds.</p>
+                </div>
+                <div class="vision-card">
+                    <span class="icon">&#128752;</span>
+                    <h3>The Vision</h3>
+                    <p>QA Genie evolves into a tool that supports your QA workflow. Test cases is just the start — from planning to reporting, it grows with your needs.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- Why QA Genie -->
+    <section id="why">
+        <div class="container">
+            <div class="section-header center">
+                <div class="section-label">Why QA Genie</div>
+                <h2 class="section-title">In a world of free AI</h2>
+                <p class="section-subtitle">Free AI chatbots are powerful, but they're not built for QA workflows. Here's what makes QA Genie different.</p>
+            </div>
+            <ul class="value-list">
+                <li>
+                    <div class="value-marker">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <div class="value-text">
+                        <h4>Structured output, not raw text</h4>
+                        <p>Free AI generates paragraphs. QA Genie produces structured test cases with preconditions, steps, expected results, test data, priority, and status — ready for review.</p>
+                    </div>
+                </li>
+                <li>
+                    <div class="value-marker">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <div class="value-text">
+                        <h4>Export to real QA formats</h4>
+                        <p>Free AI output stays in the chat. QA Genie exports to Excel (.xlsx), CSV, JSON (Xray-compatible), and PDF — formats that work in Jira, test management tools, and team handoffs.</p>
+                    </div>
+                </li>
+                <li>
+                    <div class="value-marker">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <div class="value-text">
+                        <h4>Test summary reports</h4>
+                        <p>Generate a concise summary report with pass/fail rates, priority breakdowns, and full test results — exportable as PDF for team handoffs, sprint reviews, or QA sign-off.</p>
+                    </div>
+                </li>
+                <li>
+                    <div class="value-marker">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <div class="value-text">
+                        <h4>Suite management — save, revisit, edit</h4>
+                        <p>Free AI is ephemeral. QA Genie saves test suites locally, lets you revisit, edit cases, mark status (pass/fail/blocked), and reorder — all without losing progress.</p>
+                    </div>
+                </li>
+                <li>
+                    <div class="value-marker">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <div class="value-text">
+                        <h4>Cloud sync — access from any device</h4>
+                        <p>Sign in with Google and your test suites follow you. Generate on your phone, review on a tablet, export from anywhere. Guest data stays on-device by default.</p>
+                    </div>
+                </li>
+                <li>
+                    <div class="value-marker">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <div class="value-text">
+                        <h4>Reliable fallback engine</h4>
+                        <p>When AI is unavailable or returns bad output, QA Genie's local fallback still delivers quality test cases. No blank screens, no "try again later."</p>
+                    </div>
+                </li>
+                <li>
+                    <div class="value-marker">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                    <div class="value-text">
+                        <h4>Privacy-first by design</h4>
+                        <p>Guest data stays entirely on your device. No training on your test cases. No account required to try. Your QA work is yours.</p>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- Future Features -->
+    <section id="future">
+        <div class="container">
+            <div class="section-header center">
+                <div class="section-label">Roadmap</div>
+                <h2 class="section-title">What's coming next</h2>
+                <p class="section-subtitle">Test cases is just the start. Here's the roadmap ahead.</p>
+            </div>
+            <div class="future-grid">
+                <div class="future-item">
+                    <span class="fi-icon">&#128220;</span>
+                    <h4>Bug Report Management</h4>
+                    <p>File and track bug reports directly within the app — linked to the test case that caught them.</p>
+                </div>
+                <div class="future-item">
+                    <span class="fi-icon">&#128200;</span>
+                    <h4>Execution Trend Charts</h4>
+                    <p>Visualise pass/fail rates over time to spot regressions and track QA progress.</p>
+                </div>
+                <div class="future-item">
+                    <span class="fi-icon">&#128202;</span>
+                    <h4>Progress Dashboard</h4>
+                    <p>An at-a-glance dashboard showing suite completion, execution stats, and coverage insights.</p>
+                </div>
+                <div class="future-item">
+                    <span class="fi-icon">&#128101;</span>
+                    <h4>Team Collaboration</h4>
+                    <p>Share suites with team members, assign test cases, and collaborate on QA workflows.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <div class="container">
+            <h2>Ready to go beyond chat?</h2>
+            <p>QA Genie is available now on Android. No account required to start.</p>
+            <a href="https://play.google.com/store/apps/details?id=com.enaykumar.qagenie" class="btn btn-primary" target="_blank" rel="noopener">&#9733; Get QA Genie on Play Store</a>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 QA Genie. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="ai-disclaimer.html">AI Disclaimer</a>
+                <a href="ads-monetization.html">Ads Policy</a>
+                <a href="delete-account.html">Delete Account</a>
+                <a href="mailto:hello@qagenies.com">Contact</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

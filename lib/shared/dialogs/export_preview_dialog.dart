@@ -20,7 +20,7 @@ class ExportPreviewDialog extends StatefulWidget {
   final String moduleName;
   final String featureName;
   final Function(List<FinalizedTestCase> updatedCases) onSave;
-  final Function(List<FinalizedTestCase> updatedCases, String? adToken) onShare;
+  final Function(List<FinalizedTestCase> updatedCases, String? adToken, {bool hideEmptyColumns}) onShare;
 
   const ExportPreviewDialog({
     super.key,
@@ -45,6 +45,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   bool _savedSuccess = false;
   bool _isProcessing = false;
   bool _isSharing = false;
+  bool _hideEmptyColumns = true;
 
   List<double> get _colWidths {
     switch (widget.type) {
@@ -387,7 +388,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     });
 
     try {
-      await widget.onShare(updatedCases, adToken);
+      await widget.onShare(updatedCases, adToken, hideEmptyColumns: _hideEmptyColumns);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -415,7 +416,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       return;
     } finally {
       // Fire-and-forget tracking export — short timeout, never blocks success dialog
-      FunctionsService.trackExport(
+      FunctionsService.recordExportMetrics(
         summary: false,
         target: widget.type,
         extension: _extensionForType(widget.type),
@@ -458,6 +459,11 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
         return '';
     }
   }
+
+  bool get _allUnexecuted => widget.cases.every(
+    (tc) => tc.actualResult.trim().isEmpty &&
+           (tc.status.trim().isEmpty || tc.status == 'Not Executed'),
+  );
 
   String _getButtonText() {
     switch (widget.type) {
@@ -712,6 +718,31 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                     ),
                   ],
                 ),
+              ),
+            ],
+            if (!_editing && widget.type == 'pdf' && _allUnexecuted) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: Checkbox(
+                      value: _hideEmptyColumns,
+                      onChanged: (v) => setState(() => _hideEmptyColumns = v ?? true),
+                      fillColor: WidgetStateProperty.all(AppColors.accent),
+                      checkColor: Colors.black,
+                      side: const BorderSide(color: AppColors.border),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Hide empty Status & Actual Result columns in PDF as not executed yet',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    ),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 12),

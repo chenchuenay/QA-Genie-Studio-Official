@@ -43,10 +43,8 @@ class _ExportSuccessDialogState extends State<ExportSuccessDialog> {
     // Fire the rating write in background — no await on Submit flows
     // so the dialog transition is instant.
     final Future<void>? ratingWrite = _selectedRating > 0
-        ? FunctionsService.call(
-            functionName: 'trackRating',
-            payload: {'rating': _selectedRating},
-          ).then((_) {}).catchError((_) {})
+        ? FunctionsService.recordRating(_selectedRating)
+            .then((_) {}).catchError((_) {})
         : null;
 
     if (submit && _selectedRating > 0 && _selectedRating <= 3) {

@@ -20,7 +20,7 @@ void main() {
     ));
     await tester.tap(find.text('show'));
     await tester.pumpAndSettle();
-    expect(find.text('Help us improve'), findsOneWidget);
+    expect(find.text('Sign in with Google to share your feedback.\nYour input helps make QA Genie better.'), findsOneWidget);
     expect(find.text('Not Now'), findsOneWidget);
     expect(find.text('OK'), findsOneWidget);
   });

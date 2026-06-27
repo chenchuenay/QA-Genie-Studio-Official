@@ -73,7 +73,7 @@ class ExportSafetyValidator {
     return lower.contains('<script') ||
         lower.contains('</script>') ||
         lower.contains('drop table') ||
-        lower.contains('--') ||
+        RegExp(r'(?<![a-zA-Z])--').hasMatch(lower) ||
         lower.contains(';--');
   }
 }

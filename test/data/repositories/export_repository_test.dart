@@ -19,6 +19,7 @@ class MockExportUseCase extends ExportTestCasesUseCase {
     String? moduleName,
     String? featureName,
     String? adToken,
+    bool hideEmptyColumns = false,
   }) async {
     executeCalled = true;
     lastType = type;

@@ -19,8 +19,8 @@ void main() {
       expect(() => NetworkGuard.dispose(), returnsNormally);
     });
 
-    test('isProduction returns false in test environment', () {
-      expect(NetworkGuard.isProduction, false);
+    test('isProduction returns true in test environment (default prod)', () {
+      expect(NetworkGuard.isProduction, true);
     });
   });
 }

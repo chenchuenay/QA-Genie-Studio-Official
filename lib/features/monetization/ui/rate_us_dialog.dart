@@ -42,7 +42,7 @@ class _RateUsDialogContent extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              "Your feedback helps us improve. Take a moment to rate us on the store.",
+              "Your feedback helps improve the app. Take a moment to rate it on the store.",
               style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
               textAlign: TextAlign.center,
             ),

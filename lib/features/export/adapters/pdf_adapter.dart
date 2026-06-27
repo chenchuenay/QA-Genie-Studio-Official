@@ -19,6 +19,7 @@ class PdfAdapter {
     required String fileName,
     required String moduleName,
     required String featureName,
+    bool hideEmptyColumns = false,
   }) async {
     final startTime = DateTime.now();
     debugPrint('📄 PDF_ADAPTER: Started export for ${cases.length} cases');
@@ -32,7 +33,7 @@ class PdfAdapter {
           margin: const pw.EdgeInsets.all(24),
           header: (context) => _header(moduleName, featureName),
           footer: (context) => _footer(context),
-          build: (context) => [pw.SizedBox(height: 10), _table(mapped)],
+          build: (context) => [pw.SizedBox(height: 10), _table(mapped, hideEmptyColumns: hideEmptyColumns)],
         ),
       );
 
@@ -111,7 +112,51 @@ class PdfAdapter {
     );
   }
 
-  static pw.Widget _table(List<Map<String, dynamic>> rows) {
+  static pw.Widget _table(List<Map<String, dynamic>> rows, {bool hideEmptyColumns = false}) {
+    if (hideEmptyColumns) {
+      return pw.Table.fromTextArray(
+        headers: const [
+          'Test Case ID',
+          'Title',
+          'Preconditions',
+          'Steps',
+          'Test Data',
+          'Expected Result',
+          'Priority',
+        ],
+        data: rows
+            .map(
+              (row) => [
+                PdfTextSanitizer.sanitize(
+                  _toString(row['ID'] ?? row['Test Case ID'] ?? ''),
+                ),
+                PdfTextSanitizer.sanitize(_toString(row['Title'])),
+                PdfTextSanitizer.sanitize(_toString(row['Preconditions'])),
+                PdfTextSanitizer.sanitize(_toString(row['Steps'])),
+                PdfTextSanitizer.sanitize(_toString(row['Test Data'])),
+                PdfTextSanitizer.sanitize(_toString(row['Expected Result'])),
+                PdfTextSanitizer.sanitize(_toString(row['Priority'])),
+              ],
+            )
+            .toList(),
+        headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+        cellStyle: const pw.TextStyle(fontSize: 7),
+        border: pw.TableBorder.all(width: 0.4, color: PdfColors.grey),
+        cellAlignment: pw.Alignment.topLeft,
+        headerAlignment: pw.Alignment.center,
+        headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+        cellPadding: const pw.EdgeInsets.all(6),
+        columnWidths: {
+          0: const pw.FixedColumnWidth(45),
+          1: const pw.FlexColumnWidth(4),
+          2: const pw.FlexColumnWidth(2),
+          3: const pw.FlexColumnWidth(4),
+          4: const pw.FlexColumnWidth(2),
+          5: const pw.FlexColumnWidth(3),
+          6: const pw.FixedColumnWidth(45),
+        },
+      );
+    }
     return pw.Table.fromTextArray(
       headers: const [
         'Test Case ID',

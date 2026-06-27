@@ -47,8 +47,8 @@ void main() {
         expect(result.categoryCounts, {'boundary': 4});
       });
 
-      test('returns all session when constraint is "session"', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 3, constraints: 'session', seed: '');
+      test('returns all session when constraint is "only session"', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 3, constraints: 'only session', seed: '');
         final result = planner.plan();
         expect(result.categoryCounts, {'session': 3});
         expect(result.riskFocus, ['HIGH']);
@@ -66,8 +66,8 @@ void main() {
         expect(result.categoryCounts, {'session': 2});
       });
 
-      test('returns all positive when constraint is "positive"', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 7, constraints: 'positive', seed: '');
+      test('returns all positive when constraint is "only positive"', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 7, constraints: 'only positive', seed: '');
         final result = planner.plan();
         expect(result.categoryCounts, {'positive': 7});
       });
@@ -100,96 +100,86 @@ void main() {
     });
 
     group('default plan with core mode', () {
-      test('returns diverse distribution when count is 8', () {
+      test('returns 70/30 distribution when count is 8', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 8, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 3);
+        expect(result.categoryCounts['positive'], 6);
         expect(result.categoryCounts['negative'], 1);
         expect(result.categoryCounts['boundary'], 1);
-        expect(result.categoryCounts['validation'], 1);
-        expect(result.categoryCounts['security'], 1);
-        expect(result.categoryCounts['session'], 1);
         expect(result.totalCount, 8);
       });
 
       test('adjusts counts proportionally when totalCount > 10', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 12, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 2);
-        expect(result.categoryCounts['negative'], 2);
-        expect(result.categoryCounts['boundary'], 2);
-        expect(result.categoryCounts['validation'], 2);
-        expect(result.categoryCounts['security'], 2);
-        expect(result.categoryCounts['session'], 2);
+        expect(result.categoryCounts['positive'], 8);
+        expect(result.categoryCounts['negative'], 1);
+        expect(result.categoryCounts['boundary'], 1);
+        expect(result.categoryCounts['validation'], 1);
+        expect(result.categoryCounts['security'], 1);
         expect(result.totalCount, 12);
       });
 
-      test('includes all 6 categories in default plan', () {
+      test('has positive as the majority category in default plan', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 10, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts.containsKey('positive'), isTrue);
+        expect(result.categoryCounts['positive'], 7);
         expect(result.categoryCounts.containsKey('negative'), isTrue);
         expect(result.categoryCounts.containsKey('boundary'), isTrue);
-        expect(result.categoryCounts.containsKey('validation'), isTrue);
-        expect(result.categoryCounts.containsKey('security'), isTrue);
-        expect(result.categoryCounts.containsKey('session'), isTrue);
         expect(result.totalCount, 10);
       });
     });
 
     group('default plan with pro mode', () {
-      test('returns pro default distribution when count is 16', () {
+      test('returns 70/30 pro distribution when count is 16', () {
         final planner = CoveragePlanner(mode: GenerationMode.pro, totalCount: 16, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 6);
-        expect(result.categoryCounts['negative'], 2);
-        expect(result.categoryCounts['boundary'], 2);
-        expect(result.categoryCounts['validation'], 2);
-        expect(result.categoryCounts['security'], 2);
-        expect(result.categoryCounts['session'], 2);
+        expect(result.categoryCounts['positive'], 11);
+        expect(result.categoryCounts['negative'], 1);
+        expect(result.categoryCounts['boundary'], 1);
+        expect(result.categoryCounts['validation'], 1);
+        expect(result.categoryCounts['security'], 1);
+        expect(result.categoryCounts['session'], 1);
         expect(result.totalCount, 16);
       });
     });
 
-    group('constraint overrides in default plan', () {
-      test('returns all security when constraints only contain security', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 6, constraints: 'security', seed: '');
+    group('only-X overrides in plan', () {
+      test('returns all security when constraint is "only security"', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 6, constraints: 'only security', seed: '');
         final result = planner.plan();
         expect(result.categoryCounts, {'security': 6});
       });
 
-      test('returns all negative when constraints only contain negative', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 5, constraints: 'negative', seed: '');
+      test('returns all negative when constraint is "only negative"', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 5, constraints: 'only negative', seed: '');
         final result = planner.plan();
         expect(result.categoryCounts, {'negative': 5});
       });
 
-      test('returns all validation when constraints only contain validation', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 4, constraints: 'validation', seed: '');
+      test('returns all validation when constraint is "only validation"', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 4, constraints: 'only validation', seed: '');
         final result = planner.plan();
         expect(result.categoryCounts, {'validation': 4});
       });
 
-      test('returns all boundary when constraints only contain boundary', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 3, constraints: 'boundary', seed: '');
+      test('returns all boundary when constraint is "only boundary"', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 3, constraints: 'only boundary', seed: '');
         final result = planner.plan();
         expect(result.categoryCounts, {'boundary': 3});
       });
 
-      test('returns all session when constraints only contain session', () {
-        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 3, constraints: 'session', seed: '');
+      test('returns all session when constraint is "only session"', () {
+        final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 3, constraints: 'only session', seed: '');
         final result = planner.plan();
         expect(result.categoryCounts, {'session': 3});
       });
 
-      test('uses diverse default when multiple constraint keywords present', () {
+      test('vague keywords fall back to default 70/30 distribution', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 10, constraints: 'security negative', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 3);
-        expect(result.categoryCounts['negative'], 2);
-        expect(result.categoryCounts['security'], 2);
+        expect(result.categoryCounts['positive'], 7);
         expect(result.totalCount, 10);
-        expect(result.categoryCounts.keys.length, 6);
       });
     });
 

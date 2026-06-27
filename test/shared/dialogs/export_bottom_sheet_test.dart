@@ -15,7 +15,7 @@ void main() {
             moduleName: 'Test Module',
             featureName: 'Test Feature',
             onSave: (_) {},
-            onExport: (_, __, ___) {},
+            onExport: (_, __, ___, {bool hideEmptyColumns = false}) {},
           ),
         ),
         child: const Text('show'),

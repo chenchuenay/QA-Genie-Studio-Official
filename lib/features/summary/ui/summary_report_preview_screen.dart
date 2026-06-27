@@ -41,6 +41,7 @@ class _SummaryReportPreviewScreenState
     extends State<SummaryReportPreviewScreen> {
   bool _isProcessing = false;
   bool _isSharing = false;
+  bool _hideEmptyColumns = true;
 
   late final int _total;
   late final int _passed;
@@ -53,6 +54,11 @@ class _SummaryReportPreviewScreenState
     super.initState();
     _recompute();
   }
+
+  bool get _allUnexecuted => widget.session.testCases.every(
+    (tc) => tc.actualResult.trim().isEmpty &&
+           (tc.status.trim().isEmpty || tc.status == 'Not Executed'),
+  );
 
   void _recompute() {
     _total = widget.session.testCases.length;
@@ -124,8 +130,9 @@ class _SummaryReportPreviewScreenState
         environment: widget.environment,
         context: context,
         adToken: adToken,
+        hideEmptyColumns: _hideEmptyColumns,
       );
-      await FunctionsService.trackExport(
+      await FunctionsService.recordExportMetrics(
         summary: true,
         target: 'pdf',
         extension: 'pdf',
@@ -233,41 +240,72 @@ class _SummaryReportPreviewScreenState
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    onPressed: fullLock ? null : () => _exportPDF(context),
-                    icon: fullLock
-                        ? const SizedBox.shrink()
-                        : const Icon(
-                            Icons.picture_as_pdf,
-                            color: Colors.black,
-                          ),
-                    label: fullLock
-                        ? const Text(
-                            '⚡ Processing...',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.bold,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_allUnexecuted)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: Checkbox(
+                                value: _hideEmptyColumns,
+                                onChanged: (v) => setState(() => _hideEmptyColumns = v ?? true),
+                                fillColor: WidgetStateProperty.all(AppColors.accent),
+                                checkColor: Colors.black,
+                                side: const BorderSide(color: AppColors.border),
+                              ),
                             ),
-                          )
-                        : const Text(
-                            'Export PDF',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'Hide empty Status & Actual Result columns in PDF as not executed yet',
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              ),
                             ),
+                          ],
+                        ),
+                      ),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        onPressed: fullLock ? null : () => _exportPDF(context),
+                        icon: fullLock
+                            ? const SizedBox.shrink()
+                            : const Icon(
+                                Icons.picture_as_pdf,
+                                color: Colors.black,
+                              ),
+                        label: fullLock
+                            ? const Text(
+                                '⚡ Processing...',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
+                            : const Text(
+                                'Export PDF',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: fullLock
+                              ? AppColors.accent.withOpacity(0.5)
+                              : AppColors.accent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: fullLock
-                          ? AppColors.accent.withOpacity(0.5)
-                          : AppColors.accent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -395,6 +433,8 @@ class _SummaryReportPreviewScreenState
 
   Widget _detailedResultsTable() {
     final cases = widget.session.testCases;
+    const colWidths = [120.0, 180.0, 80.0, 80.0, 120.0];
+    final headers = ['Test Case ID', 'Title', 'Priority', 'Status', 'Actual Result'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -407,33 +447,60 @@ class _SummaryReportPreviewScreenState
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            children: [
-              _tableRow([
-                'Test Case ID',
-                'Title',
-                'Priority',
-                'Status',
-                'Actual Result',
-              ], isHeader: true),
-              ...cases.map(
-                (tc) => _tableRow([
-                  tc.id,
-                  tc.title,
-                  tc.priority,
-                  tc.status,
-                  tc.actualResult,
-                ]),
-              ),
-            ],
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.border),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                _detailRow(headers, colWidths, isHeader: true),
+                ...cases.map((tc) => _detailRow(
+                  [tc.id, tc.title, tc.priority, tc.status, tc.actualResult],
+                  colWidths,
+                )),
+              ],
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _detailRow(List<String> cells, List<double> colWidths, {bool isHeader = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.border.withOpacity(0.5)),
+        ),
+        color: isHeader ? AppColors.card : Colors.transparent,
+      ),
+      child: Row(
+        children: cells.asMap().entries.map((entry) {
+          final index = entry.key;
+          final cell = entry.value;
+          return SizedBox(
+            width: colWidths[index],
+            child: Text(
+              cell.isEmpty ? '-' : cell,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: TextStyle(
+                color: isHeader
+                    ? AppColors.accent
+                    : (cell == 'Pass'
+                          ? AppColors.success
+                          : (cell == 'Fail' ? AppColors.error : Colors.white)),
+                fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
+                fontSize: 12,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 
@@ -461,7 +528,7 @@ class _SummaryReportPreviewScreenState
             child: Text(
               cell.isEmpty ? '-' : cell,
               overflow: TextOverflow.ellipsis,
-              softWrap: true,
+              softWrap: false,
               style: TextStyle(
                 color: isHeader
                     ? AppColors.accent
