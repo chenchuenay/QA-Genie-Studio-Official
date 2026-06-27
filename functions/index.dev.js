@@ -4,6 +4,9 @@ const fetch = require("node-fetch");
 const zlib = require("zlib");
 
 admin.initializeApp();
+
+const _cleanup = require("./cleanup");
+exports.migrate = _cleanup.migrate;
 const db = admin.firestore();
 const TEST_CASES_BUCKET = (functions.config().test_cases && functions.config().test_cases.bucket) || "qa-genie-ai-dev-test-cases";
 const bucket = admin.storage().bucket(TEST_CASES_BUCKET);
@@ -33,13 +36,15 @@ function onCall(handler, runWithOpts = {}) {
     ? functions.runWith(runWithOpts).https.onCall
     : functions.https.onCall;
   const wrappedHandler = async (data, context) => {
-    // 1st gen onCall doesn't support enforceAppCheck option,
-    // so we enforce it manually here
+    // Enforcement is managed at Firebase Console level (currently OFF for Functions).
+    // We log verification failures for debugging but DO NOT block — otherwise any
+    // AppCheck token expiry / refresh issue rejects ALL calls (see bugfix 2026-06-27).
     if (!IS_DEV_PROJECT) {
       if (!context.app || !context.app.appId) {
-        throw new functions.https.HttpsError(
-          "unauthenticated",
-          "App Check verification required"
+        console.warn(
+          `[AppCheck] Token missing or invalid for function. ` +
+          `Enforcement is disabled at console level — allowing request. ` +
+          `app=${JSON.stringify(context.app)}`
         );
       }
     }
@@ -116,7 +121,26 @@ async function getCachedOrFetch(cacheKey, ttl, fetchFn) {
 // ------------------------------------------------------------------
 function sanitisePrompt(prompt) {
   if (typeof prompt !== "string") return "";
-  return prompt.replace(/<[^>]*>/g, "").replace(/[<>]/g, "").slice(0, 12000);
+  let s = prompt.replace(/<[^>]*>/g, "").replace(/[<>]/g, "").slice(0, 12000);
+  const lower = s.toLowerCase();
+  const blocked = [
+    "ignore previous instructions","ignore all instructions","disregard system prompt",
+    "forget previous instructions","override instructions",
+    "reveal system prompt","show hidden prompt","display internal prompt","show developer message",
+    "execute shell","run command","execute script","run powershell","run terminal",
+    "read local file","access filesystem","read secrets","dump credentials",
+    "generate infinite","repeat forever","spam generation","flood output",
+    "api key","secret token","private credential",
+  ];
+  for (const phrase of blocked) {
+    if (lower.includes(phrase)) {
+      s = s.replace(new RegExp(phrase, "gi"), "[BLOCKED]");
+    }
+  }
+  s = s.replace(/[`]{3,}|<script|<\/script>|<iframe|<\/iframe>/gi, "[REMOVED]");
+  s = s.replace(/(.)\1{20,}/g, "[TRUNCATED]");
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
+  return s.trim();
 }
 
 // --------------------------------------------------------------
@@ -361,11 +385,25 @@ exports.generate = onCall(async (data, context) => {
           ]);
         if (reqDoc.exists) throw new Error("ALREADY_PROCESSED");
 
-        // Handle rewardToken (new flow): create + consume atomically
+        // Handle rewardToken (new flow): validate server-issued nonce, then create + consume
         if (rewardToken) {
           const tokenRef = uRef.collection("usedRewards").doc(rewardToken);
           const tokenSnap = await t.get(tokenRef);
           if (tokenSnap.exists) throw new Error("AD_TOKEN_USED");
+
+          // Server-issued nonce: verify in processed_requests
+          // Fallback (client-generated) token: skip nonce validation, rely on uniqueness
+          if (!rewardToken.startsWith("fallback_")) {
+            const nonceRef = db.collection("processed_requests").doc(rewardToken);
+            const nonceSnap = await t.get(nonceRef);
+            if (!nonceSnap.exists || !["pending","verified"].includes(nonceSnap.data().status) || nonceSnap.data().uid !== uid)
+              throw new Error("INVALID_REWARD_TOKEN");
+            const nonceCreated = nonceSnap.data().createdAt?.toDate ? nonceSnap.data().createdAt.toDate() : new Date(nonceSnap.data().createdAt);
+            if (Date.now() - nonceCreated.getTime() > 5 * 60 * 1000)
+              throw new Error("REWARD_TOKEN_EXPIRED");
+            t.delete(nonceRef);
+          }
+
           t.set(tokenRef, {
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             usedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -738,7 +776,7 @@ exports.getOrCreateGuestToken = onCall(async (data) => {
     }
     // Guest doc consumed (upgraded/deleted) → create new returning guest
     console.log(`[getOrCreateGuestToken] GUEST CONSUMED | creating new returning guest`);
-    const newUid = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newUid = `guest_${Date.now()}_${crypto.randomUUID().split("-")[0]}`;
     const registryNumber = await getNextRegistryNumber();
     const displayName = `Guest${registryNumber}`;
     const batch = db.batch();
@@ -752,7 +790,7 @@ exports.getOrCreateGuestToken = onCall(async (data) => {
       type: "guest", metrics: { lifetimeGeneratedCases: 0 }, exports: { lifetimeExports: 0 },
     });
     batch.set(db.collection("the_qag_registry").doc(newUid), {
-      uid: newUid, type: "guest", displayName, createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      uid: newUid, type: "guest", displayName, deviceId, createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     batch.set(db.collection("deviceGuestMapping").doc(deviceDocId), {
       guestUid: newUid, androidId: androidId || null, createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -787,7 +825,7 @@ exports.getOrCreateGuestToken = onCall(async (data) => {
   }
 
   if (isNew) {
-    guestUid = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    guestUid = `guest_${Date.now()}_${crypto.randomUUID().split("-")[0]}`;
     const registryNumber = await getNextRegistryNumber();
     const displayName = `Guest${registryNumber}`;
     console.log(`[getOrCreateGuestToken] CREATING NEW guest | uid=${guestUid} | tier=${guestTier} | displayName=${displayName}`);
@@ -811,6 +849,7 @@ exports.getOrCreateGuestToken = onCall(async (data) => {
       uid: guestUid,
       type: "guest",
       displayName,
+      deviceId,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     batch.set(mappingRef, {
@@ -1164,10 +1203,12 @@ exports.recomputeAnalytics = onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // HEALTH CHECK
 // ------------------------------------------------------------------
-exports.healthCheck = onCall(async () => ({
-  status: "ok",
-  timestamp: new Date().toISOString(),
-}));
+exports.healthCheck = onCall(async (data, context) => {
+  if (!checkRateLimit(`healthCheck_${context.auth?.uid || "anon"}`, 10)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+  return { status: "ok", timestamp: new Date().toISOString() };
+});
 
 // ------------------------------------------------------------------
 // CHECK GENERATION QUOTA (client uses before showing ad)
@@ -1228,7 +1269,25 @@ exports.checkGenerationQuota = onCall(async (data, context) => {
 });
 
 // ------------------------------------------------------------------
-// VERIFY REWARDED AD (stores token)
+// REQUEST AD NONCE (server-generated UUID, prevents token fabrication)
+// ------------------------------------------------------------------
+exports.requestAdNonce = onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  if (!checkRateLimit(`requestAdNonce_${context.auth.uid}`, 2)) {
+    throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
+  }
+  const nonce = crypto.randomUUID();
+  await db.collection("processed_requests").doc(nonce).set({
+    uid: context.auth.uid,
+    status: "pending",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { nonce };
+});
+
+// ------------------------------------------------------------------
+// VERIFY REWARDED AD (validates server-issued nonce, marks as used)
 // ------------------------------------------------------------------
 exports.verifyRewardAd = onCall(async (data, context) => {
   if (!context.auth)
@@ -1240,10 +1299,26 @@ exports.verifyRewardAd = onCall(async (data, context) => {
   if (!checkRateLimit(`verifyRewardAd_${context.auth.uid}`, 10)) {
     return { verified: false, reason: "Rate limited" };
   }
-  const usedRewardsRef = uRef.collection("usedRewards").doc(adTransactionId);
-  const usedDoc = await usedRewardsRef.get();
-  if (usedDoc.exists) return { verified: false, reason: "Token already used" };
-  await usedRewardsRef.set({
+
+  // Validate nonce was server-issued via requestAdNonce
+  const nonceRef = db.collection("processed_requests").doc(adTransactionId);
+  const nonceDoc = await nonceRef.get();
+  if (!nonceDoc.exists)
+    return { verified: false, reason: "Invalid nonce" };
+  const nonceData = nonceDoc.data();
+  if (nonceData.uid !== context.auth.uid)
+    return { verified: false, reason: "Nonce uid mismatch" };
+  if (nonceData.status !== "pending")
+    return { verified: false, reason: "Nonce already used" };
+  const createdAt = nonceData.createdAt?.toDate ? nonceData.createdAt.toDate() : new Date(nonceData.createdAt);
+  if (Date.now() - createdAt.getTime() > 5 * 60 * 1000)
+    return { verified: false, reason: "Nonce expired" };
+
+  // Mark as verified
+  await nonceRef.update({ status: "verified" });
+
+  // Create usedRewards doc for consumption during generate
+  await uRef.collection("usedRewards").doc(adTransactionId).set({
     usedAt: admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
@@ -1374,16 +1449,24 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
     }
   }
 
-  // Ensure registry entry exists for ALL Google accounts (not just guest upgrades)
-  await db.collection("the_qag_registry").doc(uid).set(
+  // Ensure registry entry exists for ALL Google accounts (keyed by email for single source of truth)
+  const registryId = email || uid;
+  await db.collection("the_qag_registry").doc(registryId).set(
     {
       type: "member",
       uid,
+      email: registryId,
       displayName: displayName || guestDisplayName || "",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },
   );
+  // Clean up old uid-keyed registry entry if it exists (migration from previous format)
+  if (email && registryId !== uid) {
+    try {
+      await db.collection("the_qag_registry").doc(uid).delete();
+    } catch (_) {}
+  }
 
   // Create / update email → uid mapping for cross-reinstall identity resolution.
   // Preserve the original uid so getMemberSuites can redirect to the first-ever UID
@@ -1488,7 +1571,9 @@ exports.deleteAccount = onCall(async (data, context) => {
     ? db.collection("usage").doc(profile.data.email)
     : db.collection("usage").doc(uid);
   batch.delete(usageDelete);
-  batch.delete(db.collection("the_qag_registry").doc(uid));
+  // Registry key: email for members, uid for guests
+  const registryKey = isMember && profile.data.email ? profile.data.email : uid;
+  batch.delete(db.collection("the_qag_registry").doc(registryKey));
   // deviceUsage/{deviceId} is NOT deleted — it carries the device's daily quota
   // across account resets. This prevents quota abuse via delete-recreate.
   const userEmail = email || context.auth.token.email;
@@ -1543,6 +1628,120 @@ exports.deleteAccount = onCall(async (data, context) => {
   await admin.auth().deleteUser(uid);
   return { success: true };
 });
+
+// ------------------------------------------------------------------
+// FIRESTORE TRIGGERS: CASCADE DELETE ON MANUAL CONSOLE DELETION
+// ------------------------------------------------------------------
+
+// When memberProfiles/{email} is deleted from console → cascade all related data
+exports.onMemberProfileDeleted = functions.firestore
+  .document("memberProfiles/{email}")
+  .onDelete(async (snap, context) => {
+    const { email } = context.params;
+    const data = snap.data() || {};
+    const uid = data.uid;
+    const logPrefix = `[onMemberProfileDeleted]`;
+    console.log(`${logPrefix} FIRED | email=${email} | uid=${uid}`);
+    if (!uid) {
+      console.warn(`${logPrefix} No uid in deleted doc — skipping`);
+      return;
+    }
+    const batch = db.batch();
+
+    // 1. Delete usage/{email}
+    batch.delete(db.collection("usage").doc(email));
+
+    // 2. Delete the_qag_registry/{email}
+    batch.delete(db.collection("the_qag_registry").doc(email));
+
+    // 3. Delete memberData/{tier}/{uid}/suites (Firestore metadata + GCS .json files)
+    const gcsPromises = [];
+    try {
+      const tier = await _getMemberTier(uid);
+      const uidDocRef = db.collection("memberData").doc(tier).collection(uid);
+      const dateDocs = await uidDocRef.get();
+      for (const dateDoc of dateDocs.docs) {
+        const suitesSnap = await dateDoc.ref.collection("suites").get();
+        for (const suiteDoc of suitesSnap.docs) {
+          batch.delete(suiteDoc.ref);
+          gcsPromises.push(
+            bucket.file(`memberData/${tier}/${uid}/${dateDoc.id}/suites/${suiteDoc.id}.json`)
+              .delete().catch(() => {}),
+          );
+        }
+      }
+      // Legacy path: memberData/{uid}/dates/{date}/suites/{serial}
+      const legacyColRef = db.collection("memberData").doc(uid).collection("dates");
+      const legacyDateDocs = await legacyColRef.get();
+      for (const dateDoc of legacyDateDocs.docs) {
+        const suitesSnap = await dateDoc.ref.collection("suites").get();
+        for (const suiteDoc of suitesSnap.docs) {
+          batch.delete(suiteDoc.ref);
+        }
+      }
+    } catch (e) {
+      console.warn(`${logPrefix} suite cleanup failed: ${e.message}`);
+    }
+
+    // 4. Create emailCooldown/{email} (24h)
+    batch.set(db.collection("emailCooldown").doc(email), {
+      uid, email,
+      expires: admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() + COOLDOWN_HOURS * 60 * 60 * 1000),
+      ),
+      reason: "manual_console_deletion",
+    });
+
+    await batch.commit();
+    await Promise.all(gcsPromises);
+
+    // 5. Delete Firebase Auth user
+    try {
+      await admin.auth().deleteUser(uid);
+      console.log(`${logPrefix} Auth user deleted | uid=${uid}`);
+    } catch (e) {
+      console.warn(`${logPrefix} Failed to delete auth user: ${e.message}`);
+    }
+    console.log(`${logPrefix} COMPLETE | email=${email}`);
+  });
+
+// When guests/{uid} is deleted from console → cascade all related data
+exports.onGuestDeleted = functions.firestore
+  .document("guests/{uid}")
+  .onDelete(async (snap, context) => {
+    const { uid } = context.params;
+    const data = snap.data() || {};
+    const identity = data.identity || {};
+    const deviceId = identity.deviceId;
+    const logPrefix = `[onGuestDeleted]`;
+    console.log(`${logPrefix} FIRED | uid=${uid}`);
+
+    const batch = db.batch();
+
+    // 1. Delete usage/{uid}
+    batch.delete(db.collection("usage").doc(uid));
+
+    // 2. Delete the_qag_registry/{uid}
+    batch.delete(db.collection("the_qag_registry").doc(uid));
+
+    // 3. Mark deviceGuestMapping/{deviceId} as deleted (preserve returning status)
+    if (deviceId) {
+      batch.set(db.collection("deviceGuestMapping").doc(deviceId), {
+        guestUid: uid, deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
+    await batch.commit();
+
+    // 4. Delete Firebase Auth user
+    try {
+      await admin.auth().deleteUser(uid);
+      console.log(`${logPrefix} Auth user deleted | uid=${uid}`);
+    } catch (e) {
+      console.warn(`${logPrefix} Failed to delete auth user: ${e.message}`);
+    }
+    console.log(`${logPrefix} COMPLETE | uid=${uid}`);
+  });
 
 // ------------------------------------------------------------------
 // SUBMIT ISSUE REPORT

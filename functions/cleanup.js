@@ -1,7 +1,6 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
-admin.initializeApp();
 const db = admin.firestore();
 
 /**
@@ -262,16 +261,141 @@ exports.migrate = functions.https.onCall(async (data, context) => {
     console.log("✅ analytics/global recomputed");
   }
 
+  // ====================================================================
+  // 5. MIGRATE MEMBER REGISTRY ENTRIES FROM uid-KEYED → email-KEYED
+  // ====================================================================
+  let registryMigrated = 0;
+  let registryErrors = 0;
+  {
+    const regSnap = await db.collection("the_qag_registry").get();
+    const memberProfileSnap = await db.collection("memberProfiles").get();
+    const emailByUid = {};
+    memberProfileSnap.forEach(d => {
+      const d2 = d.data();
+      if (d2.uid) emailByUid[d2.uid] = d.id;
+    });
+
+    const batch = db.batch();
+    let ops = 0;
+    regSnap.forEach(d => {
+      const data = d.data();
+      if (data.type !== "member") return;
+      const docId = d.id;
+      // Already email-keyed — skip
+      if (docId.includes("@")) return;
+      // Look up email from memberProfiles or from data.email field
+      const email = data.email || emailByUid[docId];
+      if (!email) {
+        console.warn(`  Step 5: No email found for member registry ${docId} — skipping`);
+        registryErrors++;
+        return;
+      }
+      // Create new email-keyed entry, delete old uid-keyed entry
+      batch.set(db.collection("the_qag_registry").doc(email), { ...data, email });
+      batch.delete(d.ref);
+      ops++;
+      registryMigrated++;
+      console.log(`  Step 5: ${docId} → ${email} migrated`);
+    });
+    if (ops > 0) {
+      await batch.commit();
+      console.log(`  Step 5: committed ${ops} batch writes`);
+    }
+    console.log(`✅ Member registry entries migrated: ${registryMigrated}`);
+  }
+
+  // ====================================================================
+  // 6. BACKFILL MISSING deviceId ON GUEST REGISTRY ENTRIES
+  // ====================================================================
+  let deviceIdBackfilled = 0;
+  {
+    const regSnap = await db.collection("the_qag_registry").get();
+    const batch = db.batch();
+    let ops = 0;
+    const guestUidsToFetch = [];
+    regSnap.forEach(d => {
+      const data = d.data();
+      if (data.type !== "guest") return;
+      if (data.deviceId) return; // already has deviceId
+      guestUidsToFetch.push({ docId: d.id, ref: d.ref });
+    });
+
+    // Batch fetch guest docs to get deviceId
+    for (const entry of guestUidsToFetch) {
+      try {
+        const guestDoc = await db.collection("guests").doc(entry.docId).get();
+        if (guestDoc.exists) {
+          const deviceId = guestDoc.data()?.identity?.deviceId;
+          if (deviceId) {
+            batch.update(entry.ref, { deviceId });
+            ops++;
+            deviceIdBackfilled++;
+          }
+        }
+      } catch (e) {
+        console.warn(`  Step 6: Error fetching guest ${entry.docId}: ${e.message}`);
+      }
+    }
+    if (ops > 0) {
+      await batch.commit();
+      console.log(`  Step 6: committed ${ops} batch writes`);
+    }
+    console.log(`✅ Guest registry deviceId backfilled: ${deviceIdBackfilled}`);
+  }
+
+  // ====================================================================
+  // 7. BACKFILL MISSING MEMBER REGISTRY ENTRIES FROM memberProfiles
+  // ====================================================================
+  let memberRegistryBackfilled = 0;
+  {
+    const regSnap = await db.collection("the_qag_registry").get();
+    const existingRegistryEmails = new Set();
+    regSnap.forEach(d => {
+      const data = d.data();
+      if (data.type === "member") existingRegistryEmails.add(d.id);
+    });
+
+    const batch = db.batch();
+    let ops = 0;
+    memberProfilesSnap.forEach(d => {
+      const email = d.id;
+      if (existingRegistryEmails.has(email)) return;
+      const data = d.data();
+      if (data.deletedAt) return; // skip deleted accounts
+      batch.set(db.collection("the_qag_registry").doc(email), {
+        type: "member",
+        uid: data.uid,
+        email,
+        displayName: data.displayName || "",
+        createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+      });
+      ops++;
+      memberRegistryBackfilled++;
+      console.log(`  Step 7: Created registry entry for ${email}`);
+    });
+    if (ops > 0) {
+      await batch.commit();
+      console.log(`  Step 7: committed ${ops} batch writes`);
+    }
+    console.log(`✅ Missing member registry entries created: ${memberRegistryBackfilled}`);
+  }
+
   console.log("=== Cleanup migration complete ===");
   console.log(`  Member usage docs migrated: ${migrated}`);
   console.log(`  Members collection docs deleted: ${deletedMembersDocs}`);
   console.log(`  Guest registry entries backfilled: ${backfilledGuests}`);
+  console.log(`  Member registry entries migrated to email-keyed: ${registryMigrated}`);
+  console.log(`  Guest registry deviceId backfilled: ${deviceIdBackfilled}`);
+  console.log(`  Missing member registry entries created: ${memberRegistryBackfilled}`);
   console.log(`  Errors: ${errors}`);
 
   return {
     migrated,
     deletedMembersDocs,
     backfilledGuests,
-    errors,
+    registryMigrated,
+    deviceIdBackfilled,
+    memberRegistryBackfilled,
+    errors: errors + registryErrors,
   };
 });
