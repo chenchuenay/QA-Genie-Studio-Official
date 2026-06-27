@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:qa_genie/app_config.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
@@ -57,7 +58,9 @@ class _AuthDialogState extends State<AuthDialog> {
   String? _progressMessage;
   Timer? _dotTimer;
   int _dotCount = 0;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  late final GoogleSignIn _googleSignIn = AppConfig.isDev
+      ? GoogleSignIn(serverClientId: '113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com')
+      : GoogleSignIn();
 
   @override
   void dispose() {

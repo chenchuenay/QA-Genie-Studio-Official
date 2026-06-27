@@ -3,6 +3,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:qa_genie/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/core/database/database_service.dart';
@@ -14,7 +15,9 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
-  static final GoogleSignIn _googleSignIn = GoogleSignIn();
+  static late final GoogleSignIn _googleSignIn = AppConfig.isDev
+      ? GoogleSignIn(serverClientId: '113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com')
+      : GoogleSignIn();
   static bool _googleAuthInProgress = false;
   static bool get isGoogleAuthInProgress => _googleAuthInProgress;
 

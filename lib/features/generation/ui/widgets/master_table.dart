@@ -4,6 +4,7 @@ import 'package:qa_genie/domain/enums/case_source.dart';
 import 'package:qa_genie/core/utils/priority_utils.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
+import 'package:qa_genie/engine/risk/risk_scorer.dart';
 
 class MasterTable extends StatefulWidget {
   final List<FinalizedTestCase> testCases;
@@ -14,6 +15,8 @@ class MasterTable extends StatefulWidget {
   final bool selectionMode;
   final Set<int> selectedIndices;
   final ValueChanged<Set<int>>? onSelectionChanged;
+  final bool riskMode;
+  final Map<String, int>? riskScores;
 
   const MasterTable({
     super.key,
@@ -25,6 +28,8 @@ class MasterTable extends StatefulWidget {
     this.selectionMode = false,
     this.selectedIndices = const {},
     this.onSelectionChanged,
+    this.riskMode = false,
+    this.riskScores,
   });
 
   @override
@@ -37,6 +42,7 @@ class _MasterTableState extends State<MasterTable> {
 
   final List<double> colWidths = [85, 150, 170, 180, 140, 180, 140, 110, 90];
   static const double _checkboxWidth = 44;
+  static const double _riskColumnWidth = 100;
 
   static const _cyanColor = AppColors.accent;
   static const _dividerColor = Color(0xFF2A2A3A);
@@ -96,7 +102,9 @@ class _MasterTableState extends State<MasterTable> {
   }
 
   double get _totalWidth =>
-      (widget.selectionMode ? _checkboxWidth : 0) + colWidths.reduce((a, b) => a + b);
+      (widget.selectionMode ? _checkboxWidth : 0) +
+      (widget.riskMode ? _riskColumnWidth : 0) +
+      colWidths.reduce((a, b) => a + b);
 
   void _edited(int index) {
     widget.onCellEdit?.call();
@@ -132,7 +140,7 @@ class _MasterTableState extends State<MasterTable> {
   }
 
   Widget _buildHeader() {
-    const headers = ['ID', 'Title', 'Preconditions', 'Steps', 'Test Data', 'Expected Result', 'Actual Result', 'Status', 'Priority'];
+    const baseHeaders = ['ID', 'Title', 'Preconditions', 'Steps', 'Test Data', 'Expected Result', 'Actual Result', 'Status', 'Priority'];
     return Container(
       color: Colors.transparent,
       child: Row(
@@ -157,11 +165,19 @@ class _MasterTableState extends State<MasterTable> {
                 ),
               ),
             ),
-          ...List.generate(headers.length, (i) => SizedBox(
+          if (widget.riskMode)
+            SizedBox(
+              width: _riskColumnWidth,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                child: Text('Risk', style: TextStyle(color: _cyanColor, fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+            ),
+          ...List.generate(baseHeaders.length, (i) => SizedBox(
             width: colWidths[i],
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              child: Text(headers[i], style: const TextStyle(color: _cyanColor, fontWeight: FontWeight.bold, fontSize: 13)),
+              child: Text(baseHeaders[i], style: const TextStyle(color: _cyanColor, fontWeight: FontWeight.bold, fontSize: 13)),
             ),
           )),
         ],
@@ -212,6 +228,7 @@ class _MasterTableState extends State<MasterTable> {
                   ),
                 ),
               ),
+            if (widget.riskMode) _riskBadgeCell(i, tc),
             _idCell(i, tc),
             _plainTextCell(titleCtrls[i], colWidths[1], (v) { tc.title = v; _edited(i); }),
             _plainTextCell(preCtrls[i], colWidths[2], (v) {
@@ -237,7 +254,45 @@ class _MasterTableState extends State<MasterTable> {
     );
   }
 
-  // ✅ Changed to use OutlineInputBorder like export preview
+  Widget _riskBadgeCell(int i, FinalizedTestCase tc) {
+    final score = widget.riskScores?[tc.id] ?? 0;
+    final label = RiskScorer.label(score);
+    final icon = RiskScorer.icon(score);
+    final Color badgeColor;
+    switch (RiskScorer.tier(score)) {
+      case RiskTier.mustTest: badgeColor = const Color(0xFFB71C1C); break;
+      case RiskTier.shouldTest: badgeColor = const Color(0xFFE65100); break;
+      case RiskTier.optional: badgeColor = const Color(0xFF2E7D32); break;
+    }
+    return SizedBox(
+      width: _riskColumnWidth,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            color: badgeColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: badgeColor.withOpacity(0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!widget.selectionMode) Text(icon, style: const TextStyle(fontSize: 11)),
+              if (!widget.selectionMode) const SizedBox(width: 3),
+              Flexible(
+                child: Text(label,
+                  style: TextStyle(color: badgeColor, fontSize: 9, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _idCell(int i, FinalizedTestCase tc) {
     return SizedBox(
       width: colWidths[0],
@@ -293,7 +348,7 @@ class _MasterTableState extends State<MasterTable> {
 
   Widget _stepsCell(int i, FinalizedTestCase tc) {
     return SizedBox(
-      width: colWidths[3],
+      width: colWidths[2],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: widget.isEditable

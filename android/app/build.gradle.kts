@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.util.Base64
 
 plugins {
     id("com.android.application")
@@ -19,6 +20,11 @@ val keystoreStorePassword = keystoreProperties.getProperty("storePassword")
 val keystoreKeyAlias = keystoreProperties.getProperty("keyAlias")
 val keystoreKeyPassword = keystoreProperties.getProperty("keyPassword")
 
+val dartDefines = (project.findProperty("dart-defines") as? String)?.split(",") ?: emptyList()
+val isDevBuild = dartDefines.any { def ->
+    try { String(Base64.getDecoder().decode(def)) == "IS_DEV=true" } catch (_: Exception) { false }
+}
+
 android {
     namespace = "com.enaykumar.qagenie"
     compileSdk = 36
@@ -28,7 +34,7 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 19
+        versionCode = 20
         multiDexEnabled = true
         manifestPlaceholders["appName"] = "QA Genie"
     }
@@ -46,10 +52,17 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = keystoreFile
-            storePassword = keystoreStorePassword
-            keyAlias = keystoreKeyAlias
-            keyPassword = keystoreKeyPassword
+            if (isDevBuild) {
+                storeFile = file("qa_genie_dev.jks")
+                storePassword = "dev123456"
+                keyAlias = "dev"
+                keyPassword = "dev123456"
+            } else {
+                storeFile = keystoreFile
+                storePassword = keystoreStorePassword
+                keyAlias = keystoreKeyAlias
+                keyPassword = keystoreKeyPassword
+            }
         }
     }
 

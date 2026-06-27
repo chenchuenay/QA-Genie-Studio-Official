@@ -527,7 +527,7 @@ class _HomeScreenState extends State<HomeScreen>
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 title: const Text('Ad Unavailable', style: TextStyle(color: Colors.white)),
                 content: const Text(
-                  'Couldn\'t load an ad. Please check for ad blockers or network issues and try again.',
+                  'Couldn\'t load an ad. Please check for ad blockers, VPNs, or network issues and try again.',
                   style: TextStyle(color: Colors.white70),
                 ),
                 actions: [

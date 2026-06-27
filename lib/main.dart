@@ -47,7 +47,7 @@ Future<void> main() async {
 
 const FirebaseOptions _devFirebaseOptions = FirebaseOptions(
   apiKey: 'AIzaSyClNIMloB5GvcDuxdllXlh41JSj0aW26EY',
-  appId: '1:113750340081:android:64a9e770deaaec18677add',
+  appId: '1:113750340081:android:7832467b709a15e4e39450',
   messagingSenderId: '113750340081',
   projectId: 'qa-genie-ai-dev',
   storageBucket: 'qa-genie-ai-dev.firebasestorage.app',

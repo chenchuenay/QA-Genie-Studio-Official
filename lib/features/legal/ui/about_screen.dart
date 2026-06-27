@@ -126,6 +126,14 @@ class _AboutScreenState extends State<AboutScreen> {
                   'Export Summaries',
                   'Share concise test-summary reports with your team.',
                 ),
+                _featureItem(
+                  'Risk-Based Sorting',
+                  'Sort test cases by risk level automatically — security, negative, and high-priority cases rise to the top.',
+                ),
+                _featureItem(
+                  'Batch Selection',
+                  'Long-press to select multiple cases for batch copy, move, or delete.',
+                ),
               ],
             ),
             const SizedBox(height: 16),

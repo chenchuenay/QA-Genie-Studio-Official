@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/config/app_config.dart';
@@ -16,6 +17,7 @@ import 'package:qa_genie/domain/usecases/export_test_cases_use_case.dart';
 import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/core/database/database_service.dart';
+import 'package:qa_genie/engine/risk/risk_scorer.dart';
 
 class SuitePreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -38,7 +40,7 @@ class SuitePreviewScreen extends StatefulWidget {
 }
 
 class _SuitePreviewScreenState extends State<SuitePreviewScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final ExportTestCasesUseCase _exportUseCase = ExportTestCasesUseCase();
   final SaveSuiteUseCase _saveUseCase = AppDependencies.saveSuiteUseCase;
 
@@ -50,16 +52,33 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   bool _selectionMode = false;
   final Set<int> _selectedIndices = {};
 
+  bool _riskMode = false;
+  List<FinalizedTestCase>? _originalOrder;
+  Map<String, int> _riskScores = {};
+
+  bool _guidelinesDismissed = false;
+  bool _helpTappedThisSession = false;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // ... keep audit logs (unchanged)
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.0, end: 0.08).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    _checkGuidelines();
   }
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _pulseController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -67,6 +86,123 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) _forceSave();
+  }
+
+  Future<void> _checkGuidelines() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getBool('suite_preview_guidelines_shown') ?? false;
+    if (mounted) {
+      setState(() => _guidelinesDismissed = dismissed);
+      if (!dismissed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) _showGuidelinesDialog();
+          });
+        });
+      }
+    }
+  }
+
+  bool get _shouldPulseHelp =>
+      _guidelinesDismissed && !_helpTappedThisSession;
+
+  Future<void> _showGuidelinesDialog({bool showDontShowAgain = true}) async {
+    bool dontShowAgain = false;
+    final scrollController = ScrollController();
+    if (showDontShowAgain) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (scrollController.hasClients) {
+          scrollController.animateTo(
+            scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+    await showBlurredDialog(context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInnerState) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Suite Preview — Features Guide', style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            controller: scrollController,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _guideSection('📋', 'Summary Report',
+                  'View execution stats, pass/fail counts, and export a formal PDF report.\nTap to open whenever ready.'),
+                const SizedBox(height: 12),
+                _guideSection('🛡️', 'Risk Sort',
+                  'Sort cases by risk level automatically. Security + Negative + High Priority cases rise to the top.\nGreat for deciding what to test first. Tap again to restore original order.'),
+                const SizedBox(height: 12),
+                _guideSection('✏️', 'Edit Mode',
+                  'Modify case titles, steps, priorities, and more inline. Tap Save to persist changes.\nRisk Sort turns off during editing.'),
+                const SizedBox(height: 12),
+                _guideSection('👆', 'Long-Press a Row',
+                  'Select multiple cases to Copy, Move, or Delete as a batch.\nUseful for grouping high-risk cases into a new suite for focused export.'),
+                const SizedBox(height: 12),
+                _guideSection('📥', 'Export Options',
+                  'Export cases as Excel, PDF, Jira CSV, or Xray JSON.\nAvailable when not in Edit, Selection, or Risk Sort mode.'),
+                const SizedBox(height: 12),
+                _guideSection('ℹ️', 'Status Banner',
+                  '"Actual Result" and "Status" are blank by design — fill them during execution.'),
+                if (showDontShowAgain) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: dontShowAgain,
+                        onChanged: (v) => setInnerState(() => dontShowAgain = v ?? false),
+                        fillColor: WidgetStateProperty.resolveWith((_) => AppColors.accent),
+                        checkColor: Colors.black,
+                        side: const BorderSide(color: AppColors.textHint),
+                      ),
+                      const Text("Don't show this again", style: TextStyle(color: Colors.white70)),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                if (dontShowAgain) {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('suite_preview_guidelines_shown', true);
+                  if (mounted) setState(() => _guidelinesDismissed = true);
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Got it', style: TextStyle(color: AppColors.accent)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _guideSection(String emoji, String title, String body) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 18)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 2),
+              Text(body, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _forceSave() async {
@@ -102,6 +238,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
       _backupCases = widget.session.testCases
           .map((tc) => tc.copyWith())
           .toList();
+      if (_riskMode) _toggleRiskMode();
     }
     setState(() => isEditable = !isEditable);
   }
@@ -144,6 +281,29 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     }
   }
 
+  void _toggleRiskMode() {
+    if (isEditable) {
+      _saveAndExitEdit();
+    }
+    setState(() {
+      if (!_riskMode) {
+        _originalOrder = List.from(widget.session.testCases);
+        _riskScores = RiskScorer.score(widget.session.testCases);
+        widget.session.testCases.sort((a, b) =>
+          (_riskScores[b.id] ?? 0).compareTo(_riskScores[a.id] ?? 0));
+        _riskMode = true;
+      } else {
+        if (_originalOrder != null) {
+          widget.session.testCases
+            ..clear()
+            ..addAll(_originalOrder!);
+          _originalOrder = null;
+        }
+        _riskMode = false;
+      }
+    });
+  }
+
   Future<void> _export(String type, String? adToken, {bool hideEmptyColumns = false}) async {
     if (_isExporting) return;
     _isExporting = true;
@@ -180,6 +340,30 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   }
 
   Future<void> _openExport() async {
+    if (_riskMode) {
+      await showBlurredDialog(context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Risk Sort Active', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Export is disabled while Risk Sort is active.\n\n'
+            'To export grouped by risk level:\n'
+            '1. Long-press high-risk cases to select\n'
+            '2. Tap Copy/Move to another suite\n'
+            '3. Export from that suite',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     await _autoSave();
     if (!mounted) return;
     await showBlurredDialog<List<FinalizedTestCase>>(
@@ -491,6 +675,63 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                           ),
                         ),
                         const SizedBox(width: 12),
+                        IconButton(
+                          onPressed: _toggleRiskMode,
+                          icon: const Text('🛡️', style: TextStyle(fontSize: 20)),
+                          tooltip: 'Risk Sort',
+                          style: IconButton.styleFrom(
+                            backgroundColor: _riskMode
+                                ? AppColors.accent.withOpacity(0.2)
+                                : Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        if (_riskMode)
+                          Container(
+                            margin: const EdgeInsets.only(right: 1),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.accent.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.accent.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: const Text('ON', style: TextStyle(
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            )),
+                          ),
+                        AnimatedBuilder(
+                          animation: _pulseAnimation,
+                          builder: (context, child) {
+                            final pulse = _shouldPulseHelp ? _pulseAnimation.value : 0.0;
+                            return Transform.scale(
+                              scale: 1.0 + pulse,
+                              child: IconButton(
+                                onPressed: () {
+                                  _helpTappedThisSession = true;
+                                  _showGuidelinesDialog(showDontShowAgain: false);
+                                },
+                                icon: const Icon(Icons.help_outline, color: Colors.white70, size: 22),
+                                tooltip: 'Help',
+                                style: IconButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 4),
                         OutlinedButton(
                           onPressed: _toggleEdit,
                           style: OutlinedButton.styleFrom(
@@ -608,6 +849,8 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                   selectionMode: _selectionMode,
                   selectedIndices: _selectedIndices,
                   onSelectionChanged: _onSelectionChanged,
+                  riskMode: _riskMode,
+                  riskScores: _riskScores,
                 ),
               ),
             ),
@@ -630,11 +873,11 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
-                    onPressed: isEditable ? null : _openExport,
+                    onPressed: (isEditable || _riskMode) ? null : _openExport,
                     icon: const Icon(Icons.file_download),
                     label: const Text('Export Options'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isEditable
+                      backgroundColor: (isEditable || _riskMode)
                           ? AppColors.textHint
                           : AppColors.accent,
                       foregroundColor: Colors.black,
