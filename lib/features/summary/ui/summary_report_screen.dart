@@ -371,8 +371,12 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
   }
 
   Widget _buildDetailedTable() {
-    return Column(
-      children: widget.session.testCases.map((tc) {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: widget.session.testCases.length,
+      itemBuilder: (_, i) {
+        final tc = widget.session.testCases[i];
         return Container(
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.all(10),
@@ -412,7 +416,7 @@ class _SummaryReportScreenState extends State<SummaryReportScreen> {
             ],
           ),
         );
-      }).toList(),
+      },
     );
   }
 

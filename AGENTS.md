@@ -310,3 +310,48 @@ also try to uninstall apps before installing
 
 - **Never checkout, reset, merge, or switch branches while uncommitted changes exist.** Always `git commit` or `git stash` first. Failing to do so WILL lose uncommitted work.
 
+## Anchored Summary — Text Limits, ListView Perform, Duplicate Guard, Copy/Move re-ID
+
+### Goal
+Fix remaining UX/quality issues: offline detection, ad reward nonce flow, account screen caching, feature name in titles, TC ID management, text field limits, and 400+ case rendering performance.
+
+### Key Decisions
+- **Option A for ad reward**: `requestAdNonce` → `rewardToken` flow (server-issued nonce validated atomically) chosen over Option B (`verifyRewardAd` → `adToken` legacy flow).
+- **HTTP cache cleared on connectivity change**: connectivity_plus fires instantly when network drops; clearing stale HTTP cache ensures `hasInternet()` doesn't return `true` for up to 30s after going offline.
+- **Display name caching**: SharedPreferences used over Firebase Auth `displayName` alone because some Google-linked users have null `displayName` in `FirebaseAuth.currentUser`.
+- **Renumber button removed**: auto-renumber is unnecessary, gaps are normal (breaks references, confuses users).
+- **Copy/move `_reId` over `IdGenerator.generate`**: preserves original module prefix (`TC_login_006` stays `TC_login_*`); only number adapts to target suite's current count.
+- **maxLength only on editable TextFields in master_table + export preview**: summary report tester/env fields unchanged (lower priority).
+- **Column → ListView.builder/L.separated for performance**: 400+ case suites cause jank/crash with Column. Lazy builders only build visible rows.
+
+### Critical Context
+- Version: 1.2.67 (versionCode 23)
+- DeepSeek cloud function: `timeoutSeconds: 60`, fetch abort at 55s, model `deepseek-v4-flash`, `extra_body: { thinking: { type: "disabled" } }`, `response_format: { type: "json_object" }`.
+- `DEEPSEEK_API_KEY` must be set as Firebase secret — missing it causes `HTTP_401` on every API call.
+- `ensureProductionOnline()` in `NetworkUiHelper` uses `NetworkGuard.hasInternet()` (HTTP check); 30s cache was root cause of offline dialog not showing — now cleared on connectivity change.
+- `IdGenerator.generate()` is truly dead code after Renumber removal. `_reId()` replaces it in copy/move.
+- Copy/move queries `getTestCasesForSuite(targetSuiteId)` and uses `_reId(originalId, existing.length + position + 1)` — preserves prefix, only number changes.
+- `maxLength` on TextField: does NOT truncate `controller.text =` (AI content passes unhindered); stops user typing/paste at limit. Counter via `counterStyle` only (no `buildCounter` in Flutter 3.44.1).
+- `Flutter 3.44.1` — no `buildCounter` or `counter` widget in `InputDecoration`. Only `counterText` + `counterStyle` available.
+- Reward ad flow: `home_screen.dart` → `FunctionsService.requestAdNonce()` → show ad → pass nonce as `rewardToken` to `generate` cloud function → server validates against `processed_requests` atomically.
+- Summary report screens (`summary_report_screen.dart`, `summary_report_preview_screen.dart`) now use `ListView.builder(shrinkWrap: true, NeverScrollableScrollPhysics())` for Detailed Results table.
+- All builds: `flutter clean && flutter pub get && flutter build apk --release --obfuscate --split-debug-info=build/debug-info`. Must uninstall before install on device.
+
+### Relevant Files
+- `lib/core/network/network_guard.dart`: HTTP cache cleared on connectivity change
+- `lib/core/network/network_ui_helper.dart`: `ensureProductionOnline()` calls `hasInternet()`, shows NoInternetScreen dialog
+- `lib/firebase/cloud_functions/functions_service.dart`: added `requestAdNonce()` binding
+- `lib/features/generation/ui/screens/home_screen.dart`: calls `FunctionsService.requestAdNonce()` before ad dialog
+- `lib/engine/orchestration/stages/ai_generation_stage.dart`: reverted `fallback_` prefix on `rewardToken`
+- `lib/engine/generators/title_generator.dart`: removed `feature` param from `generate()`, all `$feature` interpolations removed
+- `lib/engine/orchestrator/deterministic_engine.dart`: updated `TitleGenerator.generate()` call (no `feature`)
+- `lib/engine/recovery/ai_repair_engine.dart`: updated `TitleGenerator.generate()` call (no `feature`)
+- `lib/features/account/ui/account_screen.dart`: `_loadCached()`, `_cachedDisplayName`, caching in `_loadData()`
+- `lib/features/suites/ui/screens/suite_preview_screen.dart`: Renumber removed, `_reId()` added, `IdGenerator` import removed, `_batchCopy()`/`_batchMove()` updated, duplicate guard wiring
+- `lib/features/generation/ui/widgets/master_table.dart`: 7 fields with `maxLength` + `counterStyle`, `_duplicateIndices` set, `onDuplicateChange` callback
+- `lib/shared/dialogs/export_preview_dialog.dart`: `_maxLengthForHeader()` mapping, `maxLength` + tiny `counterStyle`, Column → `ListView.separated` + `Expanded` inside `SizedBox`
+- `lib/features/summary/ui/summary_report_screen.dart`: Column → `ListView.builder(shrinkWrap: true, NeverScrollableScrollPhysics())`
+- `lib/features/summary/ui/summary_report_preview_screen.dart`: Column → `ListView.builder(shrinkWrap: true, NeverScrollableScrollPhysics())`
+- `test/engine/generators/title_generator_test.dart`: updated to new `TitleGenerator.generate(scenario)` signature
+- `lib/core/utils/id_generator.dart`: `IdGenerator.generate(module, index)` — dead code after Renumber removal
+

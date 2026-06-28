@@ -454,14 +454,18 @@ class _SummaryReportPreviewScreenState
               border: Border.all(color: AppColors.border),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Column(
-              children: [
-                _detailRow(headers, colWidths, isHeader: true),
-                ...cases.map((tc) => _detailRow(
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: cases.length + 1,
+              itemBuilder: (_, i) {
+                if (i == 0) return _detailRow(headers, colWidths, isHeader: true);
+                final tc = cases[i - 1];
+                return _detailRow(
                   [tc.id, tc.title, tc.priority, tc.status, tc.actualResult],
                   colWidths,
-                )),
-              ],
+                );
+              },
             ),
           ),
         ),

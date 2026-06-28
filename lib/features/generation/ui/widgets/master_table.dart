@@ -6,6 +6,14 @@ import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
 import 'package:qa_genie/engine/risk/risk_scorer.dart';
 
+const _cyanColor = AppColors.accent;
+const _dividerColor = Color(0xFF2A2A3A);
+const _textPrimary = Colors.white;
+const _textSecondary = Color(0xFFCCCCCC);
+const _pillBg = Color(0xFF2A2A3A);
+const _fieldBg = Color(0xFF1A1A2E);
+const _counterStyle = TextStyle(fontSize: 8, color: Colors.white38, height: 1);
+
 class MasterTable extends StatefulWidget {
   final List<FinalizedTestCase> testCases;
   final bool isEditable;
@@ -46,13 +54,6 @@ class _MasterTableState extends State<MasterTable> {
   final Set<int> _duplicateIndices = {};
   static const double _checkboxWidth = 44;
   static const double _riskColumnWidth = 100;
-
-  static const _cyanColor = AppColors.accent;
-  static const _dividerColor = Color(0xFF2A2A3A);
-  static const _textPrimary = Colors.white;
-  static const _textSecondary = Color(0xFFCCCCCC);
-  static const _pillBg = Color(0xFF2A2A3A);
-  static const _fieldBg = Color(0xFF1A1A2E);
 
   @override
   void initState() {
@@ -321,35 +322,27 @@ class _MasterTableState extends State<MasterTable> {
         child: Column(
           children: [
             widget.isEditable
-                ? Container(
-                    color: _fieldBg,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    child: TextField(
-                      controller: idCtrls[i],
-                      maxLines: null,
-                      maxLength: 50,
-                      style: TextStyle(
-                        color: isDuplicate ? AppColors.error : _cyanColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      decoration: InputDecoration(
-                        border: isDuplicate
-                            ? OutlineInputBorder(
-                                borderSide: const BorderSide(color: AppColors.error),
-                              )
-                            : const OutlineInputBorder(),
-                        errorText: isDuplicate ? 'Duplicate' : null,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        counterStyle: _counterStyle,
-                      ),
-                      onChanged: (v) {
-                        tc.id = v;
-                        _checkDuplicate(i);
-                        _edited(i);
-                      },
+                ? _EditField(
+                    controller: idCtrls[i],
+                    maxLength: 50,
+                    style: TextStyle(
+                      color: isDuplicate ? AppColors.error : _cyanColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
+                    decoration: InputDecoration(
+                      border: isDuplicate
+                          ? OutlineInputBorder(
+                              borderSide: const BorderSide(color: AppColors.error),
+                            )
+                          : null,
+                      errorText: isDuplicate ? 'Duplicate' : null,
+                    ),
+                    onChanged: (v) {
+                      tc.id = v;
+                      _checkDuplicate(i);
+                      _edited(i);
+                    },
                   )
                 : Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -383,41 +376,29 @@ class _MasterTableState extends State<MasterTable> {
 
   Widget _stepsCell(int i, FinalizedTestCase tc) {
     return SizedBox(
-      width: colWidths[2],
+      width: colWidths[3],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: widget.isEditable
-            ? Container(
-                color: _fieldBg,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: TextField(
-                  controller: stepsCtrls[i],
-                  maxLines: null,
-                  maxLength: 2000,
-                  style: const TextStyle(color: _textPrimary, fontSize: 12),
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    counterStyle: _counterStyle,
-                  ),
-                  onChanged: (v) {
-                    final lines = v.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-                    final newSteps = <TestStep>[];
-                    for (int k = 0; k < lines.length; k++) {
-                      final line = lines[k];
-                      final dotIndex = line.indexOf('. ');
-                      final action = dotIndex != -1 ? line.substring(dotIndex + 2).trim() : line.trim();
-                      newSteps.add(TestStep(
-                        action: action,
-                        data: k < tc.steps.length ? tc.steps[k].data : '',
-                        expected: k < tc.steps.length ? tc.steps[k].expected : '',
-                      ));
-                    }
-                    if (newSteps.isNotEmpty) tc.steps = newSteps;
-                    _edited(i);
-                  },
-                ),
+            ? _EditField(
+                controller: stepsCtrls[i],
+                maxLength: 2000,
+                onChanged: (v) {
+                  final lines = v.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                  final newSteps = <TestStep>[];
+                  for (int k = 0; k < lines.length; k++) {
+                    final line = lines[k];
+                    final dotIndex = line.indexOf('. ');
+                    final action = dotIndex != -1 ? line.substring(dotIndex + 2).trim() : line.trim();
+                    newSteps.add(TestStep(
+                      action: action,
+                      data: k < tc.steps.length ? tc.steps[k].data : '',
+                      expected: k < tc.steps.length ? tc.steps[k].expected : '',
+                    ));
+                  }
+                  if (newSteps.isNotEmpty) tc.steps = newSteps;
+                  _edited(i);
+                },
               )
             : Text(stepsCtrls[i].text, overflow: TextOverflow.ellipsis, maxLines: 5, style: const TextStyle(color: _textSecondary, fontSize: 12)),
       ),
@@ -430,22 +411,10 @@ class _MasterTableState extends State<MasterTable> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: widget.isEditable
-            ? Container(
-                color: _fieldBg,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                child: TextField(
-                  controller: ctrl,
-                  maxLines: null,
-                  maxLength: maxLength,
-                  style: const TextStyle(color: _textPrimary, fontSize: 12),
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    counterStyle: _counterStyle,
-                  ),
-                  onChanged: (v) { onChanged(v); },
-                ),
+            ? _EditField(
+                controller: ctrl,
+                maxLength: maxLength,
+                onChanged: (v) { onChanged(v); },
               )
             : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -535,6 +504,94 @@ class _MasterTableState extends State<MasterTable> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Text(priority, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+    );
+  }
+}
+
+class _EditField extends StatefulWidget {
+  final TextEditingController controller;
+  final int? maxLength;
+  final int minLines;
+  final int maxLines;
+  final TextStyle? style;
+  final ValueChanged<String> onChanged;
+  final InputDecoration? decoration;
+
+  const _EditField({
+    required this.controller,
+    this.maxLength,
+    this.minLines = 1,
+    this.maxLines = 3,
+    this.style,
+    required this.onChanged,
+    this.decoration,
+  });
+
+  @override
+  State<_EditField> createState() => _EditFieldState();
+}
+
+class _EditFieldState extends State<_EditField> {
+  String _counterText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _counterText = _computeCounterText();
+    widget.controller.addListener(_onCounterUpdate);
+  }
+
+  @override
+  void didUpdateWidget(_EditField old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onCounterUpdate);
+      widget.controller.addListener(_onCounterUpdate);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onCounterUpdate);
+    super.dispose();
+  }
+
+  void _onCounterUpdate() {
+    final t = _computeCounterText();
+    if (t != _counterText && mounted) {
+      setState(() => _counterText = t);
+    }
+  }
+
+  String _computeCounterText() {
+    if (widget.maxLength == null) return '';
+    final len = widget.controller.text.length;
+    if (len > (widget.maxLength! * 0.6).ceil()) {
+      return '${widget.maxLength! - len}';
+    }
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final custom = widget.decoration;
+    return TextField(
+      controller: widget.controller,
+      minLines: widget.minLines,
+      maxLines: widget.maxLines,
+      maxLength: widget.maxLength,
+      style: widget.style ?? const TextStyle(color: _textPrimary, fontSize: 12),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: _fieldBg,
+        border: custom?.border ?? const OutlineInputBorder(),
+        errorText: custom?.errorText,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        counterText: _counterText,
+        counterStyle: _counterStyle,
+      ),
+      onChanged: widget.onChanged,
     );
   }
 }

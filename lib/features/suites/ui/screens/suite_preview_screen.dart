@@ -18,7 +18,6 @@ import 'package:qa_genie/features/generation/ui/widgets/master_table.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/engine/risk/risk_scorer.dart';
-import 'package:qa_genie/core/utils/id_generator.dart';
 
 class SuitePreviewScreen extends StatefulWidget {
   final GenerationSession session;
@@ -42,6 +41,8 @@ class SuitePreviewScreen extends StatefulWidget {
 
 class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  static bool _guidelinesShownThisLaunch = false;
+
   final ExportTestCasesUseCase _exportUseCase = ExportTestCasesUseCase();
   final SaveSuiteUseCase _saveUseCase = AppDependencies.saveSuiteUseCase;
 
@@ -93,6 +94,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   }
 
   Future<void> _checkGuidelines() async {
+    if (_guidelinesShownThisLaunch) return;
     final prefs = await SharedPreferences.getInstance();
     final dismissed = prefs.getBool('suite_preview_guidelines_shown') ?? false;
     if (mounted) {
@@ -201,6 +203,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
           actions: [
             TextButton(
               onPressed: () async {
+                _guidelinesShownThisLaunch = true;
                 if (dontShowAgain) {
                   final prefs = await SharedPreferences.getInstance();
                   await prefs.setBool('suite_preview_guidelines_shown', true);
@@ -267,6 +270,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
   }
 
   Future<bool> _onWillPop() async {
+    if (isEditable) return false;
     await _forceSave();
     return true;
   }
@@ -328,24 +332,12 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     }
   }
 
-  Future<void> _renumberCases() async {
-    final module = widget.moduleName;
-    final cases = widget.session.testCases;
-    for (int i = 0; i < cases.length; i++) {
-      cases[i] = cases[i].copyWith(id: IdGenerator.generate(module, i + 1));
-    }
-    await DatabaseService.replaceAllTestCases(
-      suiteId: widget.suiteId,
-      cases: cases,
-    );
-    if (mounted) {
-      setState(() => _hasUnsaved = true);
-      showBlurredDialog(context, builder: (ctx) => AlertDialog(
-        title: const Text('Renumbered'),
-        content: Text('Renumbered ${cases.length} case(s).'),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-      ));
-    }
+  String _reId(String originalId, int newIndex) {
+    final match = RegExp(r'^(.+?)(\d+)$').firstMatch(originalId);
+    if (match == null) return '${originalId}${newIndex.toString().padLeft(3, '0')}';
+    final prefix = match.group(1)!;
+    final width = match.group(2)!.length;
+    return '${prefix}${newIndex.toString().padLeft(width, '0')}';
   }
 
   void _toggleRiskMode() {
@@ -594,12 +586,11 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
     );
     if (targetSuiteId == null) return;
     final existing = await DatabaseService.getTestCasesForSuite(targetSuiteId);
-    final module = widget.moduleName;
     final casesToCopy = <FinalizedTestCase>[];
     for (var j = 0; j < _selectedIndices.length; j++) {
       final tc = widget.session.testCases[_selectedIndices.elementAt(j)];
       casesToCopy.add(tc.copyWith(
-        id: IdGenerator.generate(module, existing.length + j + 1),
+        id: _reId(tc.id, existing.length + j + 1),
         dbId: null,
       ));
     }
@@ -665,6 +656,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
       ),
     );
     if (targetSuiteId == null) return;
+    final existing = await DatabaseService.getTestCasesForSuite(targetSuiteId);
     final indices = List.from(_selectedIndices)..sort((a, b) => b.compareTo(a));
     final originalCases = indices
         .map((i) => widget.session.testCases[i])
@@ -673,9 +665,13 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
         .map((tc) => tc.dbId)
         .whereType<int>()
         .toList();
-    final casesToMove = originalCases
-        .map((tc) => tc.copyWith(dbId: null))
-        .toList();
+    final casesToMove = originalCases.asMap().entries.map((entry) {
+      final tc = entry.value;
+      return tc.copyWith(
+        id: _reId(tc.id, existing.length + entry.key + 1),
+        dbId: null,
+      );
+    }).toList();
     await DatabaseService.insertTestCases(
       suiteId: targetSuiteId,
       cases: casesToMove,
@@ -805,6 +801,7 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () async {
+                          if (isEditable) return;
                           if (_selectionMode) {
                             _exitSelectionMode();
                           } else if (await _onWillPop() && mounted) {
@@ -905,24 +902,6 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                               bottom: 2,
                             ),
                             minimumSize: const Size(24, 24),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        IconButton(
-                          onPressed: _renumberCases,
-                          icon: const Icon(
-                            Icons.format_list_numbered,
-                            color: Colors.white70,
-                            size: 19,
-                          ),
-                          tooltip: 'Renumber',
-                          style: IconButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(30, 30),
                             visualDensity: VisualDensity.compact,
                           ),
                         ),

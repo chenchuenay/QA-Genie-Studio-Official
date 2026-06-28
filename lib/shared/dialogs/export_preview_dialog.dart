@@ -520,144 +520,108 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       ),
     );
 
-    final dataRows = <Widget>[];
-    for (int rowIdx = 0; rowIdx < rowCount; rowIdx++) {
-      final rowChildren = <Widget>[];
-      for (int col = 0; col < headers.length; col++) {
-        final w = col < _colWidths.length ? _colWidths[col] : 100.0;
-        final isStatus =
-            (_statusColumnIndex != null && col == _statusColumnIndex);
-        final isPriority =
-            (_priorityColumnIndex != null && col == _priorityColumnIndex);
-        final controller = _controllers[rowIdx + 1][col];
-        final cell = _editing
-            ? (isStatus
-                  ? Container(
-                      width: w,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 4,
-                      ),
-                      child: Center(
-                        child: DropdownButton<String>(
-                          value: _normalizeStatus(controller.text),
-                          isExpanded: true,
-                          dropdownColor: AppColors.card,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                          ),
-                          underline: const SizedBox(),
-                          items: _statusOptions
-                              .map(
-                                (opt) => DropdownMenuItem(
-                                  value: opt,
-                                  child: Center(child: Text(opt)),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (newVal) {
-                            if (newVal != null) {
-                              controller.text = newVal;
-                              setState(() {});
-                            }
-                          },
-                        ),
-                      ),
-                    )
-                  : isPriority
-                  ? Container(
-                      width: w,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 4,
-                      ),
-                      child: Center(
-                        child: DropdownButton<String>(
-                          value: _normalizePriority(controller.text),
-                          isExpanded: true,
-                          dropdownColor: AppColors.card,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                          ),
-                          underline: const SizedBox(),
-                          items: _priorityOptions
-                              .map(
-                                (opt) => DropdownMenuItem(
-                                  value: opt,
-                                  child: Center(child: Text(opt)),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (newVal) {
-                            if (newVal != null) {
-                              controller.text = newVal;
-                              setState(() {});
-                            }
-                          },
-                        ),
-                      ),
-                    )
-                  : Container(
-                      width: w,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 4,
-                      ),
-                      child: TextField(
-                        controller: controller,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: null,
-                        maxLength: _maxLengthForHeader(headers[col]),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 4,
-                          ),
-                          border: const OutlineInputBorder(),
-                          counterStyle: const TextStyle(fontSize: 7, color: Colors.white38, height: 1),
-                        ),
-                      ),
-                    ))
-            : Container(
-                width: w,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: Text(
-                  controller.text,
-                  style: const TextStyle(color: Colors.white70, fontSize: 10),
-                  textAlign: TextAlign.center,
-                  softWrap: true,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-        rowChildren.add(cell);
+    double totalWidth(List<String> h) {
+      double w = 0;
+      for (int c = 0; c < h.length; c++) {
+        w += c < _colWidths.length ? _colWidths[c] : 100.0;
       }
-      dataRows.add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: rowChildren,
-        ),
-      );
-      if (rowIdx < rowCount - 1) {
-        dataRows.add(
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: AppColors.border.withOpacity(0.8),
-          ),
-        );
-      }
+      return w;
     }
 
-    final tableContent = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [headerRow, const SizedBox(height: 4), ...dataRows],
+    final tableContent = SizedBox(
+      width: totalWidth(headers),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          headerRow,
+          const SizedBox(height: 4),
+          Expanded(
+            child: ListView.separated(
+              itemCount: rowCount,
+              separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: AppColors.border.withOpacity(0.8)),
+              itemBuilder: (_, rowIdx) {
+                final rowChildren = <Widget>[];
+                for (int col = 0; col < headers.length; col++) {
+                  final w = col < _colWidths.length ? _colWidths[col] : 100.0;
+                  final isStatus = (_statusColumnIndex != null && col == _statusColumnIndex);
+                  final isPriority = (_priorityColumnIndex != null && col == _priorityColumnIndex);
+                  final controller = _controllers[rowIdx + 1][col];
+                  final cell = _editing
+                      ? (isStatus
+                            ? Container(
+                                width: w,
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                child: Center(
+                                  child: DropdownButton<String>(
+                                    value: _normalizeStatus(controller.text),
+                                    isExpanded: true,
+                                    dropdownColor: AppColors.card,
+                                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                                    underline: const SizedBox(),
+                                    items: _statusOptions.map((opt) => DropdownMenuItem(value: opt, child: Center(child: Text(opt)))).toList(),
+                                    onChanged: (newVal) {
+                                      if (newVal != null) { controller.text = newVal; setState(() {}); }
+                                    },
+                                  ),
+                                ),
+                              )
+                            : isPriority
+                            ? Container(
+                                width: w,
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                child: Center(
+                                  child: DropdownButton<String>(
+                                    value: _normalizePriority(controller.text),
+                                    isExpanded: true,
+                                    dropdownColor: AppColors.card,
+                                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                                    underline: const SizedBox(),
+                                    items: _priorityOptions.map((opt) => DropdownMenuItem(value: opt, child: Center(child: Text(opt)))).toList(),
+                                    onChanged: (newVal) {
+                                      if (newVal != null) { controller.text = newVal; setState(() {}); }
+                                    },
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                width: w,
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                child: TextField(
+                                  controller: controller,
+                                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                                  textAlign: TextAlign.center,
+                                  maxLines: null,
+                                  maxLength: _maxLengthForHeader(headers[col]),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                    border: const OutlineInputBorder(),
+                                    counterStyle: const TextStyle(fontSize: 7, color: Colors.white38, height: 1),
+                                  ),
+                                ),
+                              ))
+                      : Container(
+                          width: w,
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                          child: Text(
+                            controller.text,
+                            style: const TextStyle(color: Colors.white70, fontSize: 10),
+                            textAlign: TextAlign.center,
+                            softWrap: true,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                  rowChildren.add(cell);
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: rowChildren,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
 
     final dialogBody = Dialog(
@@ -697,14 +661,8 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                 physics: (_isProcessing || _isSharing)
                     ? const NeverScrollableScrollPhysics()
                     : const AlwaysScrollableScrollPhysics(),
-                scrollDirection: Axis.vertical,
-                child: SingleChildScrollView(
-                  physics: (_isProcessing || _isSharing)
-                      ? const NeverScrollableScrollPhysics()
-                      : const AlwaysScrollableScrollPhysics(),
-                  scrollDirection: Axis.horizontal,
-                  child: tableContent,
-                ),
+                scrollDirection: Axis.horizontal,
+                child: tableContent,
               ),
             ),
             if (!_editing && widget.type == 'pdf' && _allUnexecuted) ...[
