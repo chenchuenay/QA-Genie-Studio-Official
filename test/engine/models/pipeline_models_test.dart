@@ -55,7 +55,7 @@ void main() {
   });
 
   group('WorkingCase', () {
-    FinalizedTestCase _makeFinalized() {
+    FinalizedTestCase makeFinalized() {
       return FinalizedTestCase(
         id: 'tc-1',
         title: 'Test login',
@@ -179,7 +179,7 @@ void main() {
     });
 
     test('copy creates independent copy', () {
-      final ft = _makeFinalized();
+      final ft = makeFinalized();
       final meta = CaseMetadata(
         source: CaseSource.ai,
         traceId: 't1',

@@ -3,7 +3,7 @@ import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/app/theme/app_radius.dart';
 import 'package:qa_genie/app/theme/app_spacing.dart';
 import 'package:qa_genie/features/legal/data/legal_documents.dart';
-import 'package:qa_genie/features/legal/ui/document_view_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class TermsPrivacyPolicyScreen extends StatelessWidget {
   const TermsPrivacyPolicyScreen({super.key});
@@ -20,30 +20,49 @@ class TermsPrivacyPolicyScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          _policyItem(context, 'Privacy Policy', LegalDocuments.privacyPolicy, LegalDocuments.privacyPolicyUrl),
-          _policyItem(context, 'Terms of Use', LegalDocuments.termsOfUse, LegalDocuments.termsOfServiceUrl),
-          _policyItem(context, 'AI Disclaimer', LegalDocuments.aiDisclaimer, LegalDocuments.aiDisclaimerUrl),
-          _policyItem(context, 'Ads & Monetization', LegalDocuments.adsPolicy, LegalDocuments.adsPolicyUrl),
-          _policyItem(context, 'Account Deletion', LegalDocuments.deleteAccountInfo, LegalDocuments.deleteAccountUrl),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+            ),
+            child: const Text(
+              'The links below take you to external pages with full information about our policies.',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _linkItem(context, 'Privacy Policy', LegalDocuments.privacyPolicyUrl),
+          _linkItem(context, 'Terms of Service', LegalDocuments.termsOfServiceUrl),
+          _linkItem(context, 'AI Disclaimer', LegalDocuments.aiDisclaimerUrl),
+          _linkItem(context, 'Ads & Monetization', LegalDocuments.adsPolicyUrl),
+          _linkItem(context, 'Account Deletion', LegalDocuments.deleteAccountUrl),
+          _linkItem(context, 'Analytics Data', LegalDocuments.analyticsDataUrl),
         ],
       ),
     );
   }
 
-  Widget _policyItem(BuildContext context, String title, String content, [String? url]) {
+  Widget _linkItem(BuildContext context, String title, String url) {
     return Card(
       color: AppColors.card,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.card)),
       child: ListTile(
         title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-        trailing: const Icon(Icons.chevron_right, color: AppColors.accent),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DocumentViewScreen(title: title, content: content, onlineUrl: url),
+        trailing: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.accent.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: const Icon(Icons.open_in_new, color: AppColors.accent, size: 18),
         ),
+        onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
       ),
     );
   }

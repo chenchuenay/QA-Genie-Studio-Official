@@ -3,9 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qa_genie/engine/orchestration/stages/ai_generation_stage.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 
-final _noopCaller = (String prompt, GenerationRequest request) async {
+Future<String> _noopCaller(String prompt, GenerationRequest request) async {
   return jsonEncode({'success': false, 'error': {'code': 'UNKNOWN', 'message': 'noop'}});
-};
+}
 
 void main() {
   group('AiGenerationStage', () {

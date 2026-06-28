@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Data — QA Genie</title>
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --bg: #05060A; --surface: #0D1018; --card: #141922; --border: #232938; --accent: #3DDCFF; --text: #FFFFFF; --text-secondary: #B8C0CF; --text-tertiary: #72798A; --radius-card: 24px; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(5, 6, 10, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+        nav .container { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 18px; }
+        .nav-logo img { width: 32px; height: 32px; border-radius: 8px; }
+        .page { padding: 120px 0 60px; }
+        h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+        .date { color: var(--text-tertiary); font-size: 14px; margin-bottom: 48px; }
+        h2 { font-size: 20px; font-weight: 700; margin: 40px 0 16px; color: var(--accent); }
+        p { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; line-height: 1.8; }
+        ul, ol { color: var(--text-secondary); font-size: 14px; padding-left: 20px; margin-bottom: 16px; }
+        li { margin-bottom: 8px; line-height: 1.7; }
+        strong { color: var(--text); }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .divider { height: 1px; background: var(--border); max-width: 720px; margin: 0 auto; padding: 0 24px; }
+        footer { border-top: 1px solid var(--border); padding: 40px 0; }
+        footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        footer .footer-links { display: flex; gap: 24px; align-items: center; }
+        footer a { color: var(--text-tertiary); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+        footer a:hover { color: var(--accent); }
+        footer p { color: var(--text-tertiary); font-size: 13px; margin-bottom: 0; }
+        @media (max-width: 768px) {
+            nav .container { height: 56px; }
+            .page { padding: 100px 0 40px; }
+            h1 { font-size: 26px; }
+            footer .container { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="nav-logo">
+                <img src="assets/logo.png" alt="QA Genie">
+                QA Genie
+            </a>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="container">
+            <h1>Analytics Data</h1>
+            <p class="date">Last updated: June 28, 2026</p>
+
+            <p>This page describes exactly what data QA Genie collects when you opt in to anonymous usage analytics. This data helps improve the app experience, fix bugs, and prioritise features.</p>
+
+            <h2>1. Analytics Events (Firebase Analytics)</h2>
+            <p>When analytics consent is granted, the following events are logged:</p>
+            <ul>
+                <li><strong>App opens</strong> — when you launch the app</li>
+                <li><strong>Screen views</strong> — which screens you visit (e.g. Home, Suites, Account, Suite Preview)</li>
+                <li><strong>Generation events</strong> — started, completed, or failed generations with metadata (platform, mode, count, duration, reason)</li>
+                <li><strong>Exports</strong> — when you export test cases, with format and count</li>
+                <li><strong>Rewarded ad completions</strong> — when you watch an ad, with placement info</li>
+                <li><strong>Upgrade intent</strong> — if you show interest in the PRO tier</li>
+                <li><strong>Bug reports</strong> — when you submit an issue report, with category</li>
+                <li><strong>Debug auth events</strong> — anonymous auth flow diagnostics (no personal identifiers)</li>
+            </ul>
+            <p><strong>No test case content, module names, feature names, or prompt text is ever included in analytics events.</strong> Only metadata counts and timestamps.</p>
+
+            <h2>2. Firestore Data (Signed-In Users)</h2>
+            <p>When you sign in with Google, the following data is stored in Firestore to enable cross-device sync and quota management:</p>
+            <ul>
+                <li><strong>Email address</strong> — from your Google account</li>
+                <li><strong>Display name</strong> — from your Google account</li>
+                <li><strong>User ID</strong> — Firebase Authentication UID</li>
+                <li><strong>Suite metadata</strong> — module names, feature names, creation/update timestamps (not test case content)</li>
+                <li><strong>Usage counts</strong> — number of generations and exports per day</li>
+                <li><strong>Device ID</strong> — for session management and quota enforcement</li>
+                <li><strong>Ad reward tokens</strong> — cryptographically random tokens to prevent reward abuse</li>
+            </ul>
+
+            <h2>3. Cloud Storage (Signed-In Users)</h2>
+            <p>Your full test case content is stored in Google Cloud Storage (GCS) to enable cross-device sync. This includes:</p>
+            <ul>
+                <li>Test case IDs, titles, descriptions</li>
+                <li>Preconditions and test steps</li>
+                <li>Expected results</li>
+                <li>Test data</li>
+            </ul>
+            <p>This data is encrypted in transit and at rest. It is never used for training, analysis, or sharing with any third party beyond the cloud infrastructure required to operate the sync feature.</p>
+
+            <h2>4. Guest Accounts (Anonymous)</h2>
+            <p>Guest accounts use only:</p>
+            <ul>
+                <li><strong>Firebase Installation ID</strong> — for quota tracking and device identity</li>
+                <li><strong>Device-based usage counters</strong> — stored in a server collection keyed by device ID</li>
+            </ul>
+            <p>Guest accounts are local-only. No test case content ever leaves your device.</p>
+
+            <h2>5. Device Information</h2>
+            <p>Device model, app version, and platform (Android) are collected <strong>only when you submit an issue report</strong> voluntarily.</p>
+
+            <h2>6. Third-Party Services</h2>
+            <p>QA Genie uses the following third-party services that may process data:</p>
+            <ul>
+                <li><strong>Firebase (Google)</strong> — Authentication, Firestore, Cloud Functions, Cloud Storage, App Check, Installations, Analytics</li>
+                <li><strong>DeepSeek</strong> — AI test case generation (receives only sanitized prompt text, no personal identifiers)</li>
+                <li><strong>Google AdMob / Unity Ads</strong> — Rewarded video advertising (see <a href="ads-monetization.html">Ads & Monetization Policy</a>)</li>
+            </ul>
+
+            <h2>7. Your Choices</h2>
+            <ul>
+                <li><strong>Withhold consent</strong> — If you do not check the analytics consent box, you cannot use the app. No analytics data is collected.</li>
+                <li><strong>Delete your account</strong> — If you change your mind after consenting, you can delete your account at any time through Account → Delete Account. This removes all server-side data. See <a href="delete-account.html">Account Deletion</a> for details.</li>
+            </ul>
+
+            <h2>8. Contact</h2>
+            <p>General enquiries: <a href="mailto:hello@qagenies.com">hello@qagenies.com</a><br>
+            Creator: <a href="mailto:chenchuenay@qagenies.com">chenchuenay@qagenies.com</a><br>
+            Account deletion: <a href="mailto:wipe@qagenies.com">wipe@qagenies.com</a> (no take backs)</p>
+
+            <p>See also: <a href="privacy.html">Privacy Policy</a> | <a href="terms.html">Terms of Service</a></p>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 QA Genie. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="ai-disclaimer.html">AI Disclaimer</a>
+                <a href="ads-monetization.html">Ads Policy</a>
+                <a href="delete-account.html">Delete Account</a>
+                <a href="mailto:hello@qagenies.com">Contact</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

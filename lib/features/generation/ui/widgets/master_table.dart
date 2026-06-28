@@ -110,8 +110,6 @@ class _MasterTableState extends State<MasterTable> {
       (widget.riskMode ? _riskColumnWidth : 0) +
       colWidths.reduce((a, b) => a + b);
 
-  static const _counterStyle = TextStyle(fontSize: 8, color: Colors.white38, height: 1);
-
   void _edited(int index) {
     widget.onCellEdit?.call();
   }
@@ -511,8 +509,6 @@ class _MasterTableState extends State<MasterTable> {
 class _EditField extends StatefulWidget {
   final TextEditingController controller;
   final int? maxLength;
-  final int minLines;
-  final int maxLines;
   final TextStyle? style;
   final ValueChanged<String> onChanged;
   final InputDecoration? decoration;
@@ -520,8 +516,6 @@ class _EditField extends StatefulWidget {
   const _EditField({
     required this.controller,
     this.maxLength,
-    this.minLines = 1,
-    this.maxLines = 3,
     this.style,
     required this.onChanged,
     this.decoration,
@@ -577,8 +571,8 @@ class _EditFieldState extends State<_EditField> {
     final custom = widget.decoration;
     return TextField(
       controller: widget.controller,
-      minLines: widget.minLines,
-      maxLines: widget.maxLines,
+      minLines: 1,
+      maxLines: 3,
       maxLength: widget.maxLength,
       style: widget.style ?? const TextStyle(color: _textPrimary, fontSize: 12),
       decoration: InputDecoration(

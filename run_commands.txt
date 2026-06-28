@@ -7,3 +7,8 @@ run script
 ./run prod          → prod debug
 ./run prod-release  → prod release
 '''
+
+
+'''this for enay refrence to connect wirelessly to CPH2621 
+adb connect 10.184.222.252:5555
+'''

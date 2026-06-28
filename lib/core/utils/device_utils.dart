@@ -18,7 +18,7 @@ class DeviceUtils {
     try {
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
       id = deviceInfo.id;
-      if (id != null && id.isNotEmpty) {
+      if (id.isNotEmpty) {
         await prefs.setString(_deviceIdKey, id);
         return id;
       }

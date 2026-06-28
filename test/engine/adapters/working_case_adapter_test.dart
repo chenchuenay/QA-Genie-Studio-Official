@@ -6,7 +6,7 @@ import 'package:qa_genie/engine/adapters/working_case_adapter.dart';
 
 void main() {
   group('WorkingCaseAdapter', () {
-    FinalizedTestCase _makeTestCase({
+    FinalizedTestCase makeTestCase({
       String type = 'Positive',
       String module = 'Auth',
       String feature = 'Login',
@@ -35,7 +35,7 @@ void main() {
     }
 
     test('fromFinalizedTestCase maps all fields correctly', () {
-      final tc = _makeTestCase();
+      final tc = makeTestCase();
       final wc = WorkingCaseAdapter.fromFinalizedTestCase(tc, traceId: 'trace-1');
 
       expect(wc.id, tc.id);
@@ -71,20 +71,20 @@ void main() {
         'Security': 'security',
       };
       for (final entry in typeMapping.entries) {
-        final tc = _makeTestCase(type: entry.key);
+        final tc = makeTestCase(type: entry.key);
         final wc = WorkingCaseAdapter.fromFinalizedTestCase(tc, traceId: 't1');
         expect(wc.categoryLock, entry.value, reason: 'Type ${entry.key} should map to ${entry.value}');
       }
     });
 
     test('fromFinalizedTestCase maps unknown type to positive', () {
-      final tc = _makeTestCase(type: 'Unknown');
+      final tc = makeTestCase(type: 'Unknown');
       final wc = WorkingCaseAdapter.fromFinalizedTestCase(tc, traceId: 't1');
       expect(wc.categoryLock, 'positive');
     });
 
     test('fromFinalizedTestCase handles case-insensitive type', () {
-      final tc = _makeTestCase(type: 'negative');
+      final tc = makeTestCase(type: 'negative');
       final wc = WorkingCaseAdapter.fromFinalizedTestCase(tc, traceId: 't1');
       expect(wc.categoryLock, 'negative');
     });

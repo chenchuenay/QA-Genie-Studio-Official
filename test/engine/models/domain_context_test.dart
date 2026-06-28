@@ -10,13 +10,13 @@ void main() {
       final context = DomainContext(
         id: 'identity',
         displayName: 'Identity',
-        entities: {EntityType.account, EntityType.account},
+        entities: {EntityType.account},
         actions: {ActionType.login, ActionType.logout},
         states: {StateType.active, StateType.inactive},
       );
       expect(context.id, 'identity');
       expect(context.displayName, 'Identity');
-      expect(context.entities, {EntityType.account, EntityType.account});
+      expect(context.entities, {EntityType.account});
       expect(context.actions, {ActionType.login, ActionType.logout});
       expect(context.states, {StateType.active, StateType.inactive});
     });

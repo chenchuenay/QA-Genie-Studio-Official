@@ -15,7 +15,7 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
-  static late final GoogleSignIn _googleSignIn = AppConfig.isDev
+  static final GoogleSignIn _googleSignIn = AppConfig.isDev
       ? GoogleSignIn(serverClientId: '113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com')
       : GoogleSignIn();
   static bool _googleAuthInProgress = false;

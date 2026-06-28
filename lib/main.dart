@@ -4,6 +4,7 @@ import 'package:qa_genie/app/app.dart';
 import 'package:qa_genie/app_config.dart';
 import 'firebase/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/core/forensics/forensics_service_prod.dart';
@@ -19,6 +20,7 @@ Future<void> main() async {
     } else {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.android);
     }
+    await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
     await AppCheckService.initialize();
     await MobileAds.instance.initialize();
     ForensicsProvider.init(ForensicsServiceProd());

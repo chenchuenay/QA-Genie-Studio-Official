@@ -67,13 +67,13 @@ class _PassExportValidator extends ExportSafetyValidator {
   }
 }
 
-final _successCaller = (String prompt, GenerationRequest request) async {
+Future<String> _successCaller(String prompt, GenerationRequest request) async {
   return jsonEncode({
     'success': true,
     'data': {'testCases': [{'id': 'TC_001', 'title': 'Test case', 'module': 'Auth', 'feature': 'Login', 'platform': 'WEB', 'type': 'POSITIVE', 'steps': [], 'expectedResult': 'Success', 'testData': '', 'preconditions': []}]},
     'metadata': {'model': 'test-model'},
   });
-};
+}
 
 void main() {
   group('PipelineOrchestrator', () {

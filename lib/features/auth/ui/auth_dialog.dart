@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:qa_genie/app_config.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -14,6 +15,7 @@ import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/firebase/analytics/analytics_service.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/features/legal/data/legal_documents.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 String _friendlyAuthError(dynamic e) {
   if (e is FirebaseAuthException) {
@@ -54,6 +56,8 @@ class _AuthDialogState extends State<AuthDialog> {
   bool _isLoading = false;
   bool _isGuestLoading = false;
   bool _forceGoogleOnly = false;
+  bool _consentAlreadyStored = false;
+  bool _analyticsConsented = false;
   String? _errorMessage;
   String? _progressMessage;
   Timer? _dotTimer;
@@ -61,6 +65,23 @@ class _AuthDialogState extends State<AuthDialog> {
   late final GoogleSignIn _googleSignIn = AppConfig.isDev
       ? GoogleSignIn(serverClientId: '113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com')
       : GoogleSignIn();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConsent();
+  }
+
+  Future<void> _loadConsent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getBool('analytics_consent') ?? false;
+    if (mounted) {
+      setState(() {
+        _consentAlreadyStored = stored;
+        _analyticsConsented = stored;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -74,13 +95,6 @@ class _AuthDialogState extends State<AuthDialog> {
     _dotTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (!mounted) return;
       setState(() => _dotCount = (_dotCount + 1) % 4);
-    });
-  }
-
-  void _resetForceGoogleOnly() {
-    setState(() {
-      _forceGoogleOnly = false;
-      _errorMessage = null;
     });
   }
 
@@ -377,22 +391,24 @@ class _AuthDialogState extends State<AuthDialog> {
                 ),
               ],
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.1),
-                    shape: BoxShape.circle,
+            child: AbsorbPointer(
+              absorbing: _isLoading || _isGuestLoading,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Image.asset(
+                      'assets/logo.png',
+                      height: 54,
+                      width: 54,
+                      color: AppColors.accent,
+                    ),
                   ),
-                  child: Image.asset(
-                    'assets/logo.png',
-                    height: 54,
-                    width: 54,
-                    color: AppColors.accent,
-                  ),
-                ),
                 const SizedBox(height: 20),
                 Text(
                   welcomeText,
@@ -426,7 +442,7 @@ class _AuthDialogState extends State<AuthDialog> {
                   width: double.infinity,
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: _isLoading || _isGuestLoading ? null : _handleContinueWithGoogle,
+                    onPressed: _isLoading || _isGuestLoading || (!_consentAlreadyStored && !_analyticsConsented) ? null : _handleContinueWithGoogle,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isLoading
                           ? AppColors.accent.withOpacity(0.7)
@@ -485,7 +501,7 @@ class _AuthDialogState extends State<AuthDialog> {
                                   SizedBox(
                                     width: 24,
                                     child: Text(
-                                      '${'.' * _dotCount}',
+                                      '.' * _dotCount,
                                       textAlign: TextAlign.left,
                                       style: const TextStyle(
                                         fontSize: 16,
@@ -509,7 +525,7 @@ class _AuthDialogState extends State<AuthDialog> {
                     width: double.infinity,
                     height: 50,
                     child: TextButton(
-                      onPressed: _isLoading || _isGuestLoading ? null : _handleContinueAsGuest,
+                      onPressed: _isLoading || _isGuestLoading || (!_consentAlreadyStored && !_analyticsConsented) ? null : _handleContinueAsGuest,
                       child: const Text(
                               'Continue as Guest',
                               style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
@@ -531,6 +547,64 @@ class _AuthDialogState extends State<AuthDialog> {
                       onPressed: () => Navigator.pop(context),
                       child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
                     ),
+                  ),
+                ],
+                if (!_consentAlreadyStored) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          setState(() => _analyticsConsented = !_analyticsConsented);
+                          if (_analyticsConsented) {
+                            FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
+                            SharedPreferences.getInstance().then(
+                              (p) => p.setBool('analytics_consent', true),
+                            );
+                          }
+                        },
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          margin: const EdgeInsets.only(top: 1, right: 10),
+                          decoration: BoxDecoration(
+                            color: _analyticsConsented ? AppColors.accent : Colors.transparent,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: _analyticsConsented ? AppColors.accent : AppColors.textHint,
+                              width: 2,
+                            ),
+                          ),
+                          child: _analyticsConsented
+                              ? const Icon(Icons.check, size: 16, color: Colors.black)
+                              : null,
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Help improve QA Genie with anonymous usage data',
+                              style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+                            ),
+                            const SizedBox(height: 4),
+                            GestureDetector(
+                              onTap: () => launchUrl(Uri.parse(LegalDocuments.analyticsDataUrl), mode: LaunchMode.externalApplication),
+                              child: const Text(
+                                'What data do we collect?',
+                                style: TextStyle(
+                                  color: AppColors.accent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -562,6 +636,7 @@ class _AuthDialogState extends State<AuthDialog> {
           ),
         ),
       ),
-      );
+    ),
+    );
   }
 }

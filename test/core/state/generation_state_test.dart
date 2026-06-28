@@ -15,7 +15,7 @@ void main() {
 
     test('isGenerating notifies listeners', () {
       int notified = 0;
-      final listener = () { notified++; };
+      void listener() { notified++; }
       GenerationState.isGenerating.addListener(listener);
       GenerationState.isGenerating.value = true;
       expect(notified, 1);

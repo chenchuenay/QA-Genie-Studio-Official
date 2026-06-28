@@ -36,7 +36,7 @@ void main() {
     DatabaseService.invalidateSuitesCache();
   });
 
-  FinalizedTestCase _makeCase({
+  FinalizedTestCase makeCase({
     int? dbId,
     String id = 'TC-001',
     String title = 'Test login',
@@ -107,7 +107,7 @@ void main() {
 
     test('deleteSuite removes suite and its test cases', () async {
       final suiteId = await DatabaseService.insertSuite(moduleName: 'Auth', feature: 'Login', platform: 'Android');
-      final cases = [_makeCase()];
+      final cases = [makeCase()];
       await DatabaseService.insertTestCases(suiteId: suiteId, cases: cases);
       await DatabaseService.deleteSuite(suiteId);
       final suites = await DatabaseService.getAllSuites();
@@ -117,8 +117,8 @@ void main() {
     test('insertTestCases and getTestCasesForSuite roundtrip', () async {
       final suiteId = await DatabaseService.insertSuite(moduleName: 'Auth', feature: 'Login', platform: 'Web');
       final cases = [
-        _makeCase(id: 'TC-001', title: 'Test 1'),
-        _makeCase(id: 'TC-002', title: 'Test 2'),
+        makeCase(id: 'TC-001', title: 'Test 1'),
+        makeCase(id: 'TC-002', title: 'Test 2'),
       ];
       await DatabaseService.insertTestCases(suiteId: suiteId, cases: cases);
       final retrieved = await DatabaseService.getTestCasesForSuite(suiteId);
@@ -129,8 +129,8 @@ void main() {
 
     test('replaceAllTestCases removes old and inserts new', () async {
       final suiteId = await DatabaseService.insertSuite(moduleName: 'Auth', feature: 'Login', platform: 'Mobile');
-      await DatabaseService.insertTestCases(suiteId: suiteId, cases: [_makeCase(id: 'TC-001')]);
-      await DatabaseService.replaceAllTestCases(suiteId: suiteId, cases: [_makeCase(id: 'TC-002'), _makeCase(id: 'TC-003')]);
+      await DatabaseService.insertTestCases(suiteId: suiteId, cases: [makeCase(id: 'TC-001')]);
+      await DatabaseService.replaceAllTestCases(suiteId: suiteId, cases: [makeCase(id: 'TC-002'), makeCase(id: 'TC-003')]);
       final retrieved = await DatabaseService.getTestCasesForSuite(suiteId);
       expect(retrieved.length, 2);
       expect(retrieved[0].id, 'TC-002');
@@ -139,17 +139,17 @@ void main() {
 
     test('updateSingleCase updates test case data', () async {
       final suiteId = await DatabaseService.insertSuite(moduleName: 'Auth', feature: 'Login', platform: 'Android');
-      await DatabaseService.insertTestCases(suiteId: suiteId, cases: [_makeCase(id: 'TC-001', title: 'Original')]);
+      await DatabaseService.insertTestCases(suiteId: suiteId, cases: [makeCase(id: 'TC-001', title: 'Original')]);
       var retrieved = await DatabaseService.getTestCasesForSuite(suiteId);
       final dbId = retrieved.first.dbId;
-      await DatabaseService.updateSingleCase(dbId: dbId!, tc: _makeCase(dbId: dbId, id: 'TC-001', title: 'Updated'));
+      await DatabaseService.updateSingleCase(dbId: dbId!, tc: makeCase(dbId: dbId, id: 'TC-001', title: 'Updated'));
       retrieved = await DatabaseService.getTestCasesForSuite(suiteId);
       expect(retrieved.first.title, 'Updated');
     });
 
     test('deleteTestCase removes a single test case', () async {
       final suiteId = await DatabaseService.insertSuite(moduleName: 'Auth', feature: 'Login', platform: 'Android');
-      await DatabaseService.insertTestCases(suiteId: suiteId, cases: [_makeCase(id: 'TC-001')]);
+      await DatabaseService.insertTestCases(suiteId: suiteId, cases: [makeCase(id: 'TC-001')]);
       var retrieved = await DatabaseService.getTestCasesForSuite(suiteId);
       await DatabaseService.deleteTestCase(retrieved.first.dbId!);
       retrieved = await DatabaseService.getTestCasesForSuite(suiteId);
@@ -159,8 +159,8 @@ void main() {
     test('batchDeleteTestCases removes multiple test cases', () async {
       final suiteId = await DatabaseService.insertSuite(moduleName: 'Auth', feature: 'Login', platform: 'Android');
       await DatabaseService.insertTestCases(suiteId: suiteId, cases: [
-        _makeCase(id: 'TC-001'),
-        _makeCase(id: 'TC-002'),
+        makeCase(id: 'TC-001'),
+        makeCase(id: 'TC-002'),
       ]);
       var retrieved = await DatabaseService.getTestCasesForSuite(suiteId);
       final ids = retrieved.map((c) => c.dbId!).toList();
