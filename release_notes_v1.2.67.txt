@@ -1,0 +1,8 @@
+QA Genie v1.2.67 (versionCode 23)
+
+- Edit mode overhauled: cleaner fields, no double borders, inputs start at a proper size and cap at 3 lines before scrolling
+- Back button blocked while editing — no more accidental loss of changes
+- Suite feature guide appears once per launch; "Don't show again" persists until next update
+- Large suites (400+ cases) now scroll smoothly in summary reports and export preview
+- Steps column width fixed, export counter hidden until 60% capacity
+- Smarter offline detection, instant account loading, cleaner suite titles
