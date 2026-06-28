@@ -176,6 +176,11 @@ class FunctionsService {
     return call(functionName: 'getMemberDashboard', payload: {'type': 'member'});
   }
 
+  static Future<String> requestAdNonce() async {
+    final result = await call(functionName: 'requestAdNonce');
+    return result['nonce'] as String;
+  }
+
   static Future<bool> verifyReward({required String rewardToken}) async {
     // Delegates to the dedicated verifyRewardAd cloud function
     return verifyRewardAd(adTransactionId: rewardToken);

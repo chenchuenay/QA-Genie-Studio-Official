@@ -222,6 +222,8 @@ class PipelineOrchestrator {
     List<WorkingCase> finalWorkingCases;
     int fallbackCount = 0;
     if (coverage.needsFallback) {
+      debugPrint('PIPELINE: Fallback triggered — AI returned ${acceptedAiCases.length}/${request.requestedCaseCount} valid cases');
+      debugPrint('PIPELINE: AI details — statusCode=${aiResult.statusCode}, transportError=${aiResult.hasTransportError}, errorMessage=${aiResult.errorMessage}');
       final fallbackCases = await _fallbackStage.fillMissing(
         request: request,
         existing: acceptedAiCases,

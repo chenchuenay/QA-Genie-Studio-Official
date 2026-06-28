@@ -23,6 +23,7 @@ import 'package:qa_genie/engine/forensics/trace_id_generator.dart';
 import 'package:qa_genie/domain/usecases/save_suite_use_case.dart';
 import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
+import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
@@ -457,7 +458,12 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() => loading = true);
     GenerationState.isGenerating.value = true;
 
-    if (!await NetworkUiHelper.ensureProductionOnline(context)) {
+    final preChecks = await Future.wait([
+      NetworkUiHelper.ensureProductionOnline(context),
+      UsageManager.isPro(),
+      DeviceUtils.getUniqueId(),
+    ]);
+    if (!(preChecks[0] as bool)) {
       if (mounted) {
         setState(() {
           loading = false;
@@ -467,9 +473,9 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    final isPro = await UsageManager.isPro();
-    final deviceId = await DeviceUtils.getUniqueId();
-    String? adToken;
+    final isPro = preChecks[1] as bool;
+    final deviceId = preChecks[2] as String;
+    String? rewardNonce;
 
     if (!isPro) {
       final remaining = await UsageManager.rewardedGensRemaining();
@@ -483,6 +489,34 @@ class _HomeScreenState extends State<HomeScreen>
             QuotaExceededException(
               'You have used all your generations for today.',
               resetTimeMillis: _resetTime?.difference(DateTime.now()).inMilliseconds,
+            ),
+          );
+        }
+        return;
+      }
+
+      debugPrint('🚀 _generate: Requesting ad nonce');
+      try {
+        rewardNonce = await FunctionsService.requestAdNonce();
+      } catch (e) {
+        debugPrint('❌ _generate: requestAdNonce failed: $e');
+        if (mounted) {
+          showBlurredDialog(
+            context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Error', style: TextStyle(color: Colors.white)),
+              content: const Text(
+                'Failed to secure generation token. Please check your connection and try again.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('OK', style: TextStyle(color: AppColors.accent)),
+                ),
+              ],
             ),
           );
         }
@@ -506,8 +540,8 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       debugPrint('🚀 _generate: Showing rewarded ad');
-      adToken = await AdManager().showRewardedAd();
-      if (adToken == null) {
+      final adResult = await AdManager().showRewardedAd();
+      if (adResult == null) {
         debugPrint('❌ _generate: Show ad failed');
         if (mounted)
           setState(() {
@@ -616,7 +650,7 @@ class _HomeScreenState extends State<HomeScreen>
             count: hardLimit,
             constraints: notes,
             traceId: TraceIdGenerator.generate(),
-            adToken: adToken,
+            adToken: rewardNonce,
             deviceId: deviceId,
           ),
           onStageChange: (stage) => stageController.add(stage),
@@ -698,7 +732,7 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       UsageManager.invalidateCache();
-      if (!isPro && adToken != null) {
+      if (!isPro && rewardNonce != null) {
         setState(() { _rewardedRemaining = (_rewardedRemaining - 1).clamp(0, 999); });
       }
       unawaited(_refreshStatus());

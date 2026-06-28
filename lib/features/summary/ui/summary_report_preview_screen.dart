@@ -57,7 +57,7 @@ class _SummaryReportPreviewScreenState
 
   bool get _allUnexecuted => widget.session.testCases.every(
     (tc) => tc.actualResult.trim().isEmpty &&
-           (tc.status.trim().isEmpty || tc.status == 'Not Executed'),
+           (tc.status.trim().isEmpty || tc.status.trim().toLowerCase() == 'not executed'),
   );
 
   void _recompute() {

@@ -59,7 +59,7 @@ class DeterministicEngine {
     final testCases = <FinalizedTestCase>[];
     for (int i = 0; i < scenarios.length && testCases.length < targetCount; i++) {
       final scenario = scenarios[i];
-      final title = TitleGenerator.generate(scenario, feature);
+      final title = TitleGenerator.generate(scenario);
 
       final steps = FlowGraphGenerator.generate(
         domain.displayName,

@@ -23,7 +23,7 @@ class AiRepairEngine {
   void _enrichTitle(WorkingCase tc) {
     if (tc.title.trim().isEmpty) {
       final scenario = _scenarioFromCase(tc);
-      tc.title = title_gen.TitleGenerator.generate(scenario, tc.feature);
+      tc.title = title_gen.TitleGenerator.generate(scenario);
     }
   }
 

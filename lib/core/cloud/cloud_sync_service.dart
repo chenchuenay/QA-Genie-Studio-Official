@@ -135,10 +135,18 @@ class CloudSyncService {
           await DatabaseService.upsertSuiteFromCloud(suiteMap);
           final localId = await _getLocalSuiteId(data['suiteId'] as String);
           if (localId != null) {
-            final cases = _parseCases(data['cases']);
-            if (cases.isNotEmpty) {
-              await DatabaseService.replaceAllTestCases(suiteId: localId, cases: cases);
-              await DatabaseService.markSynced(localId, data['suiteId'] as String);
+            final db = await DatabaseService.db;
+            final existing = await db.query('suites',
+                columns: ['dirty'], where: 'id = ?', whereArgs: [localId]);
+            final isDirty = existing.isNotEmpty && existing.first['dirty'] == 1;
+            if (isDirty) {
+              debugPrint('CloudSyncService: Skipping overwrite for dirty suite $localId');
+            } else {
+              final cases = _parseCases(data['cases']);
+              if (cases.isNotEmpty) {
+                await DatabaseService.replaceAllTestCases(suiteId: localId, cases: cases);
+                await DatabaseService.markSynced(localId, data['suiteId'] as String);
+              }
             }
           }
           pulled++;

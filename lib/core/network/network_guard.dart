@@ -32,7 +32,9 @@ class NetworkGuard {
         if (_isOnline != newState) {
           _isOnline = newState;
           onlineStatus.value = newState;
-          debugPrint('🌐 NetworkGuard: Connectivity changed to $_isOnline');
+          _httpCached = false;
+          _lastHttpCheck = null;
+          debugPrint('🌐 NetworkGuard: Connectivity changed to $_isOnline, HTTP cache cleared');
         }
       });
     });

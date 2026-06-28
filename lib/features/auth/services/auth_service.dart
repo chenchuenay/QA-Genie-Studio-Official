@@ -239,6 +239,14 @@ class AuthService {
       debugPrint('🔐 AuthService: Firebase sign-out error: $e');
     }
 
+    // Clear local database so the new guest sees empty suites
+    try {
+      await DatabaseService.clearAll();
+      DatabaseService.invalidateSuitesCache();
+    } catch (e, _) {
+      debugPrint('🔐 AuthService: DB clear error: $e');
+    }
+
     // Re-initialize database under device-level identity
     try {
       final deviceId = await DeviceUtils.getUniqueId();

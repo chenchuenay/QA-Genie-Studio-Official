@@ -9,6 +9,10 @@
 - **Dev GCS bucket (test cases):** `qa-genie-ai-dev-test-cases` — SA: `qa-genie-ai-dev@appspot.gserviceaccount.com` (objectAdmin)
 - **AI Provider:** DeepSeek (`deepseek-v4-flash`, API key in `DEEPSEEK_API_KEY` secret, 45s timeout, temp 0.15)
 
+## Build Rule
+
+- **Never build with `--dart-define=IS_DEV=true` unless explicitly asked.** Only build the production APK/AAB unless the user says "dev".
+
 ## Run Commands
 
 - `run dev` = `flutter run --dart-define=IS_DEV=true`
@@ -301,3 +305,8 @@ All 4 policies must be **identical** in-app (`legal_documents.dart`) and on webs
 
 note:always -rm,clean,pug get before building any apk or flutter runs
 also try to uninstall apps before installing
+
+## Git Discipline
+
+- **Never checkout, reset, merge, or switch branches while uncommitted changes exist.** Always `git commit` or `git stash` first. Failing to do so WILL lose uncommitted work.
+

@@ -39,13 +39,29 @@ class _AccountScreenState extends State<AccountScreen> {
   String _appVersion = '';
   String _guestDisplayName = '';
   String _profileDisplayName = '';
+  String _cachedDisplayName = '';
 
   @override
   void initState() {
     super.initState();
     _member = AuthService.currentMember;
     _loadVersion();
+    _loadCached();
     _loadData();
+  }
+
+  Future<void> _loadCached() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedName = prefs.getString('cached_display_name') ?? '';
+    final cachedSince = prefs.getString('cached_member_since');
+    final guestName = prefs.getString('guest_display_name') ?? '';
+    if (mounted) {
+      setState(() {
+        _cachedDisplayName = cachedName;
+        _guestDisplayName = guestName;
+        if (cachedSince != null) _memberSince = DateTime.tryParse(cachedSince);
+      });
+    }
   }
 
   Future<void> _loadVersion() async {
@@ -98,6 +114,16 @@ class _AccountScreenState extends State<AccountScreen> {
         'stats_last_sync',
         DateTime.now().millisecondsSinceEpoch,
       );
+      if (memberSince != null) {
+        await prefs.setString('cached_member_since', memberSince.toIso8601String());
+      }
+      final displayNameToCache = _profileDisplayName.isNotEmpty
+          ? _profileDisplayName
+          : (member?.displayName ?? member?.email?.split('@').first ?? 'Guest');
+      if (displayNameToCache.isNotEmpty) {
+        _cachedDisplayName = displayNameToCache;
+        await prefs.setString('cached_display_name', displayNameToCache);
+      }
     } catch (e) {
       debugPrint('AccountScreen: Error loading data: $e');
     }
@@ -110,6 +136,7 @@ class _AccountScreenState extends State<AccountScreen> {
           _totalExports = exports;
           _memberSince = memberSince;
           _guestDisplayName = _guestDisplayName;
+          _cachedDisplayName = _cachedDisplayName;
           _isSyncing = false;
           _lastSyncedText = 'Sync just now';
         });
@@ -167,9 +194,11 @@ class _AccountScreenState extends State<AccountScreen> {
     final email = _member?.email ?? '';
     final displayName = _profileDisplayName.isNotEmpty
         ? _profileDisplayName
-        : (_member?.displayName?.isNotEmpty == true
-            ? _member!.displayName!
-            : (_member?.email?.split('@').first ?? ''));
+        : (_cachedDisplayName.isNotEmpty
+            ? _cachedDisplayName
+            : (_member?.displayName?.isNotEmpty == true
+                ? _member!.displayName!
+                : (_member?.email?.split('@').first ?? '')));
 
     return Scaffold(
       backgroundColor: AppColors.background,

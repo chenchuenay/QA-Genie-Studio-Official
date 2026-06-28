@@ -42,7 +42,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   bool _editing = false;
   int? _statusColumnIndex;
   int? _priorityColumnIndex;
-  bool _savedSuccess = false;
   bool _isProcessing = false;
   bool _isSharing = false;
   bool _hideEmptyColumns = true;
@@ -319,17 +318,13 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     return updatedCases;
   }
 
-  void _performSave() {
+  Future<void> _performSave() async {
     final editedData = _collectEditedData();
     final updatedCases = _updateOriginalCasesFromEditedData(editedData);
-    widget.onSave(updatedCases);
+    await widget.onSave(updatedCases);
     setState(() {
       _data = editedData;
       _editing = false;
-      _savedSuccess = true;
-    });
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _savedSuccess = false);
     });
   }
 
@@ -389,7 +384,22 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
 
     try {
       await widget.onShare(updatedCases, adToken, hideEmptyColumns: _hideEmptyColumns);
-    } catch (e) {
+
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _isSharing = false;
+        });
+        await showBlurredDialog(
+          context,
+          builder: (ctx) => ExportSuccessDialog(
+            type: widget.type,
+            moduleName: widget.moduleName,
+          ),
+        );
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      }
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -400,10 +410,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
           builder: (ctx) => AlertDialog(
             backgroundColor: AppColors.surface,
             title: const Text('Export Failed', style: TextStyle(color: Colors.white)),
-            content: Text(
-              'Export failed: $e',
-              style: const TextStyle(color: AppColors.textSecondary),
-            ),
+            content: const Text('Export failed. Please try again.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -413,35 +420,12 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
           ),
         );
       }
-      return;
     } finally {
-      // Fire-and-forget tracking export — short timeout, never blocks success dialog
       FunctionsService.recordExportMetrics(
         summary: false,
         target: widget.type,
         extension: _extensionForType(widget.type),
       ).timeout(const Duration(seconds: 5)).catchError((_) {});
-
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          _isSharing = false;
-        });
-        // Brief delay so share sheet opens before we show success dialog
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-
-        // Now pop the preview dialog
-        if (mounted) Navigator.of(context, rootNavigator: true).pop();
-        if (mounted) {
-          showBlurredDialog(
-            context,
-            builder: (ctx) => ExportSuccessDialog(
-              type: widget.type,
-              moduleName: widget.moduleName,
-            ),
-          );
-        }
-      }
     }
   }
 
@@ -460,10 +444,36 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
     }
   }
 
-  bool get _allUnexecuted => widget.cases.every(
-    (tc) => tc.actualResult.trim().isEmpty &&
-           (tc.status.trim().isEmpty || tc.status == 'Not Executed'),
-  );
+  bool get _allUnexecuted {
+    if (_data.length < 2) return false;
+    final headers = _data.first;
+    final statusIdx = headers.indexWhere((h) => h.toLowerCase().contains('status'));
+    final actualIdx = headers.indexWhere((h) => h.toLowerCase().contains('actual result'));
+    for (int r = 1; r < _data.length; r++) {
+      final row = _data[r];
+      final status = statusIdx >= 0 && statusIdx < row.length ? row[statusIdx].trim() : '';
+      final actual = actualIdx >= 0 && actualIdx < row.length ? row[actualIdx].trim() : '';
+      if (actual.isNotEmpty) return false;
+      if (status.isNotEmpty && status.toLowerCase() != 'not executed') return false;
+    }
+    return true;
+  }
+
+  int? _maxLengthForHeader(String header) {
+    final h = header.toLowerCase();
+    if (h.contains('id')) return 50;
+    if (h.contains('title') || h.contains('summary')) return 200;
+    if (h.contains('precondition') || h.contains('description')) return 1000;
+    if (h.contains('step')) return 2000;
+    if (h.contains('test data') || h.contains('testdata')) return 500;
+    if (h.contains('expected result')) return 500;
+    if (h.contains('actual result') || h.contains('actual')) return 500;
+    if (h.contains('module')) return 100;
+    if (h.contains('feature')) return 200;
+    if (h.contains('type') || h.contains('testtype')) return 50;
+    if (h.contains('platform')) return 50;
+    return null;
+  }
 
   String _getButtonText() {
     switch (widget.type) {
@@ -603,13 +613,15 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                         ),
                         textAlign: TextAlign.center,
                         maxLines: null,
-                        decoration: const InputDecoration(
+                        maxLength: _maxLengthForHeader(headers[col]),
+                        decoration: InputDecoration(
                           isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
+                          contentPadding: const EdgeInsets.symmetric(
                             horizontal: 4,
                             vertical: 4,
                           ),
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          counterStyle: const TextStyle(fontSize: 7, color: Colors.white38, height: 1),
                         ),
                       ),
                     ))
@@ -695,31 +707,6 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                 ),
               ),
             ),
-            if (_savedSuccess) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.success.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      color: AppColors.success,
-                      size: 16,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Changes saved',
-                      style: TextStyle(color: AppColors.success, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
             if (!_editing && widget.type == 'pdf' && _allUnexecuted) ...[
               const SizedBox(height: 8),
               Row(
@@ -794,7 +781,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton(
-                    onPressed: _performSave,
+                    onPressed: () => _performSave(),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.success,
                     ),

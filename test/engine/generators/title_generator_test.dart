@@ -14,10 +14,9 @@ void main() {
         targetState: StateType.active,
         category: 'positive',
       );
-      final title = TitleGenerator.generate(scenario, 'Auth');
+      final title = TitleGenerator.generate(scenario);
       expect(title, contains('Create'));
       expect(title, contains('account'));
-      expect(title, contains('Auth'));
     });
 
     test('generate returns negative category title', () {
@@ -27,7 +26,7 @@ void main() {
         targetState: StateType.failed,
         category: 'negative',
       );
-      final title = TitleGenerator.generate(scenario, 'Auth');
+      final title = TitleGenerator.generate(scenario);
       expect(title, contains('Creating'));
       expect(title, contains('account'));
       expect(title, contains('fails'));
@@ -40,8 +39,8 @@ void main() {
         targetState: StateType.active,
         category: 'validation',
       );
-      final title = TitleGenerator.generate(scenario, 'Auth');
-      expect(title, contains('validate'));
+      final title = TitleGenerator.generate(scenario);
+      expect(title, contains('Validate'));
       expect(title, contains('password'));
       expect(title, contains('reset'));
     });
@@ -53,8 +52,8 @@ void main() {
         targetState: StateType.authenticated,
         category: 'security',
       );
-      final title = TitleGenerator.generate(scenario, 'Auth');
-      expect(title, contains('security'));
+      final title = TitleGenerator.generate(scenario);
+      expect(title, contains('Security'));
       expect(title, contains('malicious'));
     });
 
@@ -65,8 +64,8 @@ void main() {
         targetState: StateType.active,
         category: 'boundary',
       );
-      final title = TitleGenerator.generate(scenario, 'Auth');
-      expect(title, contains('boundary'));
+      final title = TitleGenerator.generate(scenario);
+      expect(title, contains('Boundary'));
       expect(title, contains('maximum allowed'));
     });
 
@@ -77,8 +76,8 @@ void main() {
         targetState: StateType.expired,
         category: 'session',
       );
-      final title = TitleGenerator.generate(scenario, 'Auth');
-      expect(title, contains('session'));
+      final title = TitleGenerator.generate(scenario);
+      expect(title, contains('Session'));
       expect(title, contains('expired'));
     });
 
@@ -89,17 +88,16 @@ void main() {
         targetState: StateType.active,
         category: 'unknown',
       );
-      final title = TitleGenerator.generate(scenario, 'Auth');
+      final title = TitleGenerator.generate(scenario);
       expect(title.toLowerCase(), contains('login'));
       expect(title, contains('Account'));
-      expect(title, contains('Auth'));
     });
 
     test('generate produces different titles for different actions', () {
       final s1 = Scenario(entity: EntityType.account, action: ActionType.create, targetState: StateType.active, category: 'positive');
       final s2 = Scenario(entity: EntityType.account, action: ActionType.view, targetState: StateType.active, category: 'positive');
-      final t1 = TitleGenerator.generate(s1, 'Feat');
-      final t2 = TitleGenerator.generate(s2, 'Feat');
+      final t1 = TitleGenerator.generate(s1);
+      final t2 = TitleGenerator.generate(s2);
       expect(t1, isNot(equals(t2)));
     });
 
@@ -110,7 +108,7 @@ void main() {
         targetState: StateType.active,
         category: 'positive',
       );
-      final title = TitleGenerator.generate(scenario, 'Cart');
+      final title = TitleGenerator.generate(scenario);
       expect(title, contains('Add'));
       expect(title, contains('account'));
     });

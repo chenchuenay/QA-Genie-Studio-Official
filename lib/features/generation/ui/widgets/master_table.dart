@@ -17,6 +17,7 @@ class MasterTable extends StatefulWidget {
   final ValueChanged<Set<int>>? onSelectionChanged;
   final bool riskMode;
   final Map<String, int>? riskScores;
+  final ValueChanged<bool>? onDuplicateChange;
 
   const MasterTable({
     super.key,
@@ -30,6 +31,7 @@ class MasterTable extends StatefulWidget {
     this.onSelectionChanged,
     this.riskMode = false,
     this.riskScores,
+    this.onDuplicateChange,
   });
 
   @override
@@ -41,6 +43,7 @@ class _MasterTableState extends State<MasterTable> {
       dataCtrls, expectedCtrls, actualCtrls, statusCtrls;
 
   final List<double> colWidths = [85, 150, 170, 180, 140, 180, 140, 110, 90];
+  final Set<int> _duplicateIndices = {};
   static const double _checkboxWidth = 44;
   static const double _riskColumnWidth = 100;
 
@@ -105,6 +108,8 @@ class _MasterTableState extends State<MasterTable> {
       (widget.selectionMode ? _checkboxWidth : 0) +
       (widget.riskMode ? _riskColumnWidth : 0) +
       colWidths.reduce((a, b) => a + b);
+
+  static const _counterStyle = TextStyle(fontSize: 8, color: Colors.white38, height: 1);
 
   void _edited(int index) {
     widget.onCellEdit?.call();
@@ -230,11 +235,11 @@ class _MasterTableState extends State<MasterTable> {
               ),
             if (widget.riskMode) _riskBadgeCell(i, tc),
             _idCell(i, tc),
-            _plainTextCell(titleCtrls[i], colWidths[1], (v) { tc.title = v; _edited(i); }),
+            _plainTextCell(titleCtrls[i], colWidths[1], (v) { tc.title = v; _edited(i); }, maxLength: 200),
             _plainTextCell(preCtrls[i], colWidths[2], (v) {
               tc.preconditions = v.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
               _edited(i);
-            }),
+            }, maxLength: 1000),
             _stepsCell(i, tc),
             _plainTextCell(dataCtrls[i], colWidths[4], (v) {
               final data = v.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
@@ -243,9 +248,9 @@ class _MasterTableState extends State<MasterTable> {
                 else tc.steps[j].data = '';
               }
               _edited(i);
-            }),
-            _plainTextCell(expectedCtrls[i], colWidths[5], (v) { tc.expectedResult = v; _edited(i); }),
-            _plainTextCell(actualCtrls[i], colWidths[6], (v) { tc.actualResult = v; _edited(i); }),
+            }, maxLength: 500),
+            _plainTextCell(expectedCtrls[i], colWidths[5], (v) { tc.expectedResult = v; _edited(i); }, maxLength: 500),
+            _plainTextCell(actualCtrls[i], colWidths[6], (v) { tc.actualResult = v; _edited(i); }, maxLength: 500),
             _statusCell(i, tc),
             _priorityCell(i, tc),
           ],
@@ -293,7 +298,22 @@ class _MasterTableState extends State<MasterTable> {
     );
   }
 
+  void _checkDuplicate(int i) {
+    final id = idCtrls[i].text.trim();
+    final isDup = id.isNotEmpty &&
+        widget.testCases
+            .where((tc) => tc.id == id)
+            .length > 1;
+    if (isDup) {
+      _duplicateIndices.add(i);
+    } else {
+      _duplicateIndices.remove(i);
+    }
+    widget.onDuplicateChange?.call(_duplicateIndices.isNotEmpty);
+  }
+
   Widget _idCell(int i, FinalizedTestCase tc) {
+    final isDuplicate = _duplicateIndices.contains(i);
     return SizedBox(
       width: colWidths[0],
       child: Padding(
@@ -307,13 +327,28 @@ class _MasterTableState extends State<MasterTable> {
                     child: TextField(
                       controller: idCtrls[i],
                       maxLines: null,
-                      style: const TextStyle(color: _cyanColor, fontSize: 13, fontWeight: FontWeight.w600),
+                      maxLength: 50,
+                      style: TextStyle(
+                        color: isDuplicate ? AppColors.error : _cyanColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
+                        border: isDuplicate
+                            ? OutlineInputBorder(
+                                borderSide: const BorderSide(color: AppColors.error),
+                              )
+                            : const OutlineInputBorder(),
+                        errorText: isDuplicate ? 'Duplicate' : null,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        counterStyle: _counterStyle,
                       ),
-                      onChanged: (v) { tc.id = v; _edited(i); },
+                      onChanged: (v) {
+                        tc.id = v;
+                        _checkDuplicate(i);
+                        _edited(i);
+                      },
                     ),
                   )
                 : Padding(
@@ -358,11 +393,13 @@ class _MasterTableState extends State<MasterTable> {
                 child: TextField(
                   controller: stepsCtrls[i],
                   maxLines: null,
+                  maxLength: 2000,
                   style: const TextStyle(color: _textPrimary, fontSize: 12),
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    counterStyle: _counterStyle,
                   ),
                   onChanged: (v) {
                     final lines = v.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
@@ -387,7 +424,7 @@ class _MasterTableState extends State<MasterTable> {
     );
   }
 
-  Widget _plainTextCell(TextEditingController ctrl, double width, Function(String) onChanged) {
+  Widget _plainTextCell(TextEditingController ctrl, double width, Function(String) onChanged, {int? maxLength}) {
     return SizedBox(
       width: width,
       child: Padding(
@@ -399,11 +436,13 @@ class _MasterTableState extends State<MasterTable> {
                 child: TextField(
                   controller: ctrl,
                   maxLines: null,
+                  maxLength: maxLength,
                   style: const TextStyle(color: _textPrimary, fontSize: 12),
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    counterStyle: _counterStyle,
                   ),
                   onChanged: (v) { onChanged(v); },
                 ),
