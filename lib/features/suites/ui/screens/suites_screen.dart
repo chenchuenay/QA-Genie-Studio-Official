@@ -58,19 +58,19 @@ class SuitesScreenState extends State<SuitesScreen> {
   }
 
   Future<void> _loadInitial() async {
-    // Show cached data from local DB instantly (offline-first)
     if (NetworkGuard.isOnline && CloudSyncService.canSync) {
-      // Wait for first cloud page to show fresh data
       await _syncPage(null);
-    } else {
-      // Offline or guest — load from local cache
-      final local = await _historyUseCase.getSuitesPage(10);
-      if (!mounted) return;
-      setState(() {
-        _suites = local;
-        _isLoadingInitial = false;
-      });
+      // After cloud sync, reload from local DB to include locally-pending suites
+      // that haven't been pushed to cloud yet (newly generated, pending sync).
+      // fetchNextSuitePage already upserts cloud data into local DB.
     }
+    // Always load from local DB — it includes both cloud-upserted and pending suites
+    final local = await _historyUseCase.getSuitesPage(10);
+    if (!mounted) return;
+    setState(() {
+      _suites = local;
+      _isLoadingInitial = false;
+    });
   }
 
   Future<void> _syncPage(String? pageToken) async {
@@ -90,12 +90,11 @@ class SuitesScreenState extends State<SuitesScreen> {
       if (!mounted) return;
 
       if (pageToken == null) {
-        // First page — replace list
+        // First page — just sync to local DB, don't overwrite _suites.
+        // _loadInitial will load from local DB afterwards (includes pending suites).
         setState(() {
-          _suites = results;
           _nextPageToken = CloudSyncService.lastPageToken;
           _isSyncing = false;
-          _isLoadingInitial = false;
         });
       } else {
         // Subsequent page — append
@@ -110,13 +109,16 @@ class SuitesScreenState extends State<SuitesScreen> {
       setState(() {
         _isSyncing = false;
         _isLoadingMore = false;
-        _isLoadingInitial = false;
       });
-      // Fallback to local cache if cloud fetch failed
-      if (pageToken == null) {
+      // _loadInitial handles the fallback from local DB on first page.
+      // Ensure _isLoadingInitial is unblocked so the UI isn't stuck.
+      if (pageToken == null && mounted) {
         final local = await _historyUseCase.getSuitesPage(10);
         if (!mounted) return;
-        setState(() => _suites = local);
+        setState(() {
+          _suites = local;
+          _isLoadingInitial = false;
+        });
       }
     }
   }
@@ -368,7 +370,7 @@ class SuitesScreenState extends State<SuitesScreen> {
             ),
           ),
           subtitle: Text(
-            '${s['platform']} · ${_fmtDate(s['created_at'])}',
+            '${s['platform']} · ${_fmtDate(s['created_at'] ?? s['createdAt'])}',
             style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -393,7 +395,6 @@ class SuitesScreenState extends State<SuitesScreen> {
             },
           ),
           onTap: () async {
-            // Phase 3: lazy case loading — try local cache first, then GCS
             var canonicalCases = await DatabaseService.getTestCasesForSuite(id);
             if (canonicalCases.isEmpty) {
               final cloudId = await DatabaseService.getCloudIdForSuite(id);
@@ -403,6 +404,30 @@ class SuitesScreenState extends State<SuitesScreen> {
                   localSuiteId: id,
                 );
               }
+            }
+            if (canonicalCases.isEmpty && mounted) {
+              if (!context.mounted) return;
+              showBlurredDialog(
+                context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: AppColors.surface,
+                  title: const Text(
+                    'No Test Cases',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  content: const Text(
+                    'Could not load test cases for this suite.',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+              );
+              return;
             }
             final session = GenerationSession(
               traceId:
@@ -520,42 +545,27 @@ class SuitesScreenState extends State<SuitesScreen> {
                         onRefresh: () async {
                           await _syncAndReload();
                         },
-                        child: ListView.builder(
+                        child                      : ListView.builder(
                           controller: _scrollController,
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(16),
-                          itemCount: _suites.length + (_isLoadingMore ? 1 : 0) + (_isSyncing ? 0 : 1),
+                          itemCount: _suites.length
+                              + (_isLoadingMore ? 1 : 0)
+                              + (!_isPro ? 1 : 0),
                           itemBuilder: (context, index) {
-                            if (index == 0 && _isSyncing) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 24, height: 24,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  ),
-                                ),
-                              );
+                            int cursor = index;
+                            // Ad slot after first suite card
+                            if (!_isPro) {
+                              if (cursor == 1) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: _adPlaceholder(),
+                                );
+                              }
+                              if (cursor > 1) cursor--;
                             }
-                            final adjustedIndex = _isSyncing ? index - 1 : index;
-                            // Ad slot after first card
-                            if (adjustedIndex == 1 && !_isPro) {
-                              return Column(
-                                children: [
-                                  _suiteCard(_suites[0]),
-                                  const SizedBox(height: 8),
-                                  _adPlaceholder(),
-                                  const SizedBox(height: 8),
-                                ],
-                              );
-                            }
-                            // Skip first card if already rendered in ad slot combo
-                            if (adjustedIndex == 1 && !_isPro) return const SizedBox.shrink();
-                            final suiteIndex = !_isPro && adjustedIndex > 1
-                                ? adjustedIndex - 1
-                                : adjustedIndex;
-                            if (suiteIndex >= _suites.length) {
-                              // Loading indicator at bottom
+                            // Remaining items: loading spinner or suite card
+                            if (cursor >= _suites.length) {
                               return _isLoadingMore
                                   ? const Padding(
                                       padding: EdgeInsets.symmetric(vertical: 16),
@@ -568,7 +578,7 @@ class SuitesScreenState extends State<SuitesScreen> {
                                     )
                                   : const SizedBox.shrink();
                             }
-                            return _suiteCard(_suites[suiteIndex]);
+                            return _suiteCard(_suites[cursor]);
                           },
                         ),
                       ),

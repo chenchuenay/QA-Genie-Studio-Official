@@ -143,7 +143,7 @@ class CloudSyncService {
             await DatabaseService.markSynced(localId, suiteMap['suiteId'] as String);
           }
         }
-        parsedSuites.add(suiteMap);
+        parsedSuites.add({...suiteMap, 'id': localId});
       }
     }
 
@@ -184,8 +184,21 @@ class CloudSyncService {
   }) async {
     if (!_canSync) return [];
     final result = await FunctionsService.getSuiteCases(cloudId);
-    if (result['success'] != true) return [];
-    final cases = _parseCases(result['cases']);
+    if (result['success'] != true) {
+      debugPrint('CloudSyncService.fetchSuiteCases: server failed for $cloudId: ${result['error']}');
+      return [];
+    }
+    final rawCases = result['cases'];
+    if (rawCases is! List) {
+      debugPrint('CloudSyncService.fetchSuiteCases: cases not a List for $cloudId, got ${rawCases.runtimeType}');
+      return [];
+    }
+    final cases = _parseCases(rawCases);
+    if (cases.isEmpty) {
+      debugPrint('CloudSyncService.fetchSuiteCases: _parseCases returned empty for $cloudId (raw length=${rawCases.length})');
+    } else {
+      debugPrint('CloudSyncService.fetchSuiteCases: loaded ${cases.length} cases for suite $localSuiteId ($cloudId)');
+    }
     if (cases.isNotEmpty) {
       await DatabaseService.replaceAllTestCases(suiteId: localSuiteId, cases: cases);
       await DatabaseService.markSynced(localSuiteId, cloudId);

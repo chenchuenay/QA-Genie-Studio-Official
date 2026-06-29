@@ -33,7 +33,7 @@ class PromptCacheManager {
     }
 
     if (!isValid) {
-      _cachedPrompt = SystemPrompt.masterPrompt;
+      _cachedPrompt = SystemPrompt.masterPromptFor('Web');
       _cachedVersion = SystemPrompt.version;
       _cachedTimestamp = DateTime.now();
       await prefs.setString(_prefKeyVersion, _cachedVersion!);
@@ -46,8 +46,7 @@ class PromptCacheManager {
   }
 
   static String get masterPrompt {
-    // Fallback if warmup not called
-    _cachedPrompt ??= SystemPrompt.masterPrompt;
+    _cachedPrompt ??= SystemPrompt.masterPromptFor('Web');
     _cachedVersion ??= SystemPrompt.version;
     return _cachedPrompt!;
   }

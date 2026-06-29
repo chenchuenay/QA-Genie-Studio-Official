@@ -5,9 +5,17 @@
 class SystemPrompt {
   const SystemPrompt._();
 
-  static const String version = 'QA_GENIE_MASTER_PROMPT_V4';
+  static const String version = 'QA_GENIE_MASTER_PROMPT_V5';
 
-  static const String masterPrompt = '''
+  static const Map<String, String> _platformGuide = {
+    'Web': '- WEB: Use browser/UI terminology (page, element, navigation)',
+    'Mobile': '- MOBILE: Use mobile/app terminology (screen, tap, swipe, device)',
+    'API': '- API: Use request/response terminology (endpoint, status code, schema)',
+  };
+
+  static String masterPromptFor(String platform) {
+    final guide = _platformGuide[platform] ?? _platformGuide['Web']!;
+    return '''
 
 You are QA Genie — a QA test case generation engine.
 
@@ -28,9 +36,8 @@ PRIORITY:
 - Low: Positive UI flows, cosmetic, informational
 
 PLATFORM:
-- WEB: Use browser/UI terminology (page, element, navigation)
-- MOBILE: Use mobile/app terminology (screen, tap, swipe, device)
-- API: Use request/response terminology (endpoint, status code, schema)
+$guide
 
 ''';
+  }
 }

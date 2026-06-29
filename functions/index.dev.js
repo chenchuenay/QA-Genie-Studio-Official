@@ -381,7 +381,7 @@ exports.generate = onCall(async (data, context) => {
       }
 
       const sanitizedPrompt = sanitisePrompt(prompt);
-      const aiResult = await callDeepSeek(sanitizedPrompt);
+      const aiResult = await callDeepSeek(sanitizedPrompt, platform);
 
       // Whether AI succeeded or failed, DeepSeek was called (cost may have been incurred).
       // We set aiFailed flag for return type, but still enter the quota transaction.
@@ -683,7 +683,7 @@ exports.generate = onCall(async (data, context) => {
       }
       return { success: false, error: { code: err.message } };
     }
-  }, { secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60, memory: "512MiB" });
+  }, { secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60, memory: "512MB" });
 
 // ------------------------------------------------------------------
 // RECORD EXPORT METRICS (per-user, no analytics/global write)
@@ -2094,9 +2094,16 @@ exports.recordUpdateDismissal = onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // HELPER: CALL DEEPSEEK
 // ------------------------------------------------------------------
-const SYSTEM_PROMPT = `You are a QA test case generator. Generate professional, realistic, execution-ready test cases for the given module, feature, and platform.
+function buildSystemPrompt(platform) {
+  const platformGuidelines = {
+    'Web': '- WEB: Use browser/UI terminology (page, element, navigation)',
+    'Mobile': '- MOBILE: Use mobile/app terminology (screen, tap, swipe, device)',
+    'API': '- API: Use request/response terminology (endpoint, status code, schema)',
+  };
+  const guideline = platformGuidelines[platform] || platformGuidelines['Web'];
+  return `You are a QA test case generator. Generate professional, realistic, execution-ready test cases for the given module, feature, and platform.
 
-Output a JSON object with a single key "testCases" containing an array of test case objects.
+Output a JSON object with a single key "testCases" containing an array of test case objects. The testCases array MUST contain at least 1 valid test case - never return an empty array.
 
 Each test case object MUST have:
 - id (string)
@@ -2119,9 +2126,7 @@ PRIORITY GUIDELINES:
 - Low: Positive UI flows, cosmetic, informational
 
 PLATFORM GUIDELINES:
-- WEB: Use browser/UI terminology (page, element, navigation)
-- MOBILE: Use mobile/app terminology (screen, tap, swipe, device)
-- API: Use request/response terminology (endpoint, status code, schema)
+${guideline}
 
 QUALITY RULES:
 - Use realistic data, observable actions, measurable expected results
@@ -2131,12 +2136,13 @@ QUALITY RULES:
 - No generic phrases like "works correctly" or "as expected"
 - No markdown, no explanations, no code blocks
 - Each test case must be unique and execution-ready`;
+}
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function callDeepSeek(prompt) {
+async function callDeepSeek(prompt, platform = 'Web') {
   const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
   const url = "https://api.deepseek.com/v1/chat/completions";
   const MAX_RETRIES = 2;
@@ -2155,7 +2161,7 @@ async function callDeepSeek(prompt) {
         body: JSON.stringify({
           model: "deepseek-v4-flash",
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: buildSystemPrompt(platform) },
             { role: "user", content: prompt },
           ],
           temperature: 0.15,
@@ -2364,14 +2370,27 @@ async function _embedCases(suites, tier, effectiveUid) {
       try {
         const [content] = await bucket
           .file(`memberData/${tier}/${effectiveUid}/${s._date}/suites/${s._serial}.json`)
-          .download();
-        s.cases = JSON.parse(content.toString());
+          .download({ decompress: true });
+        s.cases = _parseGcsCases(content);
       } catch (_) {
         s.cases = [];
       }
     }));
   }
   return suites;
+}
+
+function _parseGcsCases(content) {
+  const raw = content.toString();
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    try {
+      return JSON.parse(zlib.gunzipSync(content).toString());
+    } catch (_2) {
+      return [];
+    }
+  }
 }
 
 // --------------------------------------------------------------
@@ -2476,12 +2495,15 @@ exports.getSuiteCases = onCall(async (data, context) => {
 
     const [content] = await bucket
       .file(`memberData/${tier}/${effectiveUid}/${date}/suites/${serial}.json`)
-      .download();
-    const raw = content.toString();
-    const cases = JSON.parse(raw);
+      .download({ decompress: true });
+    const cases = _parseGcsCases(content);
+    if (!Array.isArray(cases)) {
+      log("warn", `getSuiteCases: parsed cases not an array for ${suiteId}`, { uid, tier, effectiveUid, date, serial });
+      return { success: false, error: "Invalid cases format", cases: [] };
+    }
     return { success: true, cases, suiteId };
   } catch (e) {
-    log("warn", `getSuiteCases: failed for ${suiteId}: ${e.message || e}`, { uid });
+    log("warn", `getSuiteCases: failed for ${suiteId}: ${e.message || e}`, { uid, tier, effectiveUid, date, serial });
     return { success: false, error: "Suite not found", cases: [] };
   }
 });
