@@ -9,6 +9,9 @@ class LocalDbSource {
 
   Future<List<Map<String, dynamic>>> getAllSuites() async => DatabaseService.getAllSuites();
 
+  Future<List<Map<String, dynamic>>> getSuitesPage(int limit, {String? beforeCreatedAt}) async =>
+    DatabaseService.getSuitesPage(limit, beforeCreatedAt: beforeCreatedAt);
+
   Future<void> deleteSuite(int suiteId) async => DatabaseService.deleteSuite(suiteId);
 
   Future<List<FinalizedTestCase>> getTestCasesForSuite(int suiteId) async => DatabaseService.getTestCasesForSuite(suiteId);

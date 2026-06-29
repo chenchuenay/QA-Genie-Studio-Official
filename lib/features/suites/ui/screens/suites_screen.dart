@@ -29,47 +29,132 @@ class SuitesScreen extends StatefulWidget {
 
 class SuitesScreenState extends State<SuitesScreen> {
   final _historyUseCase = AppDependencies.getHistoryUseCase;
-  late Future<List<Map<String, dynamic>>> _suitesFuture;
-  bool _isPro = false;
+  List<Map<String, dynamic>> _suites = [];
+  bool _isLoadingInitial = true;
+  bool _isLoadingMore = false;
+  bool _isSyncing = false;
   bool _isDeleting = false;
   bool _isRenaming = false;
+  bool _isPro = false;
+  String? _nextPageToken;
+  final _scrollController = ScrollController();
   StreamSubscription<User?>? _authSub;
 
   @override
   void initState() {
     super.initState();
-    _authSub = AuthService.authStateChanges.listen((_) => _refreshSuites());
+    _authSub = AuthService.authStateChanges.listen((_) => refresh());
     AdManager().loadRewardedAd(adUnitId: AdUnits.rewardedTcExport);
-    _refreshSuites();
-    _syncAndReload();
+    _loadInitial();
     _checkPro();
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _authSub?.cancel();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadInitial() async {
+    // Show cached data from local DB instantly (offline-first)
+    if (NetworkGuard.isOnline && CloudSyncService.canSync) {
+      // Wait for first cloud page to show fresh data
+      await _syncPage(null);
+    } else {
+      // Offline or guest — load from local cache
+      final local = await _historyUseCase.getSuitesPage(10);
+      if (!mounted) return;
+      setState(() {
+        _suites = local;
+        _isLoadingInitial = false;
+      });
+    }
+  }
+
+  Future<void> _syncPage(String? pageToken) async {
+    try {
+      if (pageToken == null) {
+        setState(() => _isSyncing = true);
+      } else {
+        setState(() => _isLoadingMore = true);
+      }
+
+      final results = await CloudSyncService.fetchNextSuitePage(
+        pageSize: 10,
+        pageToken: pageToken,
+        includeCases: pageToken == null,
+      );
+
+      if (!mounted) return;
+
+      if (pageToken == null) {
+        // First page — replace list
+        setState(() {
+          _suites = results;
+          _nextPageToken = CloudSyncService.lastPageToken;
+          _isSyncing = false;
+          _isLoadingInitial = false;
+        });
+      } else {
+        // Subsequent page — append
+        setState(() {
+          _suites.addAll(results);
+          _nextPageToken = CloudSyncService.lastPageToken;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSyncing = false;
+        _isLoadingMore = false;
+        _isLoadingInitial = false;
+      });
+      // Fallback to local cache if cloud fetch failed
+      if (pageToken == null) {
+        final local = await _historyUseCase.getSuitesPage(10);
+        if (!mounted) return;
+        setState(() => _suites = local);
+      }
+    }
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || _nextPageToken == null) return;
+    await _syncPage(_nextPageToken);
   }
 
   Future<void> _syncAndReload() async {
     await CloudSyncService.processPendingDeletes();
     await CloudSyncService.manualSync();
-    if (mounted) _refreshSuites();
+    if (mounted) await _loadInitial();
   }
 
   Future<void> _checkCloud() async {
     if (!await NetworkUiHelper.ensureProductionOnline(context)) return;
-    final pulled = await CloudSyncService.pullRemoteSuites();
+    final results = await CloudSyncService.fetchNextSuitePage(pageSize: 10, pageToken: null);
     if (!mounted) return;
-    if (pulled > 0) {
-      _refreshSuites();
+    if (results.isNotEmpty) {
+      setState(() {
+        _suites = results;
+        _nextPageToken = CloudSyncService.lastPageToken;
+      });
       showBlurredDialog(
         context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppColors.surface,
           title: const Text('Synced', style: TextStyle(color: Colors.white)),
           content: Text(
-            'Found $pulled suite(s) in cloud.',
+            'Found ${results.length} suite(s) in cloud.',
             style: const TextStyle(color: AppColors.textSecondary),
           ),
           actions: [
@@ -104,24 +189,18 @@ class SuitesScreenState extends State<SuitesScreen> {
     }
   }
 
-  void _refreshSuites() {
-    setState(() {
-      _suitesFuture = _historyUseCase.getAllSuites();
-    });
+  void refresh() {
+    _loadInitial();
+  }
+
+  Future<void> triggerSync() async {
+    await _syncAndReload();
   }
 
   Future<void> _checkPro() async {
     final pro = await UsageManager.isPro();
     if (!mounted) return;
     setState(() => _isPro = pro);
-  }
-
-  void refresh() {
-    _refreshSuites();
-  }
-
-  Future<void> triggerSync() async {
-    await _syncAndReload();
   }
 
   Future<bool?> _confirmDelete(int id) async {
@@ -157,7 +236,6 @@ class SuitesScreenState extends State<SuitesScreen> {
   Future<void> _deleteSuite(int id) async {
     if (_isDeleting) return;
     _isDeleting = true;
-    // Capture cloud_id BEFORE local delete so pending deletes can use it
     final cloudId = await DatabaseService.getCloudIdForSuite(id);
     final networkOk = NetworkGuard.isOnline;
     if (networkOk && !AuthService.isGuest) {
@@ -315,9 +393,17 @@ class SuitesScreenState extends State<SuitesScreen> {
             },
           ),
           onTap: () async {
-            final canonicalCases = await DatabaseService.getTestCasesForSuite(
-              id,
-            );
+            // Phase 3: lazy case loading — try local cache first, then GCS
+            var canonicalCases = await DatabaseService.getTestCasesForSuite(id);
+            if (canonicalCases.isEmpty) {
+              final cloudId = await DatabaseService.getCloudIdForSuite(id);
+              if (cloudId != null && NetworkGuard.isOnline && !AuthService.isGuest) {
+                canonicalCases = await CloudSyncService.fetchSuiteCases(
+                  cloudId: cloudId,
+                  localSuiteId: id,
+                );
+              }
+            }
             final session = GenerationSession(
               traceId:
                   'HISTORICAL_LOAD_${DateTime.now().millisecondsSinceEpoch}',
@@ -352,109 +438,140 @@ class SuitesScreenState extends State<SuitesScreen> {
       body: Column(
         children: [
           Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _suitesFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
+            child: _isLoadingInitial
+                ? const Center(
                     child: Text(
                       'Loading...',
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
-                  );
-                }
-                final suites = snapshot.data ?? [];
-                if (suites.isEmpty) {
-                  return RefreshIndicator(
-                    onRefresh: () async {
-                      await _syncAndReload();
-                    },
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        const SizedBox(height: 120),
-                        if (!_isPro) ...[
-                          _adPlaceholder(),
-                          const SizedBox(height: 24),
-                        ],
-                        Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.folder_open,
-                                size: 64,
-                                color: AppColors.textHint,
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'No test suites yet',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 16,
-                                ),
-                              ),
+                  )
+                : _suites.isEmpty
+                    ? RefreshIndicator(
+                        onRefresh: () async {
+                          await _syncAndReload();
+                        },
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            const SizedBox(height: 120),
+                            if (!_isPro) ...[
+                              _adPlaceholder(),
                               const SizedBox(height: 24),
-                              ElevatedButton.icon(
-                                onPressed: () => widget.onGenerate?.call(),
-                                icon: const Icon(
-                                  Icons.bolt,
-                                  color: Colors.black,
-                                ),
-                                label: const Text(
-                                  'Generate now',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.accent,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 32,
-                                    vertical: 14,
-                                  ),
-                                  elevation: 4,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              if (!AuthService.isGuest)
-                                TextButton.icon(
-                                  onPressed: _checkCloud,
-                                  icon: const Icon(Icons.cloud_sync, size: 18),
-                                  label: const Text('Check cloud'),
-                                ),
                             ],
-                          ),
+                            Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.folder_open,
+                                    size: 64,
+                                    color: AppColors.textHint,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'No test suites yet',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  ElevatedButton.icon(
+                                    onPressed: () => widget.onGenerate?.call(),
+                                    icon: const Icon(
+                                      Icons.bolt,
+                                      color: Colors.black,
+                                    ),
+                                    label: const Text(
+                                      'Generate now',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.accent,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 32,
+                                        vertical: 14,
+                                      ),
+                                      elevation: 4,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (!AuthService.isGuest)
+                                    TextButton.icon(
+                                      onPressed: _checkCloud,
+                                      icon: const Icon(Icons.cloud_sync, size: 18),
+                                      label: const Text('Check cloud'),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 120),
+                          ],
                         ),
-                        const SizedBox(height: 120),
-                      ],
-                    ),
-                  );
-                }
-
-                final children = <Widget>[];
-                children.add(_suiteCard(suites.first));
-                if (!_isPro) children.add(_adPlaceholder());
-                for (int i = 1; i < suites.length; i++)
-                  children.add(_suiteCard(suites[i]));
-
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    await _syncAndReload();
-                  },
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    children: children,
-                  ),
-                );
-              },
-            ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () async {
+                          await _syncAndReload();
+                        },
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _suites.length + (_isLoadingMore ? 1 : 0) + (_isSyncing ? 0 : 1),
+                          itemBuilder: (context, index) {
+                            if (index == 0 && _isSyncing) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 24, height: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                ),
+                              );
+                            }
+                            final adjustedIndex = _isSyncing ? index - 1 : index;
+                            // Ad slot after first card
+                            if (adjustedIndex == 1 && !_isPro) {
+                              return Column(
+                                children: [
+                                  _suiteCard(_suites[0]),
+                                  const SizedBox(height: 8),
+                                  _adPlaceholder(),
+                                  const SizedBox(height: 8),
+                                ],
+                              );
+                            }
+                            // Skip first card if already rendered in ad slot combo
+                            if (adjustedIndex == 1 && !_isPro) return const SizedBox.shrink();
+                            final suiteIndex = !_isPro && adjustedIndex > 1
+                                ? adjustedIndex - 1
+                                : adjustedIndex;
+                            if (suiteIndex >= _suites.length) {
+                              // Loading indicator at bottom
+                              return _isLoadingMore
+                                  ? const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 16),
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 24, height: 24,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      ),
+                                    )
+                                  : const SizedBox.shrink();
+                            }
+                            return _suiteCard(_suites[suiteIndex]);
+                          },
+                        ),
+                      ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),

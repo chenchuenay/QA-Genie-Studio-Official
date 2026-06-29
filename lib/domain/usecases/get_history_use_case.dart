@@ -11,6 +11,10 @@ class GetHistoryUseCase {
     return _repository.getAllSuites();
   }
 
+  Future<List<Map<String, dynamic>>> getSuitesPage(int limit, {String? beforeCreatedAt}) async {
+    return _repository.getSuitesPage(limit, beforeCreatedAt: beforeCreatedAt);
+  }
+
   Future<List<FinalizedTestCase>> getTestCases(int suiteId) async {
     return _repository.getTestCases(suiteId);
   }

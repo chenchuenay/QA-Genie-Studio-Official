@@ -291,16 +291,31 @@ class FunctionsService {
     );
   }
 
-  /// Get all suites from cloud. Returns list of suite maps.
-  static Future<List<Map<String, dynamic>>> getMemberSuites() async {
-    final result = await call(functionName: 'getMemberSuites');
-    if (result['success'] != true) {
-      debugPrint('⚠️ getMemberSuites: cloud function returned failure');
-      return [];
-    }
-    final suites = result['suites'];
-    if (suites is! List) return [];
-    return suites.cast<Map<String, dynamic>>();
+  /// Get a page of suite metadata from cloud (no test case content).
+  /// Returns [result] with keys: success, suites, nextPageToken, effectiveUid.
+  /// When [includeCases] is true (first page only), server also embeds GCS test cases.
+  static Future<Map<String, dynamic>> getMemberSuitesPage({
+    int pageSize = 10,
+    String? pageToken,
+    bool includeCases = false,
+  }) async {
+    return call(
+      functionName: 'getMemberSuites',
+      payload: {
+        'pageSize': pageSize,
+        if (pageToken != null) 'pageToken': pageToken,
+        'includeCases': includeCases,
+      },
+    );
+  }
+
+  /// Get test cases for a single suite from GCS.
+  /// Returns [result] with keys: success, cases.
+  static Future<Map<String, dynamic>> getSuiteCases(String suiteId) async {
+    return call(
+      functionName: 'getSuiteCases',
+      payload: {'suiteId': suiteId},
+    );
   }
 
   /// Delete a suite from cloud by its cloud_id ("date/serialNumber").

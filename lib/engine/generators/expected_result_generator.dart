@@ -132,6 +132,8 @@ class ExpectedResultGenerator {
         return 'The form displays a clear error message: "Invalid email or password." No sensitive information about whether the email exists is revealed. The form does not submit. Fields retain their entered values for correction.';
       case ActionType.authenticate:
         return 'Authentication fails. The API returns HTTP 401 with an error message. No session token is issued. The member remains on the login page. Failed attempt count increments for brute force protection.';
+      case ActionType.authorize:
+        return 'OAuth authorization fails. The provider returns an error response (access_denied, invalid_grant, or redirect_uri_mismatch). No authorization code is issued. The member is redirected back with an error parameter. The application handles the error gracefully without crashing.';
       case ActionType.create:
         return 'Creation fails. The system returns a validation error identifying the invalid/missing fields. No partial data is saved. The form remains editable with entered values preserved. Specific error messages appear inline for each invalid field.';
       case ActionType.update:

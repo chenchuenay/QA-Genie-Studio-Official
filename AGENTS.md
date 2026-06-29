@@ -310,48 +310,57 @@ also try to uninstall apps before installing
 
 - **Never checkout, reset, merge, or switch branches while uncommitted changes exist.** Always `git commit` or `git stash` first. Failing to do so WILL lose uncommitted work.
 
-## Anchored Summary — Text Limits, ListView Perform, Duplicate Guard, Copy/Move re-ID
+## Anchored Summary — Ontology2 + Quota Edge Cases
 
 ### Goal
-Fix remaining UX/quality issues: offline detection, ad reward nonce flow, account screen caching, feature name in titles, TC ID management, text field limits, and 400+ case rendering performance.
+Replace hardcoded domain templates with a generative ontology engine that produces AI-quality test cases for all 10 domains using entity property definitions.
 
 ### Key Decisions
-- **Option A for ad reward**: `requestAdNonce` → `rewardToken` flow (server-issued nonce validated atomically) chosen over Option B (`verifyRewardAd` → `adToken` legacy flow).
-- **HTTP cache cleared on connectivity change**: connectivity_plus fires instantly when network drops; clearing stale HTTP cache ensures `hasInternet()` doesn't return `true` for up to 30s after going offline.
-- **Display name caching**: SharedPreferences used over Firebase Auth `displayName` alone because some Google-linked users have null `displayName` in `FirebaseAuth.currentUser`.
-- **Renumber button removed**: auto-renumber is unnecessary, gaps are normal (breaks references, confuses users).
-- **Copy/move `_reId` over `IdGenerator.generate`**: preserves original module prefix (`TC_login_006` stays `TC_login_*`); only number adapts to target suite's current count.
-- **maxLength only on editable TextFields in master_table + export preview**: summary report tester/env fields unchanged (lower priority).
-- **Column → ListView.builder/L.separated for performance**: 400+ case suites cause jank/crash with Column. Lazy builders only build visible rows.
+- **PropertyDef is the core abstraction** — every generator reads property types/examples/constraints rather than switching on domain name.
+- **VariationPool uses seeded Random** for deterministic but varied output.
+- **OntologyScenarioPlanner** iterates entity+action pairs with round-robin category cycling — simpler than old Relationship-graph expansion planner.
+- **Quota consumed AFTER DeepSeek call** (cost incurred first), but with overdraft safety for race conditions — DeepSeek cost always honoured with fallback.
+- **Nonce expiry checked BEFORE DeepSeek call** to avoid wasting AI cost on expired tokens.
+- **`callDeepSeek` always returns** (never throws), so every return from it is treated as "AI was attempted" for quota purposes, except `HTTP_4xx` / `CLIENT_ERROR` which are classified as no-cost.
+
+### Quota Edge Cases (SCENARIO 2.2, 2.3, 4.5)
+- **SCENARIO 2.2 (Race → Overdraft):** When DeepSeek was called + ad was watched + quota is exhausted by another request in the same window, the transaction allows one over-limit increment (`!aiFailed` guard on LIMIT_REACHED throw) and returns fallback. Quota is consumed because DeepSeek cost was incurred.
+- **SCENARIO 2.3 (No-cost AI error → free fallback):** `HTTP_4xx` / `CLIENT_ERROR` errors from DeepSeek are classified as `aiNoCost = true`. If ad was watched, the transaction skips counter increment entirely and returns `freeFallback: true`. No quota consumed. Pre-DeepSeek errors (transport, auth) are handled by the existing catch block — they never enter transaction, no quota consumed.
+- **SCENARIO 4.5 (Expired nonce → skip DeepSeek, free fallback):** Before `callDeepSeek`, the nonce timestamp is checked against `processed_requests`. If expired (>5 min), a single-document transaction atomically consumes the nonce and returns `freeFallback: true` without ever calling DeepSeek. No AI cost, no quota consumed.
 
 ### Critical Context
 - Version: 1.2.67 (versionCode 23)
 - DeepSeek cloud function: `timeoutSeconds: 60`, fetch abort at 55s, model `deepseek-v4-flash`, `extra_body: { thinking: { type: "disabled" } }`, `response_format: { type: "json_object" }`.
 - `DEEPSEEK_API_KEY` must be set as Firebase secret — missing it causes `HTTP_401` on every API call.
-- `ensureProductionOnline()` in `NetworkUiHelper` uses `NetworkGuard.hasInternet()` (HTTP check); 30s cache was root cause of offline dialog not showing — now cleared on connectivity change.
 - `IdGenerator.generate()` is truly dead code after Renumber removal. `_reId()` replaces it in copy/move.
 - Copy/move queries `getTestCasesForSuite(targetSuiteId)` and uses `_reId(originalId, existing.length + position + 1)` — preserves prefix, only number changes.
 - `maxLength` on TextField: does NOT truncate `controller.text =` (AI content passes unhindered); stops user typing/paste at limit. Counter via `counterStyle` only (no `buildCounter` in Flutter 3.44.1).
 - `Flutter 3.44.1` — no `buildCounter` or `counter` widget in `InputDecoration`. Only `counterText` + `counterStyle` available.
-- Reward ad flow: `home_screen.dart` → `FunctionsService.requestAdNonce()` → show ad → pass nonce as `rewardToken` to `generate` cloud function → server validates against `processed_requests` atomically.
-- Summary report screens (`summary_report_screen.dart`, `summary_report_preview_screen.dart`) now use `ListView.builder(shrinkWrap: true, NeverScrollableScrollPhysics())` for Detailed Results table.
 - All builds: `flutter clean && flutter pub get && flutter build apk --release --obfuscate --split-debug-info=build/debug-info`. Must uninstall before install on device.
+- Current fallback: 300+ hardcoded branches across 6 generators, cannot handle domains not explicitly coded. New approach: single set of generators reads PropertyDef list + ActionDef transitions — works for any domain.
+- 10 domains confirmed working: Identity → Login/SSO, Commerce → Checkout, Banking → Transfer, Medical → Patient Records, Scheduling → Book Appointment, Integration → Webhook, AI/ML → Model Training, Social → Create Post, Tech → Server Deploy, Robotics → Robot Mission.
+- All 717 engine tests pass (0 failures), 0 analyzer warnings across entire project.
 
 ### Relevant Files
+- `lib/engine/ontology2/model/`: entity_def, action_def, state_def, domain_ontology, step_template — core data model
+- `lib/engine/ontology2/registry/domain_index.dart`: master registry with detect() for all 10 domains
+- `lib/engine/ontology2/registry/domains/`: 10 domain data files (identity, commerce, banking, medical, scheduling, integration, ai_ml, social, tech, robotics)
+- `lib/engine/ontology2/generators/`: 5 ontology generators (title, data, step, precondition, expected_result)
+- `lib/engine/ontology2/planners/ontology_scenario_planner.dart`: native scenario planner for V2 engine
+- `lib/engine/orchestrator/deterministic_engine_v2.dart`: V2 orchestrator — drop-in replacement for old engine
+- `lib/engine/orchestration/pipeline_orchestrator.dart`: hard error logic updated to skip SERVICE_UNAVAILABLE when ad was watched
+- `lib/engine/orchestration/stages/ai_generation_stage.dart`: handles `freeFallback` flag from cloud fn, sets `hasQuotaBeenConsumed` accordingly
+- `lib/engine/orchestration/stages/fallback_stage.dart`: uses DeterministicEngineV2
+- `lib/engine/models/pipeline_models.dart`: GenerationRequest carries adToken, AiStageResult carries hasQuotaBeenConsumed
+- `functions/index.prod.js` + `functions/index.dev.js`: `exports.generate` restructured — pre-DeepSeek nonce expiry check (4.5), no-cost error classification (2.3), overdraft for race condition (2.2)
 - `lib/core/network/network_guard.dart`: HTTP cache cleared on connectivity change
 - `lib/core/network/network_ui_helper.dart`: `ensureProductionOnline()` calls `hasInternet()`, shows NoInternetScreen dialog
 - `lib/firebase/cloud_functions/functions_service.dart`: added `requestAdNonce()` binding
 - `lib/features/generation/ui/screens/home_screen.dart`: calls `FunctionsService.requestAdNonce()` before ad dialog
-- `lib/engine/orchestration/stages/ai_generation_stage.dart`: reverted `fallback_` prefix on `rewardToken`
-- `lib/engine/generators/title_generator.dart`: removed `feature` param from `generate()`, all `$feature` interpolations removed
-- `lib/engine/orchestrator/deterministic_engine.dart`: updated `TitleGenerator.generate()` call (no `feature`)
-- `lib/engine/recovery/ai_repair_engine.dart`: updated `TitleGenerator.generate()` call (no `feature`)
 - `lib/features/account/ui/account_screen.dart`: `_loadCached()`, `_cachedDisplayName`, caching in `_loadData()`
-- `lib/features/suites/ui/screens/suite_preview_screen.dart`: Renumber removed, `_reId()` added, `IdGenerator` import removed, `_batchCopy()`/`_batchMove()` updated, duplicate guard wiring
-- `lib/features/generation/ui/widgets/master_table.dart`: 7 fields with `maxLength` + `counterStyle`, `_duplicateIndices` set, `onDuplicateChange` callback
-- `lib/shared/dialogs/export_preview_dialog.dart`: `_maxLengthForHeader()` mapping, `maxLength` + tiny `counterStyle`, Column → `ListView.separated` + `Expanded` inside `SizedBox`
-- `lib/features/summary/ui/summary_report_screen.dart`: Column → `ListView.builder(shrinkWrap: true, NeverScrollableScrollPhysics())`
-- `lib/features/summary/ui/summary_report_preview_screen.dart`: Column → `ListView.builder(shrinkWrap: true, NeverScrollableScrollPhysics())`
-- `test/engine/generators/title_generator_test.dart`: updated to new `TitleGenerator.generate(scenario)` signature
+- `lib/features/suites/ui/screens/suite_preview_screen.dart`: Renumber removed, `_reId()` added, duplicate guard wiring
+- `lib/features/generation/ui/widgets/master_table.dart`: 7 fields with maxLength + counterStyle, duplicate indices
+- `lib/shared/dialogs/export_preview_dialog.dart`: maxLength + counterStyle, ListView.separated
+- `lib/features/summary/ui/summary_report_screen.dart` + `summary_report_preview_screen.dart`: ListView.builder for performance
 - `lib/core/utils/id_generator.dart`: `IdGenerator.generate(module, index)` — dead code after Renumber removal
 

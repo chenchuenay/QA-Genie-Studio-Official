@@ -51,6 +51,7 @@ class ScenarioPlanner {
       if (needed == 0) continue;
       final conditions = _getConditionsForCategory(category);
       final relList = reachable.toList();
+      _prioritizeRelList(relList);
       int relIndex = 0;
       int catCount = 0;
       while (catCount < needed) {
@@ -139,6 +140,51 @@ class ScenarioPlanner {
     return scenarios.take(totalNeeded).toList();
   }
 
+  void _prioritizeRelList(List<Relationship> relList) {
+    final hasOAuth = seedEntities.contains(EntityType.oauthProvider);
+    final hasAccount = seedEntities.contains(EntityType.account);
+    final hasCart = seedEntities.contains(EntityType.cart);
+    final hasAppointment = seedEntities.contains(EntityType.appointment);
+    final hasRecord = seedEntities.contains(EntityType.record);
+    final hasBeneficiary = seedEntities.contains(EntityType.beneficiary);
+    final entityPriorities = <EntityType, int>{};
+    final actionPriorities = <ActionType, int>{};
+
+    if (hasOAuth) {
+      entityPriorities[EntityType.oauthProvider] = 0;
+      actionPriorities[ActionType.authorize] = 0;
+    }
+    if (hasAccount) {
+      actionPriorities[ActionType.authenticate] = 1;
+      actionPriorities[ActionType.login] = 1;
+    }
+    if (hasBeneficiary) {
+      actionPriorities[ActionType.transfer] = 0;
+    }
+    if (hasCart) {
+      actionPriorities[ActionType.checkout] = 0;
+      actionPriorities[ActionType.pay] = 0;
+    }
+    if (hasAppointment) {
+      actionPriorities[ActionType.book] = 0;
+    }
+    if (hasRecord) {
+      actionPriorities[ActionType.create] = 0;
+    }
+
+    if (entityPriorities.isNotEmpty || actionPriorities.isNotEmpty) {
+      relList.sort((a, b) {
+        final aActionPrio = actionPriorities[a.action] ?? 999;
+        final bActionPrio = actionPriorities[b.action] ?? 999;
+        if (aActionPrio != bActionPrio) return aActionPrio.compareTo(bActionPrio);
+        final aEntityPrio = entityPriorities[a.source] ?? 999;
+        final bEntityPrio = entityPriorities[b.source] ?? 999;
+        if (aEntityPrio != bEntityPrio) return aEntityPrio.compareTo(bEntityPrio);
+        return 0;
+      });
+    }
+  }
+
   void _expandFromEntity(
     EntityType entity,
     List<Relationship> allRelations,
@@ -157,25 +203,30 @@ class ScenarioPlanner {
   }
 
   List<String> _getConditionsForCategory(String category) {
+    final hasOAuth = seedEntities.contains(EntityType.oauthProvider);
     switch (category) {
       case 'positive':
         return ['valid'];
       case 'negative':
-        return ['invalid', 'expired', 'locked', 'unauthorized', 'insufficient'];
+        final conditions = <String>['invalid', 'expired', 'locked', 'unauthorized', 'insufficient'];
+        if (hasOAuth) conditions.add('consent_denied');
+        return conditions;
       case 'validation':
-        return [
-          'empty',
-          'invalid_format',
-          'duplicate',
-          'max_length',
-          'min_length',
-        ];
+        final conditions = <String>['empty', 'invalid_format', 'duplicate', 'max_length', 'min_length'];
+        if (hasOAuth) conditions.add('redirect_uri_mismatch');
+        return conditions;
       case 'boundary':
-        return ['maximum', 'minimum'];
+        final conditions = <String>['maximum', 'minimum'];
+        if (hasOAuth) conditions.add('max_redirect_uri');
+        return conditions;
       case 'security':
-        return ['sql_injection', 'xss', 'bruteforce', 'credential_stuffing'];
+        final conditions = <String>['sql_injection', 'xss', 'bruteforce', 'credential_stuffing'];
+        if (hasOAuth) conditions.addAll(['csrf_mismatch', 'oauth_replay']);
+        return conditions;
       case 'session':
-        return ['expired', 'revoked', 'concurrent'];
+        final conditions = <String>['expired', 'revoked', 'concurrent'];
+        if (hasOAuth) conditions.add('expired_code');
+        return conditions;
       default:
         return ['valid'];
     }
@@ -186,7 +237,9 @@ class ScenarioPlanner {
     if (['sql_injection', 'xss', 'bruteforce', 'credential_stuffing',
          'empty', 'invalid_format', 'duplicate', 'max_length', 'min_length',
          'maximum', 'minimum',
-         'expired', 'revoked', 'concurrent'].contains(condition)) {
+         'expired', 'revoked', 'concurrent',
+         'csrf_mismatch', 'oauth_replay', 'consent_denied',
+         'redirect_uri_mismatch', 'expired_code', 'max_redirect_uri'].contains(condition)) {
       return true;
     }
     final action = rel.action;

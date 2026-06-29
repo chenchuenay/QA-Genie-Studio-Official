@@ -153,6 +153,10 @@ class DeterministicEngine {
 
   Set<EntityType> _detectSeedEntities(String feature) {
     final f = feature.toLowerCase();
+    if ((f.contains('login') || f.contains('signin') || f.contains('auth')) &&
+        (f.contains('oauth') || f.contains('google') || f.contains('oidc'))) {
+      return {EntityType.account, EntityType.oauthProvider, EntityType.token, EntityType.session, EntityType.credential};
+    }
     if (f.contains('login') || f.contains('signin') || f.contains('auth'))
       return {EntityType.account, EntityType.credential};
     if (f.contains('reset') && f.contains('password'))

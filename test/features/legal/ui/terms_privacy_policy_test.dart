@@ -9,7 +9,7 @@ void main() {
     ));
     expect(find.text('Policies'), findsOneWidget);
     expect(find.text('Privacy Policy'), findsOneWidget);
-    expect(find.text('Terms of Use'), findsOneWidget);
+    expect(find.text('Terms of Service'), findsOneWidget);
     expect(find.text('AI Disclaimer'), findsOneWidget);
     expect(find.text('Ads & Monetization'), findsOneWidget);
   });

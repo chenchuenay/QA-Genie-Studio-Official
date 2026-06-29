@@ -3,11 +3,12 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/prompts/prompt_composer.dart';
 import 'package:qa_genie/engine/planners/prompt_planner.dart';
+import 'package:qa_genie/engine/planners/prompt_domain_detector.dart';
 import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 import 'package:qa_genie/engine/orchestration/pipeline_orchestrator.dart';
 import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
-import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
+import 'package:qa_genie/engine/orchestrator/deterministic_engine_v2.dart';
 import 'package:qa_genie/core/security/content_filter.dart';
 import 'package:qa_genie/core/security/security_filter.dart';
 import 'package:qa_genie/core/config/app_environment.dart';
@@ -23,6 +24,10 @@ class GenerateTestCasesUseCase {
   }) async {
     // ----- Try AI generation first -----
     try {
+      final domain = PromptDomainDetector.detect(
+        feature: dto.feature,
+        constraints: dto.constraints,
+      );
       onStageChange?.call('analyzing');
       final planner = PromptPlanner(
         module: dto.module,
@@ -30,7 +35,7 @@ class GenerateTestCasesUseCase {
         platform: dto.platform,
         mode: dto.mode,
         count: dto.count,
-        domain: dto.domain,
+        domain: domain,
         constraints: dto.constraints,
       );
       final skeletons = planner.generateSkeletons();
@@ -40,7 +45,7 @@ class GenerateTestCasesUseCase {
         platform: dto.platform,
         skeletons: skeletons,
         constraints: dto.constraints,
-        domain: dto.domain,
+        domain: domain,
       );
 
       final sanitized = SecurityFilter.sanitize(prompt);
@@ -68,7 +73,7 @@ class GenerateTestCasesUseCase {
         generationMode: dto.mode.name,
         requestedCaseCount: dto.count,
         constraints: dto.constraints,
-        domain: dto.domain,
+        domain: domain,
         plan: skeletons,
         traceId: dto.traceId,
         adToken: dto.adToken,
@@ -141,7 +146,7 @@ class GenerateTestCasesUseCase {
       onStageChange?.call('analyzing');
       onStageChange?.call('generating');
 
-      final engine = DeterministicEngine(
+      final engine = DeterministicEngineV2(
         module: ContentFilter.sanitizeField(dto.module),
         feature: ContentFilter.sanitizeField(dto.feature),
         platform: dto.platform,

@@ -38,17 +38,29 @@ class AiGenerationStage {
       }
 
       final errorCode = structured['error']?['code'] as String?;
+
+      // Check if cloud function returned fallback:true — AI was called but failed,
+      // quota was consumed server-side. Return empty rawResponse to trigger pipeline fallback.
+      final rawData = structured['data'];
+      final isFallbackMode = rawData is Map<String, dynamic> && rawData['fallback'] == true;
+      final isFreeFallback = rawData is Map<String, dynamic> && rawData['freeFallback'] == true;
+
+      if (isFallbackMode) {
+        debugPrint('✅ AI_STAGE: Cloud function returned fallback (freeFallback=$isFreeFallback)');
+      }
+
       return AiStageResult(
-        rawResponse: structured['success'] == true
-            ? jsonEncode(structured['data'])
+        rawResponse: structured['success'] == true && !isFallbackMode
+            ? jsonEncode(rawData)
             : '',
         statusCode: structured['success'] == true
             ? 200
             : (errorCode == 'LIMIT_REACHED'
                 ? 403
                 : (errorCode == 'RATE_LIMIT' ? 429 : 500)),
-        hasTransportError: false, // Only set in the catch block for genuine transport failures
+        hasTransportError: false,
         hardErrorCode: errorCode == 'LIMIT_REACHED' ? errorCode : null,
+        hasQuotaBeenConsumed: isFallbackMode && !isFreeFallback,
         errorMessage: (structured['success'] != true && structured['error'] != null) ? structured['error']['message'] : null,
         latencyMs: latencyMs,
         structuredResponse: structured,
@@ -172,6 +184,7 @@ class AiStageResult {
   final String? apiUrl;
   final int? totalRetries;
   final String? hardErrorCode;
+  final bool hasQuotaBeenConsumed;
 
   const AiStageResult({
     required this.rawResponse,
@@ -185,5 +198,6 @@ class AiStageResult {
     this.apiUrl,
     this.totalRetries,
     this.hardErrorCode,
+    this.hasQuotaBeenConsumed = false,
   });
 }

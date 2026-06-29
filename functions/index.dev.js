@@ -121,7 +121,7 @@ async function getCachedOrFetch(cacheKey, ttl, fetchFn) {
 // ------------------------------------------------------------------
 function sanitisePrompt(prompt) {
   if (typeof prompt !== "string") return "";
-  let s = prompt.replace(/<[^>]*>/g, "").replace(/[<>]/g, "").slice(0, 12000);
+  let s = prompt.replace(/<[^>]*>/g, "").replace(/[<>]/g, "").slice(0, 15000);
   const lower = s.toLowerCase();
   const blocked = [
     "ignore previous instructions","ignore all instructions","disregard system prompt",
@@ -290,6 +290,12 @@ async function _getMemberTier(uid) {
   return profile.data.subscription?.planType === "pro" ? "pro" : "core";
 }
 
+// Normalise email to lowercase + trimmed to prevent case-bypass of cooldown (SCENARIO F10)
+function _normaliseEmail(email) {
+  if (!email) return email;
+  return email.toLowerCase().trim();
+}
+
 // ------------------------------------------------------------------
 // GENERATION (uses central constants) — combined flow
 // Accepts rewardToken (new) or adToken (legacy) for ad verification.
@@ -350,30 +356,69 @@ exports.generate = onCall(async (data, context) => {
         return { success: false, error: { code: "ALREADY_PROCESSED" } };
       }
 
+      // Pre-DeepSeek nonce validation — prevents AI cost on expired tokens (SCENARIO 4.5)
+      if (rewardToken && !rewardToken.startsWith("fallback_")) {
+        const preNonceRef = db.collection("processed_requests").doc(rewardToken);
+        const preNonceSnap = await preNonceRef.get();
+        if (preNonceSnap.exists && preNonceSnap.data().uid === uid) {
+          const nonceCreated = preNonceSnap.data().createdAt?.toDate
+            ? preNonceSnap.data().createdAt.toDate()
+            : new Date(preNonceSnap.data().createdAt);
+          if (Date.now() - nonceCreated.getTime() > 5 * 60 * 1000) {
+            // Expired — consume nonce atomically, return free fallback (no DeepSeek, no quota)
+            await db.runTransaction(async (t) => {
+              const snap = await t.get(reqRef);
+              if (snap.exists) throw new Error("ALREADY_PROCESSED");
+              t.delete(preNonceRef);
+              t.set(reqRef, {
+                uid,
+                processedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            }).catch(() => {}); // Silently handle race — next requestId dedup catches it
+            return { success: true, data: { fallback: true, freeFallback: true } };
+          }
+        }
+      }
+
       const sanitizedPrompt = sanitisePrompt(prompt);
       const aiResult = await callDeepSeek(sanitizedPrompt);
-      if (!aiResult.success) throw new Error(aiResult.error.code);
 
-      let text = aiResult.data.text.trim();
-      if (text.startsWith("```")) {
-        text = text.replace(/^```[a-z]*\n/i, "").replace(/\n```$/i, "");
-      }
-      const parsed = JSON.parse(text);
-      let cases;
-      if (Array.isArray(parsed)) {
-        cases = parsed;
-      } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.testCases)) {
-        cases = parsed.testCases;
-      } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data)) {
-        cases = parsed.data;
+      // Whether AI succeeded or failed, DeepSeek was called (cost may have been incurred).
+      // We set aiFailed flag for return type, but still enter the quota transaction.
+      let aiFailed = false;
+      let aiNoCost = false;
+      let parsedCases = [];
+
+      if (aiResult.success) {
+        try {
+          let text = aiResult.data.text.trim();
+          if (text.startsWith("```")) {
+            text = text.replace(/^```[a-z]*\n/i, "").replace(/\n```$/i, "");
+          }
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            parsedCases = parsed;
+          } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.testCases)) {
+            parsedCases = parsed.testCases;
+          } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data)) {
+            parsedCases = parsed.data;
+          }
+          if (!Array.isArray(parsedCases) || parsedCases.length === 0) {
+            aiFailed = true;
+          }
+        } catch (_) {
+          aiFailed = true; // JSON parse error
+        }
       } else {
-        throw new Error('INVALID_AI_RESPONSE');
+        aiFailed = true; // DeepSeek HTTP / timeout / transport error
+        // Classify no-cost errors: client-side issues that never reached DeepSeek server (SCENARIO 2.3)
+        if (aiResult.error?.code === "CLIENT_ERROR" || aiResult.error?.httpStatus?.toString().startsWith("4")) {
+          aiNoCost = true;
+        }
       }
 
-      if (!Array.isArray(cases) || cases.length === 0) {
-        throw new Error('EMPTY_AI_RESPONSE');
-      }
-
+      // ALWAYS enter transaction to consume quota when DeepSeek was called.
+      // The transaction handles: token validation, quota check, counter increment, suite metadata.
       const generationData = await db.runTransaction(async (t) => {
         const [uDoc, reqDoc, memberProfileDoc, guestDoc, deviceDoc] =
           await Promise.all([
@@ -384,6 +429,11 @@ exports.generate = onCall(async (data, context) => {
             t.get(deviceRef),
           ]);
         if (reqDoc.exists) throw new Error("ALREADY_PROCESSED");
+
+        // SCENARIO F1: If member profile has deletedAt, reject writes (stale generate after deletion)
+        if (memberProfileDoc.exists && memberProfileDoc.data().deletedAt) {
+          throw new Error("ACCOUNT_DELETED");
+        }
 
         // Handle rewardToken (new flow): validate server-issued nonce, then create + consume
         if (rewardToken) {
@@ -451,10 +501,10 @@ exports.generate = onCall(async (data, context) => {
           proFreeCount = metrics.proFreeGenCount || 0;
           lifetimeCases = metrics.lifetimeGeneratedCases || 0;
           if (isPro) {
-            if (!(proFreeCount < PRO_FREE_BATCHES_PER_DAY))
+            if (!(proFreeCount < PRO_FREE_BATCHES_PER_DAY) && !aiFailed)
               throw new Error(`LIMIT_REACHED|${getMsUntilReset()}`);
           } else {
-            if (!(adPresent && rewardedCount < CORE_REWARDED_BATCHES_PER_DAY))
+            if (!(adPresent && rewardedCount < CORE_REWARDED_BATCHES_PER_DAY) && !(aiFailed || adPresent))
               throw new Error(`LIMIT_REACHED|${getMsUntilReset()}`);
           }
         } else {
@@ -466,7 +516,7 @@ exports.generate = onCall(async (data, context) => {
           const guestTier = guestDoc.data()?.guestTier || "first";
           const guestMax = guestTier === "returning" ? RETURNING_GUEST_BATCHES_PER_DAY : CORE_REWARDED_BATCHES_PER_DAY;
           if (!adPresent) throw new Error("REWARDED_AD_REQUIRED");
-          if (!(rewardedCount < guestMax))
+          if (!(rewardedCount < guestMax) && !(aiFailed || adPresent))
             throw new Error(`LIMIT_REACHED|${getMsUntilReset()}`);
         }
 
@@ -478,6 +528,26 @@ exports.generate = onCall(async (data, context) => {
         }
         if (adToken) {
           t.delete(uRef.collection("usedRewards").doc(adToken));
+        }
+
+        // SCENARIO 2.3: No-cost AI error + ad watched → free fallback, no quota consumed
+        if (aiNoCost && adPresent) {
+          const responseUsage = {
+            rewardedGenCount,
+            proFreeGenCount,
+            lifetimeGeneratedCases,
+            resetTimestamp: getResetISO(),
+          };
+          t.set(reqRef, {
+            uid,
+            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          return {
+            fallback: true,
+            freeFallback: true,
+            usage: responseUsage,
+            caseCount,
+          };
         }
 
         // Increment counters
@@ -554,8 +624,27 @@ exports.generate = onCall(async (data, context) => {
           lifetimeCases += caseCount;
         }
 
+        if (aiFailed) {
+          // Quota consumed but no test cases to return — client will use fallback
+          const responseUsage = {
+            rewardedGenCount: rewardedCount + 1,
+            proFreeGenCount: proFreeCount + (isPro ? 1 : 0),
+            lifetimeGeneratedCases: lifetimeCases,
+            resetTimestamp: getResetISO(),
+          };
+          t.set(reqRef, {
+            uid,
+            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          return {
+            fallback: true,
+            usage: responseUsage,
+            caseCount,
+          };
+        }
+
         const responseTestCases = transformTestCases(
-          cases, module, feature, platform || "Web", caseCount,
+          parsedCases, module, feature, platform || "Web", caseCount,
         );
         const responseUsage = {
           rewardedGenCount: rewardedCount + 1,
@@ -569,26 +658,21 @@ exports.generate = onCall(async (data, context) => {
           // No response field — never store test case content per data policy
         });
         return {
-          isPro,
-          caseCount,
-          rewardedGenCount: rewardedCount,
-          proFreeGenCount: proFreeCount,
-          lifetimeGeneratedCases: lifetimeCases,
           testCases: responseTestCases,
           usage: responseUsage,
+          caseCount,
         };
       });
 
-      return {
-        success: true,
-        data: {
-          testCases: generationData.testCases,
-          usage: generationData.usage,
-        },
-      };
+      const isFree = generationData.freeFallback === true;
+      return aiFailed
+        ? { success: true, data: { fallback: true, freeFallback: isFree, usage: generationData.usage } }
+        : { success: true, data: { testCases: generationData.testCases, usage: generationData.usage } };
     } catch (err) {
+      // Errors caught here are BEFORE DeepSeek call (validation, transport, dedup, LIMIT_REACHED).
+      // No AI cost incurred → no quota consumed.
       if (
-        !["ALREADY_PROCESSED", "LIMIT_REACHED", "PRO_LIMIT_REACHED", "AD_TOKEN_USED", "INVALID_AD_TOKEN", "AD_TOKEN_EXPIRED", "REWARDED_AD_REQUIRED", "DEVICE_ID_MISMATCH", "EMPTY_AI_RESPONSE"].includes(
+        !["ALREADY_PROCESSED", "LIMIT_REACHED", "PRO_LIMIT_REACHED", "AD_TOKEN_USED", "INVALID_AD_TOKEN", "AD_TOKEN_EXPIRED", "REWARDED_AD_REQUIRED", "DEVICE_ID_MISMATCH"].includes(
           err.message,
         )
       ) {
@@ -599,7 +683,7 @@ exports.generate = onCall(async (data, context) => {
       }
       return { success: false, error: { code: err.message } };
     }
-}, { secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60 });
+  }, { secrets: ["DEEPSEEK_API_KEY"], timeoutSeconds: 60, memory: "512MiB" });
 
 // ------------------------------------------------------------------
 // RECORD EXPORT METRICS (per-user, no analytics/global write)
@@ -683,7 +767,7 @@ exports.recordRating = onCall(async (data, context) => {
 // COOLDOWN CHECK (called before Google sign-in to enforce 24h cooldown)
 // ------------------------------------------------------------------
 exports.checkEmailCooldown = onCall(async (data, context) => {
-  const { email } = data;
+  const email = _normaliseEmail(data.email);
   if (!email) {
     throw new functions.https.HttpsError("invalid-argument", "email required");
   }
@@ -1339,8 +1423,10 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
     console.log(`[linkGoogleAccount] RATE LIMITED`);
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
-  const { email, displayName, deviceId, previousGuestUid } = data;
-  if (email && context.auth.token?.email && email !== context.auth.token.email) {
+  let { email, displayName, deviceId, previousGuestUid } = data;
+  email = _normaliseEmail(email);
+  const originalTokenEmail = _normaliseEmail(context.auth.token?.email);
+  if (email && originalTokenEmail && email !== originalTokenEmail) {
     console.log(`[linkGoogleAccount] EMAIL MISMATCH | data.email=${email} | token.email=${context.auth.token.email}`);
     throw new functions.https.HttpsError("permission-denied", "Email mismatch");
   }
@@ -1531,7 +1617,8 @@ exports.deleteAccount = onCall(async (data, context) => {
   if (!checkRateLimit(`deleteAccount_${uid}`, 2)) {
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
-  const { deviceId, email } = data;
+  const { deviceId } = data;
+  const email = _normaliseEmail(data.email);
   const batch = db.batch();
   const profile = await _getMemberProfileByUid(uid);
   const isMember = !!profile;
@@ -1621,6 +1708,11 @@ exports.deleteAccount = onCall(async (data, context) => {
 
     await suiteBatch.commit();
     await Promise.all(gcsPromises);
+
+    // Delete _session doc to prevent false conflict on re-registration (SCENARIO C7)
+    try {
+      await uidDocRef.doc("_session").delete();
+    } catch (_) {}
   } catch (e) {
     log("warn", `deleteAccount: suite cleanup failed for ${uid}`, { error: e.message });
   }
@@ -1637,7 +1729,7 @@ exports.deleteAccount = onCall(async (data, context) => {
 exports.onMemberProfileDeleted = functions.firestore
   .document("memberProfiles/{email}")
   .onDelete(async (snap, context) => {
-    const { email } = context.params;
+    const email = _normaliseEmail(context.params.email);
     const data = snap.data() || {};
     const uid = data.uid;
     const logPrefix = `[onMemberProfileDeleted]`;
@@ -1679,6 +1771,10 @@ exports.onMemberProfileDeleted = functions.firestore
           batch.delete(suiteDoc.ref);
         }
       }
+      // Delete _session doc to prevent false conflict on re-registration (SCENARIO C7)
+      try {
+        await uidDocRef.doc("_session").delete();
+      } catch (_) {}
     } catch (e) {
       console.warn(`${logPrefix} suite cleanup failed: ${e.message}`);
     }
@@ -2176,30 +2272,111 @@ exports.pushMemberSuite = onCall(async (data, context) => {
 });
 
 // --------------------------------------------------------------
-// Helper: read all suite docs under memberData/{tier}/{uid}
-// Iterates {date}/suites (no collectionGroup index needed).
+// Module-level cache for date docs (30s TTL) — avoids re-reading
+// all date stamps on every paginated page fetch (SCENARIO E13).
 // --------------------------------------------------------------
-async function _getMemberSuites(uid, tier) {
-  const suites = [];
-  const uidColRef = db.collection("memberData").doc(tier).collection(uid);
-  const dateDocs = await uidColRef.get();
-  for (const dateDoc of dateDocs.docs) {
-    if (dateDoc.id.startsWith("_")) continue; // skip counter docs
-    const suitesSnap = await dateDoc.ref.collection("suites").get();
-    for (const suiteDoc of suitesSnap.docs) {
-      suites.push({
-        _date: dateDoc.id,
-        _serial: suiteDoc.id,
-        ...suiteDoc.data(),
-      });
+const _dateDocsCache = new Map();
+function _getCachedDateDocs(uidColRef, uid, tier, ttlMs = 30000) {
+  const key = `${tier}_${uid}`;
+  const cached = _dateDocsCache.get(key);
+  if (cached && (Date.now() - cached.ts) < ttlMs) return cached.promise;
+  const promise = uidColRef.get().then(snap => {
+    const dates = [];
+    for (const doc of snap.docs) {
+      if (!doc.id.startsWith("_")) dates.push(doc.id);
     }
+    dates.sort().reverse(); // newest first
+    return dates;
+  });
+  _dateDocsCache.set(key, { promise, ts: Date.now() });
+  return promise;
+}
+
+// --------------------------------------------------------------
+// Helper: fetch one page of suite metadata (no GCS cases).
+// Cursor = "{date}__{serial}" (null for first page).
+// Returns { suites, nextPageToken } where nextPageToken is null when done.
+// --------------------------------------------------------------
+async function _getMemberSuitesPage(uid, tier, pageSize, pageToken) {
+  const suites = [];
+  let cursorDate = null, cursorSerial = null;
+  if (pageToken) {
+    const parts = pageToken.split("__");
+    cursorDate = parts[0];
+    cursorSerial = parts[1];
+  }
+
+  const uidColRef = db.collection("memberData").doc(tier).collection(uid);
+  const dates = await _getCachedDateDocs(uidColRef, uid, tier);
+
+  if (dates.length === 0) return { suites, nextPageToken: null };
+
+  // Find start index from cursor date
+  let startIdx = 0;
+  if (cursorDate) {
+    const found = dates.indexOf(cursorDate);
+    if (found === -1) return { suites, nextPageToken: null };
+    startIdx = found;
+  }
+
+  let remaining = pageSize;
+  for (let i = startIdx; i < dates.length && remaining > 0; i++) {
+    const date = dates[i];
+    let query = uidColRef.doc(date).collection("suites")
+      .orderBy("__name__")
+      .limit(remaining);
+
+    if (cursorDate && date === cursorDate && cursorSerial) {
+      query = query.startAfter(cursorSerial);
+      cursorDate = null; // consume cursor — subsequent dates fetch from start
+    }
+
+    const snap = await query.get();
+    for (const doc of snap.docs) {
+      suites.push({
+        _date: date,
+        _serial: doc.id,
+        ...doc.data(),
+      });
+      remaining--;
+      if (remaining === 0) break;
+    }
+  }
+
+  const last = suites[suites.length - 1];
+  const nextPageToken = last && remaining === 0
+    ? `${last._date}__${last._serial}`
+    : null;
+
+  return { suites, nextPageToken };
+}
+
+// --------------------------------------------------------------
+// Optionally embed GCS test cases into suite metadata (for preloading).
+// Downloads all cases for the given suites in chunks of 10.
+// --------------------------------------------------------------
+async function _embedCases(suites, tier, effectiveUid) {
+  if (!suites || suites.length === 0) return suites;
+  const CHUNK = 10;
+  for (let i = 0; i < suites.length; i += CHUNK) {
+    const chunk = suites.slice(i, i + CHUNK);
+    await Promise.all(chunk.map(async (s) => {
+      try {
+        const [content] = await bucket
+          .file(`memberData/${tier}/${effectiveUid}/${s._date}/suites/${s._serial}.json`)
+          .download();
+        s.cases = JSON.parse(content.toString());
+      } catch (_) {
+        s.cases = [];
+      }
+    }));
   }
   return suites;
 }
 
 // --------------------------------------------------------------
-// Get all synced suites: metadata from Firestore, cases from GCS.
-// Uses memberData/{tier}/{uid}/{date}/suites/{serialNumber}.
+// Get one page of suite metadata (with optional GCS cases for first page).
+// Accepts { pageSize (default 10), pageToken (cursor string or null), includeCases (bool) }.
 // --------------------------------------------------------------
 exports.getMemberSuites = onCall(async (data, context) => {
   if (!context.auth)
@@ -2208,54 +2385,104 @@ exports.getMemberSuites = onCall(async (data, context) => {
   if (!checkRateLimit(`getSuites_${uid}`, 10)) {
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
+  const pageSize = (data.pageSize && typeof data.pageSize === "number")
+    ? Math.min(Math.max(1, data.pageSize), 100)
+    : 10;
+  const pageToken = data.pageToken || null;
+
   try {
     let effectiveUid = uid;
     const initialTier = await _getMemberTier(effectiveUid);
     let tier = initialTier;
-    let suites = await _getMemberSuites(effectiveUid, tier);
 
-    // UID redirect via memberProfiles if no suites found (handles reinstall)
-    if (suites.length === 0) {
-      const email = context.auth.token?.email;
-      if (email) {
-        const profileDoc = await db.collection("memberProfiles").doc(email).get();
-        if (profileDoc.exists) {
-          const profileData = profileDoc.data();
-          if (profileData.uid && profileData.uid !== uid) {
-            effectiveUid = profileData.uid;
-            tier = await _getMemberTier(effectiveUid);
-            log("info", `getMemberSuites: redirecting from ${uid} to profile uid ${effectiveUid} (email ${email})`);
-            suites = await _getMemberSuites(effectiveUid, tier);
+    // UID redirect only on first page (no pageToken)
+    if (!pageToken) {
+      let pageResult = await _getMemberSuitesPage(effectiveUid, tier, pageSize, null);
+      if (pageResult.suites.length === 0) {
+        const email = context.auth.token?.email;
+        if (email) {
+          const profileDoc = await db.collection("memberProfiles").doc(email).get();
+          if (profileDoc.exists) {
+            const profileData = profileDoc.data();
+            if (profileData.uid && profileData.uid !== uid) {
+              effectiveUid = profileData.uid;
+              tier = await _getMemberTier(effectiveUid);
+              log("info", `getMemberSuites: redirecting from ${uid} to profile uid ${effectiveUid} (email ${email})`);
+              pageResult = await _getMemberSuitesPage(effectiveUid, tier, pageSize, null);
+              if (pageResult.suites.length === 0 && profileData.previousGuestUid && profileData.previousGuestUid !== effectiveUid) {
+                effectiveUid = profileData.previousGuestUid;
+                tier = await _getMemberTier(effectiveUid);
+                log("info", `getMemberSuites: redirecting from ${uid} to previousGuestUid ${effectiveUid} (email ${email})`);
+                pageResult = await _getMemberSuitesPage(effectiveUid, tier, pageSize, null);
+              }
+            }
           }
-          if (suites.length === 0 && profileData.previousGuestUid && profileData.previousGuestUid !== effectiveUid) {
-            effectiveUid = profileData.previousGuestUid;
-            tier = await _getMemberTier(effectiveUid);
-            log("info", `getMemberSuites: redirecting from ${uid} to previousGuestUid ${effectiveUid} (email ${email})`);
-            suites = await _getMemberSuites(effectiveUid, tier);
-          }
+        }
+      }
+      // Preload GCS cases for the initial 10 suites when requested
+      if (includeCases && pageResult.suites.length > 0) {
+        pageResult.suites = await _embedCases(pageResult.suites, tier, effectiveUid);
+      }
+      return { success: true, suites: pageResult.suites, nextPageToken: pageResult.nextPageToken, effectiveUid };
+    }
+
+    // Subsequent page — no redirect, no GCS preload
+    const page = await _getMemberSuitesPage(effectiveUid, tier, pageSize, pageToken);
+    return { success: true, suites: page.suites, nextPageToken: page.nextPageToken };
+  } catch (e) {
+    return { success: false, error: e.message, suites: [], nextPageToken: null };
+  }
+});
+
+// --------------------------------------------------------------
+// Get test cases for a single suite from GCS (lazy loading, Phase 2).
+// Accepts { suiteId: "date/serial" }.
+// Returns { success, cases: [...], suiteId }.
+// --------------------------------------------------------------
+exports.getSuiteCases = onCall(async (data, context) => {
+  if (!context.auth)
+    throw new functions.https.HttpsError("unauthenticated", "Auth required");
+  const uid = context.auth.uid;
+  const { suiteId } = data;
+  if (!suiteId || typeof suiteId !== "string") {
+    return { success: false, error: "Missing suiteId", cases: [] };
+  }
+  const parts = suiteId.split("/");
+  if (parts.length !== 2) {
+    return { success: false, error: "Invalid suiteId format", cases: [] };
+  }
+  const [date, serial] = parts;
+
+  try {
+    let effectiveUid = uid;
+    const initialTier = await _getMemberTier(effectiveUid);
+    let tier = initialTier;
+
+    // Check memberProfiles redirect
+    const email = context.auth.token?.email;
+    if (email) {
+      const profileDoc = await db.collection("memberProfiles").doc(email).get();
+      if (profileDoc.exists) {
+        const profileData = profileDoc.data();
+        if (profileData.uid && profileData.uid !== uid) {
+          effectiveUid = profileData.uid;
+          tier = await _getMemberTier(effectiveUid);
+        } else if (profileData.previousGuestUid && profileData.previousGuestUid !== effectiveUid) {
+          effectiveUid = profileData.previousGuestUid;
+          tier = await _getMemberTier(effectiveUid);
         }
       }
     }
 
-    const result = await Promise.all(suites.map(async (s) => {
-      let cases = [];
-      try {
-        const [content] = await bucket
-          .file(`memberData/${tier}/${effectiveUid}/${s._date}/suites/${s._serial}.json`)
-          .download();
-        const raw = content.toString();
-        // GCS auto-decompresses when contentEncoding:gzip is set
-        cases = JSON.parse(raw);
-      } catch (e) {
-        log("warn", `GCS read failed for suite ${s._serial}: ${e.message || e}`, { uid: effectiveUid, date: s._date });
-      }
-      const suiteId = `${s._date}/${s._serial}`;
-      return { suiteId, ...s, cases };
-    }));
-
-    return { success: true, suites: result };
+    const [content] = await bucket
+      .file(`memberData/${tier}/${effectiveUid}/${date}/suites/${serial}.json`)
+      .download();
+    const raw = content.toString();
+    const cases = JSON.parse(raw);
+    return { success: true, cases, suiteId };
   } catch (e) {
-    return { success: false, error: e.message, suites: [] };
+    log("warn", `getSuiteCases: failed for ${suiteId}: ${e.message || e}`, { uid });
+    return { success: false, error: "Suite not found", cases: [] };
   }
 });
 
@@ -2294,11 +2521,12 @@ exports.deleteMemberSuite = onCall(async (data, context) => {
     const tier = await _getMemberTier(effectiveUid);
     const uidDocRef = db.collection("memberData").doc(tier).collection(effectiveUid);
 
-    await uidDocRef.doc(date).collection("suites").doc(serial).delete();
-
+    // GCS delete FIRST, Firestore second — if GCS fails, Firestore metadata still exists (SCENARIO E3)
     try {
       await bucket.file(`memberData/${tier}/${effectiveUid}/${date}/suites/${serial}.json`).delete();
     } catch (_) {}
+
+    await uidDocRef.doc(date).collection("suites").doc(serial).delete();
 
     return { success: true };
   } catch (e) {

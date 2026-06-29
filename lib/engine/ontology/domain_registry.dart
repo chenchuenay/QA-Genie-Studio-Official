@@ -26,6 +26,15 @@ class DomainRegistry {
           'API': ['PostAuthPayload', 'ReceiveToken', 'VerifyStatusCode200']
         },
       ),
+      'authorize': ActionPattern(
+        requiredPreconditions: [EntityState.idle],
+        postCondition: EntityState.authenticated,
+        stepsByPlatform: {
+          'Mobile': ['TapSignInWithGoogle', 'SelectGoogleAccount', 'ApproveConsentScreen', 'VerifyRedirectWithCode'],
+          'Web': ['ClickSignInWithGoogle', 'SelectGoogleAccount', 'ApproveConsentScreen', 'VerifyRedirectWithCode'],
+          'API': ['PostOAuthAuthorizePayload', 'ReceiveAuthCode', 'ExchangeCodeForTokens'],
+        },
+      ),
       'reset': ActionPattern(
         requiredPreconditions: [EntityState.idle],
         postCondition: EntityState.initialized,

@@ -17,21 +17,21 @@ class CoveragePlanner {
   final int totalCount;
   final String constraints;
   final String seed;
+  final String domain;
 
   CoveragePlanner({
     required this.mode,
     required this.totalCount,
     required this.constraints,
     required this.seed,
+    this.domain = 'general',
   });
 
   CoverageRequest plan() {
-    // Edge cases: totalCount must be positive
     if (totalCount <= 0) {
       return CoverageRequest(totalCount: 0, categoryCounts: {}, riskFocus: []);
     }
 
-    // If totalCount is 1, simplest is a single positive case
     if (totalCount == 1) {
       return CoverageRequest(
         totalCount: 1,
@@ -40,7 +40,6 @@ class CoveragePlanner {
       );
     }
 
-    // If constraints are present, try to detect intent
     if (constraints.trim().isNotEmpty) {
       final intent = _parseConstraintIntent(constraints.toLowerCase());
       if (intent != null) {
@@ -48,22 +47,18 @@ class CoveragePlanner {
       }
     }
 
-    // Default category distribution according to member specification
     return _defaultPlan();
   }
 
   String? _parseConstraintIntent(String c) {
-    // Exact overrides — only "only X" triggers hard override
     if (c.contains('only security')) return 'security';
     if (c.contains('only validation')) return 'validation';
     if (c.contains('only boundary')) return 'boundary';
     if (c.contains('only session')) return 'session';
     if (c.contains('only positive')) return 'positive';
     if (c.contains('only negative')) return 'negative';
-    if (c.contains('oauth') || c.contains('social login')) return 'oauth';
     if (c.contains('expiry') || c.contains('concurrent'))
       return 'session_expiry';
-    // Mixed positive+negative
     if (c.contains('positive and negative')) return 'positive_negative';
     return null;
   }
@@ -110,27 +105,43 @@ class CoveragePlanner {
           totalCount: totalCount,
           categoryCounts: {'positive': pos, 'negative': neg},
         );
-      case 'oauth':
-        return CoverageRequest(
-          totalCount: totalCount,
-          categoryCounts: {'positive': totalCount},
-        );
       default:
         return _defaultPlan();
     }
   }
 
   CoverageRequest _defaultPlan() {
-    final nonHappyCount = (totalCount * 30 + 50) ~/ 100;
+    final nonHappyPercent = _domainNonHappyPercent();
+    final nonHappyCount = (totalCount * nonHappyPercent + 50) ~/ 100;
     final happyCount = totalCount - nonHappyCount;
     final categoryCounts = <String, int>{'positive': happyCount};
 
     if (nonHappyCount > 0) {
-      const cats = ['negative', 'boundary', 'validation', 'security', 'session'];
-      final base = nonHappyCount ~/ 5;
-      final rem = nonHappyCount % 5;
-      for (int i = 0; i < cats.length; i++) {
-        categoryCounts[cats[i]] = base + (i < rem ? 1 : 0);
+      final weighted = _domainCategoryWeights();
+      final totalWeight = weighted.values.fold(0, (a, b) => a + b);
+      final catKeys = weighted.keys.toList();
+      final counts = <String, int>{};
+      final remainders = <String, double>{};
+      int totalAssigned = 0;
+      for (final cat in catKeys) {
+        final exact = nonHappyCount * weighted[cat]! / totalWeight;
+        final floorCount = exact.floor();
+        counts[cat] = floorCount;
+        totalAssigned += floorCount;
+        remainders[cat] = exact - floorCount;
+      }
+      int remaining = nonHappyCount - totalAssigned;
+      final sortedCats = catKeys.toList()
+        ..sort((a, b) => remainders[b]!.compareTo(remainders[a]!));
+      for (final cat in sortedCats) {
+        if (remaining <= 0) break;
+        counts[cat] = counts[cat]! + 1;
+        remaining--;
+      }
+      for (final entry in counts.entries) {
+        if (entry.value > 0) {
+          categoryCounts[entry.key] = entry.value;
+        }
       }
     }
 
@@ -147,5 +158,29 @@ class CoveragePlanner {
       categoryCounts: categoryCounts,
       riskFocus: [],
     );
+  }
+
+  int _domainNonHappyPercent() {
+    switch (domain) {
+      case 'oauthSocial':
+      case 'samlSso':
+        return 50;
+      case 'apiKey':
+        return 40;
+      default:
+        return 40;
+    }
+  }
+
+  Map<String, int> _domainCategoryWeights() {
+    switch (domain) {
+      case 'oauthSocial':
+      case 'samlSso':
+        return {'security': 3, 'session': 2, 'negative': 2, 'boundary': 1, 'validation': 1};
+      case 'apiKey':
+        return {'negative': 3, 'boundary': 2, 'security': 2, 'validation': 1, 'session': 1};
+      default:
+        return {'negative': 1, 'boundary': 1, 'validation': 1, 'security': 1, 'session': 1};
+    }
   }
 }

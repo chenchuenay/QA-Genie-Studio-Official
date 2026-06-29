@@ -38,7 +38,11 @@ class PreconditionGenerator {
       preconditions.add(_negativePrerequisite(scenario, action, entityName));
     }
 
-    if (action == ActionType.login || action == ActionType.authenticate) {
+    if (action == ActionType.authorize) {
+      preconditions.add('OAuth provider service is active and reachable (Google, Facebook, etc.)');
+      preconditions.add('Registered OAuth client credentials (client_id, redirect_uri) are configured and verified');
+      preconditions.add('Member is not currently authenticated via OAuth — fresh OAuth flow required');
+    } else if (action == ActionType.login || action == ActionType.authenticate) {
       preconditions.add('Member account is active and verified (not locked, disabled, or pending)');
       preconditions.add('Login form is active and accepts input without pre-validation restrictions');
     } else if (action == ActionType.refresh) {
@@ -193,6 +197,9 @@ class PreconditionGenerator {
   static String _negativePrerequisite(Scenario scenario, ActionType action, String entityName) {
     if (action == ActionType.login) {
       return 'No prior successful authentication session exists for validation';
+    }
+    if (action == ActionType.authorize) {
+      return 'Valid OAuth session or browser state is configured for the authorization attempt';
     }
     if (action == ActionType.pay || action == ActionType.transfer) {
       return 'System does not allow bypassing the error state with alternative methods';

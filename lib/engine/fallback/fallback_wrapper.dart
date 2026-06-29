@@ -2,7 +2,7 @@ import 'package:qa_genie/core/security/content_filter.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
-import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
+import 'package:qa_genie/engine/orchestrator/deterministic_engine_v2.dart';
 import 'package:qa_genie/domain/entities/test_step.dart';
 import 'package:qa_genie/domain/enums/case_source.dart';
 
@@ -15,7 +15,7 @@ class FallbackWrapper {
   }) async {
     if (missingCount <= 0) return [];
 
-    final engine = DeterministicEngine(
+    final engine = DeterministicEngineV2(
       module: ContentFilter.sanitizeField(request.module),
       feature: ContentFilter.sanitizeField(request.feature),
       platform: request.platform,

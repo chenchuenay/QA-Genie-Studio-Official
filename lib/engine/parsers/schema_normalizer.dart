@@ -103,13 +103,7 @@ class SchemaNormalizer {
   }
 
   String _normalizeType(dynamic value) {
-    final type = _string(value);
-
-    if (type.isEmpty) {
-      return 'Functional';
-    }
-
-    return type;
+    return _string(value);
   }
 
   String _normalizeCategory(dynamic value) {

@@ -85,6 +85,42 @@ class DomainDetector {
     ])) {
       return IntegrationDomain.context;
     }
+    if (_containsAny(combined, [
+      'robot',
+      'fleet',
+      'drone',
+      'sensor',
+      'actuator',
+      'mission',
+      'waypoint',
+      'calibrate',
+    ])) {
+      return SchedulingDomain.context;
+    }
+    if (_containsAny(combined, [
+      'ai',
+      'machine learning',
+      'model training',
+      'prediction',
+      'dataset',
+      'deploy',
+      'server',
+      'container',
+      'devops',
+      'infrastructure',
+    ])) {
+      return CommerceDomain.context;
+    }
+    if (_containsAny(combined, [
+      'social',
+      'post',
+      'feed',
+      'message',
+      'chat',
+      'notification',
+    ])) {
+      return CommerceDomain.context;
+    }
     // Fallback to commerce (most common generic)
     return CommerceDomain.context;
   }

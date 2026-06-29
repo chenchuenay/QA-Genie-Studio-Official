@@ -17,7 +17,7 @@ void main() {
           'feature': 'Login',
           'platform': 'Android',
           'priority': 'high',
-          'type': 'Functional',
+          'type': '',
           'categoryLock': 'positive',
           'preconditions': ['User is logged in'],
           'testData': 'valid@email.com',
@@ -37,7 +37,7 @@ void main() {
         expect(result['feature'], 'Login');
         expect(result['platform'], 'Android');
         expect(result['priority'], 'High');
-        expect(result['type'], 'Functional');
+        expect(result['type'], '');
         expect(result['categoryLock'], 'positive');
         expect(result['preconditions'], ['User is logged in']);
         expect(result['testData'], 'valid@email.com');
@@ -80,7 +80,7 @@ void main() {
         expect(result['feature'], '');
         expect(result['platform'], '');
         expect(result['priority'], 'Medium');
-        expect(result['type'], 'Functional');
+        expect(result['type'], '');
         expect(result['categoryLock'], 'positive');
         expect(result['preconditions'], isEmpty);
         expect(result['testData'], '');
@@ -102,8 +102,8 @@ void main() {
       });
 
       test('normalizes type with empty fallback', () {
-        expect(normalizer.normalizeCase({})['type'], 'Functional');
-        expect(normalizer.normalizeCase({'type': ''})['type'], 'Functional');
+        expect(normalizer.normalizeCase({})['type'], '');
+        expect(normalizer.normalizeCase({'type': ''})['type'], '');
         expect(normalizer.normalizeCase({'type': 'Smoke'})['type'], 'Smoke');
       });
 

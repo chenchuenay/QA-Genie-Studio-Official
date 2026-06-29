@@ -10,7 +10,15 @@ class DataGenerator {
     final action = scenario.action;
     final entity = scenario.entity;
 
-    if (action == ActionType.login || action == ActionType.authenticate) {
+    if (action == ActionType.authorize && (entity == EntityType.oauthProvider || entity == EntityType.account)) {
+      data['provider'] = 'google';
+      data['response_type'] = 'code';
+      data['scope'] = 'email profile';
+      data['state'] = 'csrf_state_abc123';
+      data['redirect_uri'] = 'https://app.example.com/oauth/callback';
+      data['auth_code'] = 'VALID_AUTH_CODE';
+      data['grant_type'] = 'authorization_code';
+    } else if (action == ActionType.login || action == ActionType.authenticate) {
       data['email'] = TestDataFactory.validEmail();
       data['password'] = TestDataFactory.validPassword();
       data['platform'] = platform;
@@ -108,7 +116,27 @@ class DataGenerator {
     final condition = scenario.condition;
     if (condition == 'valid' || condition.isEmpty) return;
 
-    if (scenario.category == 'security') {
+    if (scenario.category == 'security' && (scenario.action == ActionType.authorize || condition == 'csrf_mismatch' || condition == 'oauth_replay')) {
+      switch (condition) {
+        case 'csrf_mismatch':
+          data['state'] = 'attacker_csrf_token';
+          data['expected_response'] = 'error';
+        case 'oauth_replay':
+          data['auth_code'] = 'used_code_replay_attempt';
+          data['expected_response'] = 'invalid_grant';
+        case 'sql_injection':
+          data['payload'] = TestDataFactory.sqlInjection();
+          data['input_type'] = 'malicious_sql';
+          data['expected_response'] = '400';
+        case 'xss':
+          data['payload'] = TestDataFactory.xssPayload();
+          data['input_type'] = 'malicious_xss';
+          data['expected_response'] = '400';
+        default:
+          data['malicious_input'] = '${condition}_payload';
+          data['expected_response'] = '400';
+      }
+    } else if (scenario.category == 'security') {
       switch (condition) {
         case 'sql_injection':
           data['payload'] = TestDataFactory.sqlInjection();
@@ -134,6 +162,19 @@ class DataGenerator {
           data['malicious_input'] = '${condition}_payload';
           data['expected_response'] = '400';
       }
+    } else if (scenario.category == 'validation' && scenario.action == ActionType.authorize) {
+      switch (condition) {
+        case 'redirect_uri_mismatch':
+          data['redirect_uri'] = 'https://evil.com/callback';
+          data['expected_response'] = 'redirect_uri_mismatch';
+        case 'empty':
+          data['redirect_uri'] = '';
+        case 'invalid_format':
+          data['redirect_uri'] = 'not-a-valid-url';
+          data['format'] = 'uri';
+        default:
+          data['input'] = condition;
+      }
     } else if (scenario.category == 'validation') {
       switch (condition) {
         case 'special_chars':
@@ -147,6 +188,20 @@ class DataGenerator {
           data['format'] = 'email';
         case 'empty':
           data['input'] = '';
+        default:
+          data['input'] = condition;
+      }
+    } else if (scenario.category == 'boundary' && scenario.action == ActionType.authorize) {
+      switch (condition) {
+        case 'max_redirect_uri':
+          data['redirect_uri'] = 'https://app.example.com/' + ('a' * 2024);
+          data['max_allowed'] = '2048';
+        case 'maximum':
+          data['redirect_uri'] = 'https://app.example.com/' + ('a' * 2048);
+          data['note'] = 'at boundary for redirect URI length';
+        case 'minimum':
+          data['redirect_uri'] = 'https://app.example.com';
+          data['note'] = 'minimum redirect URI length';
         default:
           data['input'] = condition;
       }
@@ -169,6 +224,22 @@ class DataGenerator {
           data['expected_response'] = 'error';
         default:
           data['input'] = condition;
+      }
+    } else if (scenario.category == 'session' && scenario.action == ActionType.authorize) {
+      switch (condition) {
+        case 'expired_code':
+          data['auth_code'] = 'expired_code_xyz789';
+          data['code_age'] = '15 minutes';
+          data['expected_response'] = 'invalid_grant';
+        case 'expired':
+          data['session_token'] = 'expired_token_abc123';
+          data['expected_response'] = '401';
+        case 'revoked':
+          data['session_token'] = 'revoked_token_def456';
+          data['expected_response'] = '403';
+        default:
+          data['session_state'] = condition;
+          data['expected_response'] = '401';
       }
     } else if (scenario.category == 'session') {
       switch (condition) {
@@ -207,7 +278,7 @@ class DataGenerator {
   }
 
   static String _domainForAction(ActionType action, EntityType entity) {
-    if (action == ActionType.login || action == ActionType.authenticate || action == ActionType.refresh || action == ActionType.reset) {
+    if (action == ActionType.authorize || action == ActionType.login || action == ActionType.authenticate || action == ActionType.refresh || action == ActionType.reset) {
       return 'Identity';
     }
     if (action == ActionType.add || action == ActionType.remove || action == ActionType.checkout || action == ActionType.pay) {

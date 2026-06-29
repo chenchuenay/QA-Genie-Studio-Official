@@ -9,7 +9,6 @@ class FlowGraphGenerator {
     // Identity: authenticate/login are semantically the same flow
     'authenticate': 'login',
     'verify': 'login',
-    'authorize': 'login',
     // Scheduling: book/create, confirm/create are same flow
     'book': 'create',
     'confirm': 'create',
@@ -160,6 +159,42 @@ class FlowGraphGenerator {
         'expected': 'Input sanitized; special characters are escaped or rejected with validation error',
       };
     }
+    if (condition == 'csrf_mismatch') {
+      return {
+        'data': 'Initiate OAuth with invalid/missing state parameter: state=attacker_csrf_token',
+        'expected': 'OAuth server validates state parameter; request rejected with CSRF error; no authorization code issued',
+      };
+    }
+    if (condition == 'oauth_replay') {
+      return {
+        'data': 'Submit previously consumed authorization code: auth_code=used_code_abc123',
+        'expected': 'Server returns error: authorization code already used; token endpoint rejects with invalid_grant',
+      };
+    }
+    if (condition == 'redirect_uri_mismatch') {
+      return {
+        'data': 'Provide redirect_uri=https://evil.com/callback (not matching registered URI)',
+        'expected': 'OAuth server validates redirect URI; request rejected with redirect_uri_mismatch error',
+      };
+    }
+    if (condition == 'consent_denied') {
+      return {
+        'data': 'User clicks "Deny" on Google OAuth consent screen',
+        'expected': 'OAuth flow stops; user redirected back with access_denied error; no authorization code issued',
+      };
+    }
+    if (condition == 'expired_code') {
+      return {
+        'data': 'Submit authorization code 10+ minutes after issuance: auth_code=expired_code_xyz789',
+        'expected': 'Token endpoint rejects expired code with invalid_grant error; no tokens issued',
+      };
+    }
+    if (condition == 'max_redirect_uri') {
+      return {
+        'data': 'Provide redirect_uri at exactly 2048 characters (maximum allowed length)',
+        'expected': 'OAuth server accepts redirect URI at boundary length; authorization code issued successfully',
+      };
+    }
     // fallback generic override
     return {
       'data': 'Use condition: $condition for scenario',
@@ -168,6 +203,20 @@ class FlowGraphGenerator {
   }
 
   static String _generateDataForStep(String step, String domain, String action, int index, String platform) {
+    if (step.contains('SignIn') || step.contains('Google') || step.contains('OAuth')) {
+      if (index == 0) return 'Navigate to login page and locate "Sign in with Google" button';
+      if (index == 1) return 'Select google account with correct email from the account chooser';
+      return 'OAuth flow initiated with valid Google account credentials';
+    }
+    if (step.contains('Consent') || step.contains('Approve')) {
+      return 'OAuth consent screen displays requested scopes (email, profile); user grants permission';
+    }
+    if (step.contains('VerifyRedirect') || step.contains('RedirectWith') || step.contains('AuthCode')) {
+      return 'Redirect URI contains authorization code parameter; no error in query params';
+    }
+    if (step.contains('Exchange') || step.contains('Tokens')) {
+      return 'POST /oauth/token with auth code; response contains access_token and refresh_token';
+    }
     if (step.contains('Login') || step.contains('Email') || step.contains('Credential')) {
       if (index == 0) return 'Navigate to login page and wait for form to render';
       if (index == 1) return 'admin@demo.com / SecurePass789!';
@@ -262,6 +311,15 @@ class FlowGraphGenerator {
     }
     if (step.contains('Login') || step.contains('Sign') || step.contains('Auth')) {
       return 'Member is redirected to dashboard/home page with authenticated session and profile visible';
+    }
+    if (step.contains('Consent') || step.contains('Approve')) {
+      return 'Consent screen is displayed with requested scopes; user can grant or deny permissions';
+    }
+    if (step.contains('VerifyRedirect') || step.contains('AuthCode') || step.contains('RedirectWith')) {
+      return 'Browser redirects to callback URL with authorization code in query parameters; no error parameter present';
+    }
+    if (step.contains('Exchange') || step.contains('Tokens')) {
+      return 'Token exchange succeeds: HTTP 200 with access_token, refresh_token, and expiry';
     }
     if (step.contains('OTP') || step.contains('Token') || step.contains('Verif')) {
       return 'System accepts OTP and proceeds to next step; error if expired or wrong';

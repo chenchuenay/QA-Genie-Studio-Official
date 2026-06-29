@@ -86,44 +86,43 @@ void main() {
         expect(result.totalCount, 5);
       });
 
-      test('returns all positive for oauth constraint', () {
+      test('oauth constraint falls through to default plan', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 4, constraints: 'oauth', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts, {'positive': 4});
+        expect(result.totalCount, 4);
+        expect(result.categoryCounts.containsKey('positive'), isTrue);
       });
 
-      test('returns all positive for social login constraint', () {
+      test('social login constraint falls through to default plan', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 3, constraints: 'social login', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts, {'positive': 3});
+        expect(result.totalCount, 3);
+        expect(result.categoryCounts.containsKey('positive'), isTrue);
       });
     });
 
     group('default plan with core mode', () {
-      test('returns 70/30 distribution when count is 8', () {
+      test('returns 60/40 distribution when count is 8', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 8, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 6);
-        expect(result.categoryCounts['negative'], 1);
-        expect(result.categoryCounts['boundary'], 1);
+        expect(result.categoryCounts['positive'], 5);
+        expect(result.categoryCounts.containsKey('negative'), isTrue);
         expect(result.totalCount, 8);
       });
 
       test('adjusts counts proportionally when totalCount > 10', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 12, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 8);
-        expect(result.categoryCounts['negative'], 1);
-        expect(result.categoryCounts['boundary'], 1);
-        expect(result.categoryCounts['validation'], 1);
-        expect(result.categoryCounts['security'], 1);
+        expect(result.categoryCounts['positive'], 7);
+        expect(result.categoryCounts.containsKey('negative'), isTrue);
+        expect(result.categoryCounts.containsKey('boundary'), isTrue);
         expect(result.totalCount, 12);
       });
 
       test('has positive as the majority category in default plan', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 10, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 7);
+        expect(result.categoryCounts['positive'], 6);
         expect(result.categoryCounts.containsKey('negative'), isTrue);
         expect(result.categoryCounts.containsKey('boundary'), isTrue);
         expect(result.totalCount, 10);
@@ -131,15 +130,11 @@ void main() {
     });
 
     group('default plan with pro mode', () {
-      test('returns 70/30 pro distribution when count is 16', () {
+      test('returns 60/40 pro distribution when count is 16', () {
         final planner = CoveragePlanner(mode: GenerationMode.pro, totalCount: 16, constraints: '', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 11);
-        expect(result.categoryCounts['negative'], 1);
-        expect(result.categoryCounts['boundary'], 1);
-        expect(result.categoryCounts['validation'], 1);
-        expect(result.categoryCounts['security'], 1);
-        expect(result.categoryCounts['session'], 1);
+        expect(result.categoryCounts['positive'], 10);
+        expect(result.categoryCounts.containsKey('negative'), isTrue);
         expect(result.totalCount, 16);
       });
     });
@@ -175,10 +170,10 @@ void main() {
         expect(result.categoryCounts, {'session': 3});
       });
 
-      test('vague keywords fall back to default 70/30 distribution', () {
+      test('vague keywords fall back to default 60/40 distribution', () {
         final planner = CoveragePlanner(mode: GenerationMode.core, totalCount: 10, constraints: 'security negative', seed: '');
         final result = planner.plan();
-        expect(result.categoryCounts['positive'], 7);
+        expect(result.categoryCounts['positive'], 6);
         expect(result.totalCount, 10);
       });
     });

@@ -2,7 +2,7 @@ import 'package:qa_genie/core/security/content_filter.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/adapters/working_case_adapter.dart';
-import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
+import 'package:qa_genie/engine/orchestrator/deterministic_engine_v2.dart';
 import 'package:qa_genie/engine/orchestration/stages/coverage_analysis_stage.dart';
 
 class FallbackStage {
@@ -15,7 +15,7 @@ class FallbackStage {
   }) async {
     if (!coverage.needsFallback) return const [];
 
-    final engine = DeterministicEngine(
+    final engine = DeterministicEngineV2(
       module: ContentFilter.sanitizeField(request.module),
       feature: ContentFilter.sanitizeField(request.feature),
       platform: request.platform,

@@ -18,7 +18,6 @@ class DatabaseService {
   static Completer<void> _initCompleter = Completer();
   static const String _dbName = 'qa_genie.db';
   static const int _version = 6;
-  static List<Map<String, dynamic>>? _suitesCache;
 
   static Future<Database> get db async {
     if (_db != null) return _db!;
@@ -173,14 +172,36 @@ class DatabaseService {
   }
 
   static Future<List<Map<String, dynamic>>> getAllSuites() async {
-    if (_suitesCache != null) return _suitesCache!;
     final db = await DatabaseService.db;
-    _suitesCache = await db.query('suites', orderBy: 'created_at DESC');
-    return _suitesCache!;
+    return db.query('suites', orderBy: 'created_at DESC');
+  }
+
+  /// Fetch one page of suites from local DB, ordered by created_at DESC.
+  /// If [beforeCreatedAt] is provided, returns suites older than that timestamp (cursor pagination).
+  static Future<List<Map<String, dynamic>>> getSuitesPage(int limit, {String? beforeCreatedAt}) async {
+    final db = await DatabaseService.db;
+    if (beforeCreatedAt != null) {
+      return db.query('suites',
+        where: 'created_at < ?',
+        whereArgs: [beforeCreatedAt],
+        orderBy: 'created_at DESC',
+        limit: limit,
+      );
+    }
+    return db.query('suites',
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+  }
+
+  static Future<int> getSuiteCount() async {
+    final db = await DatabaseService.db;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM suites');
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   static void invalidateSuitesCache() {
-    _suitesCache = null;
+    // No-op: cache removed in favor of paginated queries (Phase 3)
   }
 
   static Future<void> renameSuite(int id, String newName) async {
@@ -379,7 +400,6 @@ class DatabaseService {
     if (_db != null) await _db!.close();
     _db = null;
     _currentIdentity = null;
-    _suitesCache = null;
   }
 
   static Future<void> clearAll() async {

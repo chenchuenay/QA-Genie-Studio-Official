@@ -26,6 +26,7 @@ class PromptPlanner {
       mode: mode,
       totalCount: count,
       constraints: constraints,
+      domain: domain,
       seed: '${module}|$feature|$platform|$domain|$constraints',
     );
     final coverage = coveragePlanner.plan();

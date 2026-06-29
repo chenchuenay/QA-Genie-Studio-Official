@@ -23,6 +23,10 @@ class SuiteRepository {
     return _local.getAllSuites();
   }
 
+  Future<List<Map<String, dynamic>>> getSuitesPage(int limit, {String? beforeCreatedAt}) async {
+    return _local.getSuitesPage(limit, beforeCreatedAt: beforeCreatedAt);
+  }
+
   Future<void> deleteSuite(int suiteId) async {
     await _local.deleteSuite(suiteId);
   }

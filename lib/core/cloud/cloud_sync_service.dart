@@ -14,7 +14,6 @@ class CloudSyncService {
   static const _lastSyncKey = 'cloud_last_sync_ms';
   static const _syncIntervalHours = 24;
   static bool _isPushing = false;
-  static bool _isPulling = false;
   static DateTime? _lastPullTime;
 
   static bool get canSync => AuthService.currentMember != null && !AuthService.isGuest;
@@ -108,64 +107,97 @@ class CloudSyncService {
   static String _formatDate(DateTime dt) =>
       '${dt.day.toString().padLeft(2, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.year}';
 
-  static Future<int> pullRemoteSuites() async {
-    if (!_canSync) return 0;
-    if (_isPulling) return 0;
-
-    _isPulling = true;
+  /// Fetch one page of suite metadata from cloud and upsert to local DB.
+  /// Returns the list of parsed suite maps (without test cases).
+  /// [pageToken] is null for the first page.
+  /// When [includeCases] is true (first page), server preloads GCS cases — they
+  /// are extracted and stored locally so the first 10 suites open instantly.
+  static Future<List<Map<String, dynamic>>> fetchNextSuitePage({
+    int pageSize = 10,
+    String? pageToken,
+    bool includeCases = false,
+  }) async {
+    if (!_canSync) return [];
     _lastPullTime = DateTime.now();
-    try {
-      if (EnvironmentAuthority.isDev) {
-        debugPrint('CloudSyncService: [DEV] Starting pullRemoteSuites');
-        final member = AuthService.currentMember;
-        debugPrint('CloudSyncService: [DEV] Current UID: ${member?.uid}, Email: ${member?.email}');
-      }
-      final suites = await FunctionsService.getMemberSuites();
-      if (EnvironmentAuthority.isDev) {
-        debugPrint('CloudSyncService: [DEV] getMemberSuites returned ${suites.length} suites');
-        for (int i = 0; i < suites.length && i < 3; i++) {
-          final s = suites[i];
-          debugPrint('CloudSyncService: [DEV] Suite $i: suiteId=${s['suiteId']}, moduleName=${s['moduleName']}, feature=${s['feature']}, cases=${(s['cases'] as List?)?.length ?? 0}');
-        }
-      }
-      int pulled = 0;
-      for (final data in suites) {
-        final suiteMap = _parseSuiteDoc(data['suiteId'] as String, data);
-        if (suiteMap != null) {
-          await DatabaseService.upsertSuiteFromCloud(suiteMap);
-          final localId = await _getLocalSuiteId(data['suiteId'] as String);
-          if (localId != null) {
-            final db = await DatabaseService.db;
-            final existing = await db.query('suites',
-                columns: ['dirty'], where: 'id = ?', whereArgs: [localId]);
-            final isDirty = existing.isNotEmpty && existing.first['dirty'] == 1;
-            if (isDirty) {
-              debugPrint('CloudSyncService: Skipping overwrite for dirty suite $localId');
-            } else {
-              final cases = _parseCases(data['cases']);
-              if (cases.isNotEmpty) {
-                await DatabaseService.replaceAllTestCases(suiteId: localId, cases: cases);
-                await DatabaseService.markSynced(localId, data['suiteId'] as String);
-              }
-            }
+
+    final result = await FunctionsService.getMemberSuitesPage(
+      pageSize: pageSize,
+      pageToken: pageToken,
+      includeCases: includeCases,
+    );
+    if (result['success'] != true) return [];
+
+    final rawSuites = result['suites'] as List? ?? [];
+    final parsedSuites = <Map<String, dynamic>>[];
+
+    for (final data in rawSuites) {
+      if (data is! Map) continue;
+      final suiteMap = _transformCloudSuite(data.cast<String, dynamic>());
+      if (suiteMap != null) {
+        final localId = await DatabaseService.upsertSuiteFromCloud(suiteMap);
+        // If server included GCS cases, cache them locally for instant opening
+        if (data['cases'] is List && (data['cases'] as List).isNotEmpty) {
+          final cases = _parseCases(data['cases']);
+          if (cases.isNotEmpty) {
+            await DatabaseService.replaceAllTestCases(suiteId: localId, cases: cases);
+            await DatabaseService.markSynced(localId, suiteMap['suiteId'] as String);
           }
-          pulled++;
         }
+        parsedSuites.add(suiteMap);
       }
-      await _setLastSyncNow();
-      if (EnvironmentAuthority.isDev) {
-        debugPrint('CloudSyncService: [DEV] Pull complete: $pulled suites pulled');
-      }
-      return pulled;
-    } catch (e) {
-      debugPrint('CloudSyncService: pull failed: $e');
-      if (EnvironmentAuthority.isDev) {
-        debugPrint('CloudSyncService: [DEV] Pull error: $e');
-      }
-      return 0;
-    } finally {
-      _isPulling = false;
     }
+
+    _lastPageToken = result['nextPageToken'] as String?;
+    return parsedSuites;
+  }
+
+  /// Get the last page token from the most recent fetchNextSuitePage call.
+  static String? get lastPageToken => _lastPageToken;
+  static String? _lastPageToken;
+
+  /// Transform server response (with _date/_serial) into cloudSuite format
+  /// expected by upsertSuiteFromCloud (with suiteId).
+  static Map<String, dynamic>? _transformCloudSuite(Map<String, dynamic> data) {
+    try {
+      final date = data['_date'] as String?;
+      final serial = data['_serial'] as String?;
+      if (date == null || serial == null) return null;
+      return {
+        'suiteId': '$date/$serial',
+        'title': data['title'] ?? data['moduleName'] ?? 'Unknown',
+        'moduleName': data['moduleName'] ?? '',
+        'feature': data['feature'] ?? '',
+        'platform': data['platform'] ?? 'Web',
+        'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+        'updatedAt': data['updatedAt'] ?? DateTime.now().toIso8601String(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Fetch test cases for a single suite from GCS and cache locally.
+  /// Returns the list of parsed FinalizedTestCase, or empty on failure.
+  static Future<List<FinalizedTestCase>> fetchSuiteCases({
+    required String cloudId,
+    required int localSuiteId,
+  }) async {
+    if (!_canSync) return [];
+    final result = await FunctionsService.getSuiteCases(cloudId);
+    if (result['success'] != true) return [];
+    final cases = _parseCases(result['cases']);
+    if (cases.isNotEmpty) {
+      await DatabaseService.replaceAllTestCases(suiteId: localSuiteId, cases: cases);
+      await DatabaseService.markSynced(localSuiteId, cloudId);
+    }
+    return cases;
+  }
+
+  /// Legacy pull — replaced by paginated fetchNextSuitePage.
+  /// Kept for backward compatibility; delegates to first page fetch.
+  static Future<int> pullRemoteSuites() async {
+    final results = await fetchNextSuitePage(pageSize: 10, pageToken: null);
+    return results.length;
   }
 
   static Future<void> deleteRemoteSuite(int suiteId) async {
@@ -214,7 +246,8 @@ class CloudSyncService {
       debugPrint('CloudSyncService: skipping pull — recent pull at $_lastPullTime');
       return;
     }
-    await pullRemoteSuites();
+    // Background sync: fetch first page only (lightweight)
+    await fetchNextSuitePage(pageSize: 10, pageToken: null);
   }
 
   static Future<SyncResult> manualSync() async {
@@ -227,7 +260,17 @@ class CloudSyncService {
 
     await processPendingDeletes();
     final pushed = await pushPendingSuites();
-    final pulled = await pullRemoteSuites();
+
+    // Manual sync: fetch all pages from cloud to fully catch up
+    int pulled = 0;
+    String? pageToken;
+    do {
+      final results = await fetchNextSuitePage(pageSize: 10, pageToken: pageToken);
+      pulled += results.length;
+      pageToken = _lastPageToken;
+    } while (pageToken != null);
+
+    await _setLastSyncNow();
 
     final parts = <String>[];
     if (pushed > 0) parts.add('$pushed suite(s) uploaded');
@@ -239,15 +282,7 @@ class CloudSyncService {
 
   static Future<void> onAccountSwitch({required String oldUid, required String newUid}) async {
     await pushPendingSuites();
-    await pullRemoteSuites();
-  }
-
-  static Future<int?> _getLocalSuiteId(String cloudId) async {
-    final db = await DatabaseService.db;
-    final rows = await db.query('suites',
-        columns: ['id'], where: 'cloud_id = ?', whereArgs: [cloudId]);
-    if (rows.isEmpty) return null;
-    return rows.first['id'] as int;
+    await fetchNextSuitePage(pageSize: 10, pageToken: null);
   }
 
   static Map<String, dynamic> _buildSuiteDoc(Map<String, dynamic> suite, List<FinalizedTestCase> cases) {
@@ -279,24 +314,6 @@ class CloudSyncService {
       'source': tc.source.name,
     };
   }
-
-  static Map<String, dynamic>? _parseSuiteDoc(String docId, Map<String, dynamic> data) {
-    try {
-      return {
-        'suiteId': docId,
-        'title': data['title'] ?? data['moduleName'] ?? 'Unknown',
-        'moduleName': data['moduleName'] ?? '',
-        'feature': data['feature'] ?? '',
-        'platform': data['platform'] ?? 'Web',
-        'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
-        'updatedAt': data['updatedAt'] ?? DateTime.now().toIso8601String(),
-        'cases': data['cases'] ?? [],
-      };
-    } catch (_) {
-      return null;
-    }
-  }
-
   static List<FinalizedTestCase> _parseCases(dynamic rawCases) {
     if (rawCases is! List) return [];
     return rawCases.map((c) {

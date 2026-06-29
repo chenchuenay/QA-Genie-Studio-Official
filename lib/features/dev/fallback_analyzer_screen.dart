@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 import 'package:qa_genie/domain/enums/generation_mode.dart';
 import 'package:qa_genie/domain/entities/finalized_test_case.dart';
-import 'package:qa_genie/engine/orchestrator/deterministic_engine.dart';
+import 'package:qa_genie/engine/orchestrator/deterministic_engine_v2.dart';
 
 class FallbackAnalyzerScreen extends StatefulWidget {
   const FallbackAnalyzerScreen({super.key});
@@ -132,7 +132,7 @@ class _FallbackAnalyzerScreenState extends State<FallbackAnalyzerScreen> {
       final results = <Map<String, dynamic>>[];
       for (int i = 0; i < _scenarioCount; i++) {
         final (module, feature, platform, constraints) = _scenarios[i];
-        final engine = DeterministicEngine(
+        final engine = DeterministicEngineV2(
           module: module,
           feature: feature,
           platform: platform,
@@ -259,7 +259,7 @@ class _FallbackAnalyzerScreenState extends State<FallbackAnalyzerScreen> {
         'tool': 'QA Genie Fallback Analyzer',
         'generated_at': DateTime.now().toIso8601String(),
         'total_scenarios': _scenarioCount,
-        'engine': 'DeterministicEngine (FallbackStage)',
+        'engine': 'DeterministicEngineV2 (Ontology2)',
       },
       'summary': {
         'total_scenarios': _scenarioCount,
@@ -306,7 +306,7 @@ class _FallbackAnalyzerScreenState extends State<FallbackAnalyzerScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Runs $_scenarioCount offline scenarios using DeterministicEngine. '
+                      'Runs $_scenarioCount offline scenarios using DeterministicEngineV2. '
                       'No cloud calls — zero cost. Writes full results as JSON for AI analysis.',
                       style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
                     ),
@@ -314,7 +314,7 @@ class _FallbackAnalyzerScreenState extends State<FallbackAnalyzerScreen> {
                     _statRow('Scenarios', '$_scenarioCount'),
                     _statRow('Cases per scenario', '10'),
                     _statRow('Total cases', '${_scenarioCount * 10}'),
-                    _statRow('Engine', 'DeterministicEngine'),
+                    _statRow('Engine', 'DeterministicEngineV2'),
                     _statRow('Cost', 'Free (no API calls)'),
                   ],
                 ),

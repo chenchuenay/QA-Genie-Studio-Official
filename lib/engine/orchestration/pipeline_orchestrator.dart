@@ -132,8 +132,14 @@ class PipelineOrchestrator {
     final acceptedAiCases = validationResult.validCases;
     final rejectedCount = validationResult.rejectedCount;
 
+    // When ad was watched but transport error occurred, skip hard error and
+    // let fallback generate cases for free (ad already consumed by user).
+    final bool adWatched = request.adToken != null;
+    if (acceptedAiCases.isEmpty && aiResult.hasTransportError && adWatched) {
+      debugPrint('PIPELINE: Transport error — ad was watched, using free fallback');
+    }
     final effectiveHardError = aiResult.hardErrorCode ??
-        ((acceptedAiCases.isEmpty && aiResult.hasTransportError)
+        ((acceptedAiCases.isEmpty && aiResult.hasTransportError && !adWatched)
             ? 'SERVICE_UNAVAILABLE'
             : null);
 
@@ -436,10 +442,20 @@ class PipelineOrchestrator {
     for (final step in steps) {
       final data = step.data.trim();
       if (data.isNotEmpty) {
-        // Only include data that looks like test input (email, password, etc.)
+        final lower = data.toLowerCase();
         if (data.contains('@') ||
-            data.toLowerCase().contains('pass') ||
-            data.contains('member') ||
+            lower.contains('pass') ||
+            lower.contains('member') ||
+            lower.contains('token') ||
+            lower.contains('api') ||
+            lower.contains('key') ||
+            lower.contains('auth') ||
+            lower.contains('bearer') ||
+            lower.contains('jwt') ||
+            lower.contains('code') ||
+            lower.contains('assertion') ||
+            lower.contains('saml') ||
+            lower.contains('header') ||
             data.length > 3) {
           if (buffer.isNotEmpty) buffer.write('&');
           buffer.write(data);
