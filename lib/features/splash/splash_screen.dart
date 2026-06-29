@@ -34,6 +34,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _init() async {
+    try {
     final prefs = await AppConfig.sharedPrefs;
     final firstLaunch = prefs.getBool('first_launch_completed') ?? false;
 
@@ -180,6 +181,15 @@ class _SplashScreenState extends State<SplashScreen> {
     unawaited(NetworkGuard.initialize().catchError((_) {}));
     unawaited(AdManager().loadRewardedAd().catchError((_) {}));
     unawaited(_backgroundInit());
+    } catch (e) {
+      debugPrint('⚠️ Splash: _init top-level error — $e');
+      if (mounted) {
+        MainScreenState.shouldAutoStartTour = false;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+        );
+      }
+    }
   }
 
   Future<void> _backgroundInit() async {

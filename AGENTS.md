@@ -364,3 +364,11 @@ Replace hardcoded domain templates with a generative ontology engine that produc
 - `lib/features/summary/ui/summary_report_screen.dart` + `summary_report_preview_screen.dart`: ListView.builder for performance
 - `lib/core/utils/id_generator.dart`: `IdGenerator.generate(module, index)` — dead code after Renumber removal
 
+## Google Review Catch (Fix Later)
+
+### ANR: `FlutterJNI.nativeSurfaceDestroyed` — main thread blocked during screen transition
+- **Symptoms:** ANR on nativeSurfaceDestroyed (engine teardown) — main thread blocked during splash→MainScreen navigation
+- **Likely cause:** `migrateDataToCurrentDb()` called in `_backgroundInit()` after navigation, but synchronous/blocking SQLite operation in `migrateDataToCurrentDb` competes with Flutter engine surface lifecycle
+- **Fix approach:** Move `migrateDataToCurrentDb` to a `compute()` isolate, or schedule it with a post-frame delay (e.g., `Future.delayed(Duration(seconds: 2))`), or skip migration entirely if DB already at current version
+- **Priority:** Low (1 user in 7 days, won't block review)
+

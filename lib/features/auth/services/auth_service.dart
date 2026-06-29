@@ -12,6 +12,7 @@ import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qa_genie/firebase/analytics/analytics_service.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
+import 'package:qa_genie/features/auth/services/session_monitor.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -197,6 +198,7 @@ class AuthService {
   // Sign out — no guest creation. Sets pending_guest_creation flag so
   // SplashScreen can auto-create a guest with a clean Firebase Auth state.
   static Future<void> signOut({bool revokeGoogleAccess = false}) async {
+    SessionMonitor.stop();
     await AnalyticsService.logDebug(message: 'signOut: ENTER | revokeGoogleAccess=$revokeGoogleAccess');
     try {
       await _googleSignIn.signOut();
@@ -259,6 +261,7 @@ class AuthService {
   /// Hard sign-out: wipes local data, does NOT re-create guest.
   /// Used when the user is kicked out due to multi-device conflict.
   static Future<void> hardSignOut() async {
+    SessionMonitor.stop();
     await AnalyticsService.logDebug(message: 'hardSignOut: ENTER');
     await DatabaseService.clearAll();
     DatabaseService.invalidateSuitesCache();

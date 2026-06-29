@@ -16,7 +16,7 @@ void main() {
 
     test('masterPrompt returns system prompt without warmup', () {
       final prompt = PromptCacheManager.masterPrompt;
-      expect(prompt, equals(SystemPrompt.masterPrompt));
+      expect(prompt, equals(SystemPrompt.masterPromptFor('Web')));
       expect(PromptCacheManager.isWarm, isTrue);
     });
 
@@ -42,7 +42,7 @@ void main() {
         'cached_prompt_timestamp': DateTime.now().millisecondsSinceEpoch,
       });
       await PromptCacheManager.warmup();
-      expect(PromptCacheManager.masterPrompt, equals(SystemPrompt.masterPrompt));
+      expect(PromptCacheManager.masterPrompt, equals(SystemPrompt.masterPromptFor('Web')));
     });
 
     test('warmup refreshes prompt when cache expired', () async {
@@ -52,7 +52,7 @@ void main() {
         'cached_prompt_timestamp': 1, // very old
       });
       await PromptCacheManager.warmup();
-      expect(PromptCacheManager.masterPrompt, equals(SystemPrompt.masterPrompt));
+      expect(PromptCacheManager.masterPrompt, equals(SystemPrompt.masterPromptFor('Web')));
     });
 
     test('invalidate clears the cache', () async {
@@ -67,7 +67,7 @@ void main() {
       expect(PromptCacheManager.isWarm, isTrue);
       await PromptCacheManager.refresh();
       expect(PromptCacheManager.isWarm, isTrue);
-      expect(PromptCacheManager.masterPrompt, equals(SystemPrompt.masterPrompt));
+      expect(PromptCacheManager.masterPrompt, equals(SystemPrompt.masterPromptFor('Web')));
     });
   });
 }

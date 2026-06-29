@@ -5,6 +5,7 @@ import 'package:qa_genie/app_config.dart';
 import 'firebase/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:qa_genie/core/forensics/forensics_provider.dart';
 import 'package:qa_genie/core/forensics/forensics_service_prod.dart';
@@ -24,20 +25,32 @@ Future<void> main() async {
     await AppCheckService.initialize();
     await MobileAds.instance.initialize();
     ForensicsProvider.init(ForensicsServiceProd());
+
+    FlutterError.onError = (details) {
+      FirebaseCrashlytics.instance.recordError(
+        details.exception,
+        details.stack,
+        fatal: true,
+      );
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
   } catch (e) {
     debugPrint("Startup critical error: $e");
     try { ForensicsProvider.init(ForensicsServiceProd()); } catch (_) {}
-  }
 
-  FlutterError.onError = (details) {
-    debugPrint('🔥 FlutterError: ${details.exception}');
-    debugPrint('   stack: ${details.stack}');
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('🔥 PlatformDispatcher.onError: $error');
-    debugPrint('   stack: $stack');
-    return true;
-  };
+    FlutterError.onError = (details) {
+      debugPrint('🔥 FlutterError: ${details.exception}');
+      debugPrint('   stack: ${details.stack}');
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('🔥 PlatformDispatcher.onError: $error');
+      debugPrint('   stack: $stack');
+      return true;
+    };
+  }
   runApp(const QaGenieApp());
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {

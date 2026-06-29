@@ -32,7 +32,6 @@ class SuitesScreenState extends State<SuitesScreen> {
   List<Map<String, dynamic>> _suites = [];
   bool _isLoadingInitial = true;
   bool _isLoadingMore = false;
-  bool _isSyncing = false;
   bool _isDeleting = false;
   bool _isRenaming = false;
   bool _isPro = false;
@@ -75,9 +74,7 @@ class SuitesScreenState extends State<SuitesScreen> {
 
   Future<void> _syncPage(String? pageToken) async {
     try {
-      if (pageToken == null) {
-        setState(() => _isSyncing = true);
-      } else {
+      if (pageToken != null) {
         setState(() => _isLoadingMore = true);
       }
 
@@ -90,14 +87,10 @@ class SuitesScreenState extends State<SuitesScreen> {
       if (!mounted) return;
 
       if (pageToken == null) {
-        // First page — just sync to local DB, don't overwrite _suites.
-        // _loadInitial will load from local DB afterwards (includes pending suites).
         setState(() {
           _nextPageToken = CloudSyncService.lastPageToken;
-          _isSyncing = false;
         });
       } else {
-        // Subsequent page — append
         setState(() {
           _suites.addAll(results);
           _nextPageToken = CloudSyncService.lastPageToken;
@@ -107,7 +100,6 @@ class SuitesScreenState extends State<SuitesScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isSyncing = false;
         _isLoadingMore = false;
       });
       // _loadInitial handles the fallback from local DB on first page.

@@ -7,22 +7,30 @@ void main() {
       expect(SystemPrompt.version, isNotEmpty);
     });
 
-    test('masterPrompt is not empty', () {
-      expect(SystemPrompt.masterPrompt, isNotEmpty);
+    test('masterPromptFor is not empty', () {
+      expect(SystemPrompt.masterPromptFor('Web'), isNotEmpty);
     });
 
-    test('masterPrompt contains QA Genie', () {
-      expect(SystemPrompt.masterPrompt, contains('QA Genie'));
+    test('masterPromptFor contains QA Genie', () {
+      expect(SystemPrompt.masterPromptFor('Web'), contains('QA Genie'));
     });
 
-    test('masterPrompt contains quality guidelines', () {
-      expect(SystemPrompt.masterPrompt, contains('QUALITY GUIDELINES'));
+    test('masterPromptFor contains quality guidelines', () {
+      expect(SystemPrompt.masterPromptFor('Web'), contains('QUALITY GUIDELINES'));
     });
 
-    test('masterPrompt mentions platform types', () {
-      expect(SystemPrompt.masterPrompt, contains('WEB'));
-      expect(SystemPrompt.masterPrompt, contains('MOBILE'));
-      expect(SystemPrompt.masterPrompt, contains('API'));
+    test('masterPromptFor only includes the selected platform guideline', () {
+      expect(SystemPrompt.masterPromptFor('Web'), contains('WEB'));
+      expect(SystemPrompt.masterPromptFor('Web'), isNot(contains('MOBILE')));
+      expect(SystemPrompt.masterPromptFor('Web'), isNot(contains('API')));
+
+      expect(SystemPrompt.masterPromptFor('Mobile'), contains('MOBILE'));
+      expect(SystemPrompt.masterPromptFor('Mobile'), isNot(contains('WEB')));
+      expect(SystemPrompt.masterPromptFor('Mobile'), isNot(contains('API')));
+
+      expect(SystemPrompt.masterPromptFor('API'), contains('API'));
+      expect(SystemPrompt.masterPromptFor('API'), isNot(contains('WEB')));
+      expect(SystemPrompt.masterPromptFor('API'), isNot(contains('MOBILE')));
     });
   });
 }
