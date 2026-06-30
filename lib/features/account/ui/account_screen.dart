@@ -18,6 +18,7 @@ import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/features/splash/splash_screen.dart';
+import 'package:qa_genie/shared/widgets/responsive_layout.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -217,16 +218,18 @@ class _AccountScreenState extends State<AccountScreen> {
         onRefresh: _loadData,
         color: AppColors.accent,
         backgroundColor: AppColors.surface,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Column(
-            children: [
-              _buildInfoCard(isGuest, email, displayName),
-              const SizedBox(height: 16),
-              _buildMenuCard(),
-              const SizedBox(height: 24),
-            ],
+        child: ResponsiveLayout(
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Column(
+              children: [
+                _buildInfoCard(isGuest, email, displayName),
+                const SizedBox(height: 16),
+                _buildMenuCard(),
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
         ),
       ),

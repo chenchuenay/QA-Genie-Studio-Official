@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -62,9 +63,11 @@ class _AuthDialogState extends State<AuthDialog> {
   String? _progressMessage;
   Timer? _dotTimer;
   int _dotCount = 0;
-  late final GoogleSignIn _googleSignIn = AppConfig.isDev
-      ? GoogleSignIn(serverClientId: '113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com')
-      : GoogleSignIn();
+  late final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: AppConfig.isDev
+        ? '113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com'
+        : '88626021268-f0u2amqbp3s6ih2hl83c1p7iv60p7lt6.apps.googleusercontent.com',
+  );
 
   @override
   void initState() {
@@ -377,7 +380,7 @@ class _AuthDialogState extends State<AuthDialog> {
         child: Material(
           color: Colors.transparent,
         child: Container(
-            width: MediaQuery.of(context).size.width * 0.85,
+            width: min(MediaQuery.of(context).size.width * 0.85, 420.0),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             decoration: BoxDecoration(
               color: AppColors.card,

@@ -7,6 +7,7 @@ import 'package:qa_genie/features/auth/services/auth_service.dart';
 import 'package:qa_genie/features/monetization/ads/ad_manager.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/shared/navigation/main_screen.dart';
+import 'package:qa_genie/core/utils/screen_utils.dart';
 import 'package:qa_genie/features/auth/ui/auth_dialog.dart';
 import 'package:qa_genie/core/database/database_service.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
@@ -193,6 +194,9 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _backgroundInit() async {
+    // Wait 2s for MainScreen surface to fully initialize — avoids ANR
+    // from FlutterJNI.nativeSurfaceDestroyed during splash→MainScreen transition.
+    await Future.delayed(const Duration(seconds: 2));
     final oldUid = AuthService.currentMember?.uid ?? 'guest_default';
     await DatabaseService.migrateDataToCurrentDb(oldUid);
 
@@ -209,7 +213,7 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset('assets/logo.png', width: 144, height: 144),
+            Image.asset('assets/logo.png', width: ScreenUtils.width(context) < 600 ? 100 : 144, height: ScreenUtils.width(context) < 600 ? 100 : 144),
             const SizedBox(height: 16),
             const Text(
               'QA Genie',

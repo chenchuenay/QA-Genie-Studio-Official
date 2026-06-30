@@ -38,7 +38,7 @@ class ExportPreviewDialog extends StatefulWidget {
 
 class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   late List<List<String>> _data;
-  late List<List<TextEditingController>> _controllers;
+  late _LazyCtrlCache _ctrlCache;
   bool _editing = false;
   int? _statusColumnIndex;
   int? _priorityColumnIndex;
@@ -91,12 +91,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   void initState() {
     super.initState();
     _data = _getMappedData();
-    _controllers = _data
-        .map(
-          (row) =>
-              row.map((cell) => TextEditingController(text: cell)).toList(),
-        )
-        .toList();
+    _ctrlCache = _LazyCtrlCache(_data);
     if (_data.isNotEmpty) {
       final headers = _data.first;
       _statusColumnIndex = headers.indexWhere(
@@ -110,7 +105,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
 
   @override
   void dispose() {
-    for (final row in _controllers) for (final ctrl in row) ctrl.dispose();
+    _ctrlCache.dispose();
     super.dispose();
   }
 
@@ -198,7 +193,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   }
 
   List<List<String>> _collectEditedData() =>
-      _controllers.map((row) => row.map((ctrl) => ctrl.text).toList()).toList();
+      _ctrlCache.collectAll();
 
   List<TestStep> _parseSteps(String stepsText) {
     final lines = stepsText.split('\n');
@@ -498,7 +493,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
   @override
   Widget build(BuildContext context) {
     final headers = _data.isNotEmpty ? _data.first : <String>[];
-    final rowCount = _controllers.length - 1;
+    final rowCount = _data.length - 1;
 
     final headerRow = Row(
       children: List.generate(
@@ -545,7 +540,7 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
                   final w = col < _colWidths.length ? _colWidths[col] : 100.0;
                   final isStatus = (_statusColumnIndex != null && col == _statusColumnIndex);
                   final isPriority = (_priorityColumnIndex != null && col == _priorityColumnIndex);
-                  final controller = _controllers[rowIdx + 1][col];
+                  final controller = _ctrlCache(rowIdx + 1, col);
                   final cell = _editing
                       ? (isStatus
                             ? Container(
@@ -763,5 +758,47 @@ class _ExportPreviewDialogState extends State<ExportPreviewDialog> {
       },
       child: dialogBody,
     );
+  }
+}
+
+/// Lazily creates and caches [TextEditingController] instances per cell.
+/// Controllers are only created when first accessed — avoids N×C eager
+/// allocation that would stall the UI for large exports.
+class _LazyCtrlCache {
+  final List<List<String>> _data;
+  final Map<String, TextEditingController> _cache = {};
+
+  _LazyCtrlCache(this._data);
+
+  static String _key(int row, int col) => '$row:$col';
+
+  TextEditingController call(int row, int col) {
+    final key = _key(row, col);
+    return _cache.putIfAbsent(key, () {
+      final text = (row < _data.length && col < _data[row].length)
+          ? _data[row][col]
+          : '';
+      return TextEditingController(text: text);
+    });
+  }
+
+  /// Returns the full grid of text values — reads from cache if a controller
+  /// was created, otherwise falls back to the original [_data].
+  List<List<String>> collectAll() {
+    final result = <List<String>>[];
+    for (int r = 0; r < _data.length; r++) {
+      final row = <String>[];
+      for (int c = 0; c < _data[r].length; c++) {
+        final cached = _cache[_key(r, c)];
+        row.add(cached != null ? cached.text : _data[r][c]);
+      }
+      result.add(row);
+    }
+    return result;
+  }
+
+  void dispose() {
+    for (final c in _cache.values) c.dispose();
+    _cache.clear();
   }
 }

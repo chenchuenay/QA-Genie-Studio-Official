@@ -1,49 +1,57 @@
 {
   "project_info": {
-    "project_number": "113750340081",
-    "project_id": "qa-genie-ai-dev",
-    "storage_bucket": "qa-genie-ai-dev.firebasestorage.app"
+    "project_number": "88626021268",
+    "project_id": "qa-genie-ai",
+    "storage_bucket": "qa-genie-ai.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:113750340081:android:3f982b5409af05dee39450",
+        "mobilesdk_app_id": "1:88626021268:android:86ebd37e35e0fdea048581",
         "android_client_info": {
-          "package_name": "com.enaykumar.qagenie_dev"
+          "package_name": "com.enaykumar.qagenie"
         }
       },
       "oauth_client": [
         {
-          "client_id": "113750340081-b7c8rvupjchnaovglb4lcu45pvpapk15.apps.googleusercontent.com",
+          "client_id": "88626021268-1tnql1f9cs32o22vg02bmmsjm4552r0c.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.enaykumar.qagenie_dev",
-            "certificate_hash": "085cf046135ac85605f44ef92c879a552531d167"
-          }
-        },
-        {
-          "client_id": "113750340081-ui25ho374c00pq91o0iortqudvdlr2la.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.enaykumar.qagenie_dev",
+            "package_name": "com.enaykumar.qagenie",
             "certificate_hash": "a97429bc31095660934c691b121d53ba14bad9db"
           }
         },
         {
-          "client_id": "113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com",
+          "client_id": "88626021268-7lonjh1gb39radbait0erae07qv30aid.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.enaykumar.qagenie",
+            "certificate_hash": "3b0d3733bf6e91dc3f837017bf2affb9692ac6de"
+          }
+        },
+        {
+          "client_id": "88626021268-hmvakd01votbgrvap2uq2568h88ghcf0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.enaykumar.qagenie",
+            "certificate_hash": "085cf046135ac85605f44ef92c879a552531d167"
+          }
+        },
+        {
+          "client_id": "88626021268-f0u2amqbp3s6ih2hl83c1p7iv60p7lt6.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyClNIMloB5GvcDuxdllXlh41JSj0aW26EY"
+          "current_key": "AIzaSyD1hasvCYcYsl4IEDX5MatJSV-EDw26f14"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com",
+              "client_id": "88626021268-f0u2amqbp3s6ih2hl83c1p7iv60p7lt6.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

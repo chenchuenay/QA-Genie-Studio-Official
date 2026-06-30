@@ -324,10 +324,10 @@ class _SummaryReportPreviewScreenState
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          SizedBox(
-            width: 100,
+          Flexible(
             child: Text(
               '$label :',
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 14,
@@ -335,9 +335,11 @@ class _SummaryReportPreviewScreenState
               ),
             ),
           ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               value,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
@@ -412,16 +414,17 @@ class _SummaryReportPreviewScreenState
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          SizedBox(
-            width: 80,
+          Flexible(
             child: Text(
               label,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 14,
               ),
             ),
           ),
+          const SizedBox(width: 8),
           Text(
             '$count',
             style: const TextStyle(color: Colors.white, fontSize: 14),

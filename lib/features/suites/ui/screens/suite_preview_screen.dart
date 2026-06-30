@@ -814,213 +814,223 @@ class _SuitePreviewScreenState extends State<SuitePreviewScreen>
                         _selectionMode
                             ? '${_selectedIndices.length} selected'
                             : 'Suite',
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      if (_selectionMode) ...[
-                        _selIcon(Icons.content_copy, 'Copy', _batchCopy),
-                        const SizedBox(width: 2),
-                        _selIcon(Icons.drive_file_move, 'Move', _batchMove),
-                        const SizedBox(width: 2),
-                        _selIcon(
-                          Icons.delete,
-                          'Delete',
-                          _batchDelete,
-                          isDestructive: true,
-                        ),
-                        const SizedBox(width: 6),
-                        _selIcon(Icons.close, 'Done', _exitSelectionMode),
-                      ] else if (!isEditable) ...[
-                        OutlinedButton.icon(
-                          onPressed: _openSummary,
-                          icon: const Icon(
-                            Icons.description,
-                            size: 16,
-                            color: AppColors.accent,
-                          ),
-                          label: const Text(
-                            'Summary Report',
-                            style: TextStyle(
-                              color: AppColors.accent,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 11,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(
-                              color: AppColors.accent,
-                              width: 1.2,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            backgroundColor: AppColors.accent.withOpacity(0.08),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          onPressed: _toggleRiskMode,
-                          icon: _riskMode
-                              ? const Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text('🛡️', style: TextStyle(fontSize: 18)),
-                                    Text(
-                                      'ON',
-                                      style: TextStyle(
-                                        color: AppColors.accent,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 9,
-                                        height: 1,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : const Text(
-                                  '🛡️',
-                                  style: TextStyle(fontSize: 18),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              if (_selectionMode) ...[
+                                _selIcon(Icons.content_copy, 'Copy', _batchCopy),
+                                const SizedBox(width: 2),
+                                _selIcon(Icons.drive_file_move, 'Move', _batchMove),
+                                const SizedBox(width: 2),
+                                _selIcon(
+                                  Icons.delete,
+                                  'Delete',
+                                  _batchDelete,
+                                  isDestructive: true,
                                 ),
-                          tooltip: 'Risk Sort',
-                          style: IconButton.styleFrom(
-                            backgroundColor: _riskMode
-                                ? AppColors.accent.withOpacity(0.2)
-                                : Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            padding: const EdgeInsets.only(
-                              right: 1,
-                              left: 4,
-                              top: 2,
-                              bottom: 2,
-                            ),
-                            minimumSize: const Size(24, 24),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                        AnimatedBuilder(
-                          animation: _pulseAnimation,
-                          builder: (context, child) {
-                            final pulse = _shouldPulseHelp
-                                ? _pulseAnimation.value
-                                : 0.0;
-                            return Transform.scale(
-                              scale: 1.0 + pulse,
-                              child: IconButton(
-                                onPressed: () {
-                                  _helpTappedThisSession = true;
-                                  _showGuidelinesDialog(
-                                    showDontShowAgain: false,
-                                  );
-                                },
-                                icon: const Icon(
-                                  Icons.help_outline,
-                                  color: Colors.white70,
-                                  size: 19,
-                                ),
-                                tooltip: 'Help',
-                                style: IconButton.styleFrom(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                const SizedBox(width: 6),
+                                _selIcon(Icons.close, 'Done', _exitSelectionMode),
+                              ] else if (!isEditable) ...[
+                                OutlinedButton.icon(
+                                  onPressed: _openSummary,
+                                  icon: const Icon(
+                                    Icons.description,
+                                    size: 16,
+                                    color: AppColors.accent,
                                   ),
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: const Size(30, 30),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        OutlinedButton(
-                          onPressed: _toggleEdit,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: AppColors.border),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 3,
-                              vertical: 2,
-                            ),
-                            minimumSize: const Size(30, 30),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          child: const Text(
-                            'EDIT',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (isEditable) ...[
-                        TextButton(
-                          onPressed: () => _undoAndExitEdit(),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          child: const Text(
-                            'CANCEL',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        ElevatedButton(
-                          onPressed: _hasDuplicateIds
-                              ? () => showBlurredDialog(context,
-                                  builder: (ctx) => AlertDialog(
-                                    backgroundColor: AppColors.surface,
-                                    title: const Text('Duplicate IDs',
-                                        style: TextStyle(color: Colors.white)),
-                                    content: const Text(
-                                      'Fix duplicate IDs before saving.',
-                                      style: TextStyle(color: AppColors.textSecondary),
+                                  label: const Text(
+                                    'Summary Report',
+                                    style: TextStyle(
+                                      color: AppColors.accent,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 11,
                                     ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(ctx),
-                                        child: const Text('OK',
-                                            style: TextStyle(color: AppColors.accent)),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(
+                                      color: AppColors.accent,
+                                      width: 1.2,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    backgroundColor: AppColors.accent.withOpacity(0.08),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 4,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  onPressed: _toggleRiskMode,
+                                  icon: _riskMode
+                                      ? const Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text('🛡️', style: TextStyle(fontSize: 18)),
+                                            Text(
+                                              'ON',
+                                              style: TextStyle(
+                                                color: AppColors.accent,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 9,
+                                                height: 1,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : const Text(
+                                          '🛡️',
+                                          style: TextStyle(fontSize: 18),
+                                        ),
+                                  tooltip: 'Risk Sort',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: _riskMode
+                                        ? AppColors.accent.withOpacity(0.2)
+                                        : Colors.transparent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    padding: const EdgeInsets.only(
+                                      right: 1,
+                                      left: 4,
+                                      top: 2,
+                                      bottom: 2,
+                                    ),
+                                    minimumSize: const Size(24, 24),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ),
+                                AnimatedBuilder(
+                                  animation: _pulseAnimation,
+                                  builder: (context, child) {
+                                    final pulse = _shouldPulseHelp
+                                        ? _pulseAnimation.value
+                                        : 0.0;
+                                    return Transform.scale(
+                                      scale: 1.0 + pulse,
+                                      child: IconButton(
+                                        onPressed: () {
+                                          _helpTappedThisSession = true;
+                                          _showGuidelinesDialog(
+                                            showDontShowAgain: false,
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.help_outline,
+                                          color: Colors.white70,
+                                          size: 19,
+                                        ),
+                                        tooltip: 'Help',
+                                        style: IconButton.styleFrom(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: const Size(30, 30),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
                                       ),
-                                    ],
-                                  ))
-                              : _saveAndExitEdit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _hasDuplicateIds
-                                ? AppColors.error.withOpacity(0.3)
-                                : AppColors.success,
-                            foregroundColor:
-                                _hasDuplicateIds ? Colors.white38 : Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text(
-                            'SAVE',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
+                                    );
+                                  },
+                                ),
+                                OutlinedButton(
+                                  onPressed: _toggleEdit,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: AppColors.border),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 3,
+                                      vertical: 2,
+                                    ),
+                                    minimumSize: const Size(30, 30),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  child: const Text(
+                                    'EDIT',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (isEditable) ...[
+                                TextButton(
+                                  onPressed: () => _undoAndExitEdit(),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: AppColors.error,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  ),
+                                  child: const Text(
+                                    'CANCEL',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                ElevatedButton(
+                                  onPressed: _hasDuplicateIds
+                                      ? () => showBlurredDialog(context,
+                                          builder: (ctx) => AlertDialog(
+                                            backgroundColor: AppColors.surface,
+                                            title: const Text('Duplicate IDs',
+                                                style: TextStyle(color: Colors.white)),
+                                            content: const Text(
+                                              'Fix duplicate IDs before saving.',
+                                              style: TextStyle(color: AppColors.textSecondary),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(ctx),
+                                                child: const Text('OK',
+                                                    style: TextStyle(color: AppColors.accent)),
+                                              ),
+                                            ],
+                                          ))
+                                      : _saveAndExitEdit,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _hasDuplicateIds
+                                        ? AppColors.error.withOpacity(0.3)
+                                        : AppColors.success,
+                                    foregroundColor:
+                                        _hasDuplicateIds ? Colors.white38 : Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 4,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'SAVE',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),

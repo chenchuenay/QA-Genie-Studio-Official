@@ -16,9 +16,11 @@ import 'package:qa_genie/features/auth/services/session_monitor.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
-  static final GoogleSignIn _googleSignIn = AppConfig.isDev
-      ? GoogleSignIn(serverClientId: '113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com')
-      : GoogleSignIn();
+  static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: AppConfig.isDev
+        ? '113750340081-c093td8t5790acqpii0o40fqk2susboj.apps.googleusercontent.com'
+        : '88626021268-f0u2amqbp3s6ih2hl83c1p7iv60p7lt6.apps.googleusercontent.com',
+  );
   static bool _googleAuthInProgress = false;
   static bool get isGoogleAuthInProgress => _googleAuthInProgress;
 

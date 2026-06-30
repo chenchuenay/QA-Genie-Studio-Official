@@ -10,6 +10,7 @@ import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
+import 'package:qa_genie/shared/widgets/responsive_layout.dart';
 
 class ReportIssueScreen extends StatefulWidget {
   final String? screen;
@@ -51,35 +52,37 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
           backgroundColor: AppColors.surface,
           title: const Text('Support'),
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.lock_outline, size: 48, color: AppColors.textHint),
-                const SizedBox(height: 20),
-                const Text(
-                  'Sign in to submit a report',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
+        body: ResponsiveLayout(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lock_outline, size: 48, color: AppColors.textHint),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Sign in to submit a report',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Only signed-in members can submit a report. '
-                  'Sign in with Google to share your feedback and track its status.',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 15,
-                    height: 1.4,
+                  const SizedBox(height: 12),
+                  Text(
+                    'Only signed-in members can submit a report. '
+                    'Sign in with Google to share your feedback and track its status.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -99,12 +102,14 @@ class _ReportIssueScreenState extends State<ReportIssueScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _ReportFormView(screen: widget.screen, onSubmitted: _onReportSubmitted),
-          _MyFeedbacksView(key: _myFeedbacksKey, onShareFeedback: () => _tabController.animateTo(0)),
-        ],
+      body: ResponsiveLayout(
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _ReportFormView(screen: widget.screen, onSubmitted: _onReportSubmitted),
+            _MyFeedbacksView(key: _myFeedbacksKey, onShareFeedback: () => _tabController.animateTo(0)),
+          ],
+        ),
       ),
     );
   }

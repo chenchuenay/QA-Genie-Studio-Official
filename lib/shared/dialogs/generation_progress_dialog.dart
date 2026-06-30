@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:qa_genie/app/theme/app_colors.dart';
 
@@ -76,7 +77,7 @@ class _GenerationProgressDialogState extends State<GenerationProgressDialog> {
         child: Material(
           color: Colors.transparent,
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.85,
+            width: min(MediaQuery.of(context).size.width * 0.85, 420.0),
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
             decoration: BoxDecoration(
               color: AppColors.card,

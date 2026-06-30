@@ -17,6 +17,7 @@ import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart'; 
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/ui/network_ui_helper.dart';
+import 'package:qa_genie/shared/widgets/responsive_layout.dart';
 
 class SuitesScreen extends StatefulWidget {
   final VoidCallback? onGenerate;
@@ -452,9 +453,10 @@ class SuitesScreenState extends State<SuitesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          Expanded(
+      body: ResponsiveLayout(
+        child: Column(
+          children: [
+            Expanded(
             child: _isLoadingInitial
                 ? const Center(
                     child: Text(
@@ -592,6 +594,7 @@ class SuitesScreenState extends State<SuitesScreen> {
           if (!_isPro) const _ProBanner(),
           const SizedBox(height: 8),
         ],
+      ),
       ),
     );
   }

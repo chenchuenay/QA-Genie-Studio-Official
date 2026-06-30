@@ -30,6 +30,7 @@ import 'package:qa_genie/domain/usecases/generate_test_cases_use_case.dart';
 import 'package:qa_genie/features/suites/ui/screens/suite_preview_screen.dart';
 import 'package:qa_genie/features/account/ui/account_screen.dart';
 import 'package:qa_genie/shared/dialogs/generation_progress_dialog.dart';
+import 'package:qa_genie/shared/widgets/responsive_layout.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -145,7 +146,8 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         child: AbsorbPointer(
           absorbing: fullLock,
-          child: SafeArea(
+          child: ResponsiveLayout(
+            includeSafeArea: true,
             child: Column(
               children: [
                 Expanded(

@@ -34,7 +34,7 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 25
+        versionCode = 28
         multiDexEnabled = true
         manifestPlaceholders["appName"] = "QA Genie"
     }

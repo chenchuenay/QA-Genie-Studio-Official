@@ -1,5 +1,9 @@
 # QA Genie — AI Agent Reference
 
+## connect wirelessly to CPH2621
+
+adb connect 10.184.222.252:5555
+
 ## Immutable Identifiers
 
 - `PACKAGE_NAME`: `com.enaykumar.qagenie` | `APPLICATIONID`: `com.enaykumar.qagenie`
@@ -280,7 +284,7 @@ All 4 policies must be **identical** in-app (`legal_documents.dart`) and on webs
 | `lib/features/monetization/ads/ad_manager.dart`            | Ad preloading + showing rewarded ads                    |
 | `lib/features/monetization/ads/ad_units.dart`              | Test (active) + real (commented) ad unit IDs            |
 | `lib/features/monetization/logic/usage_manager.dart`       | Quota checks, tier resolution, dashboard caching        |
-| `lib/app_config.dart`                                      | IS_DEV compile-time switch (--dart-define)             |
+| `lib/app_config.dart`                                      | IS_DEV compile-time switch (--dart-define)              |
 | `lib/firebase/cloud_functions/functions_service.dart`      | All 18+ cloud function Dart bindings                    |
 | `lib/shared/dialogs/export_success_dialog.dart`            | Star rating + feedback trigger                          |
 | `lib/shared/dialogs/feedback_dialog.dart`                  | Guest-locked feedback prompt                            |
@@ -290,7 +294,7 @@ All 4 policies must be **identical** in-app (`legal_documents.dart`) and on webs
 | `lib/engine/orchestration/pipeline_orchestrator.dart`      | AI → Parse → Repair → Validate → Fallback → Finalize    |
 | `lib/engine/orchestrator/deterministic_engine.dart`        | Local fallback generator (no AI)                        |
 | `website/*.html`                                           | All policy pages + delete-account.html                  |
-| `functions/index.js`                                       | Generated — copied from *.prod.js or *.dev.js at deploy |
+| `functions/index.js`                                       | Generated — copied from _.prod.js or _.dev.js at deploy |
 | `functions/index.prod.js`                                  | Production cloud functions (deployed to qa-genie-ai)    |
 | `functions/index.dev.js`                                   | Dev cloud functions (deployed to qa-genie-ai-dev)       |
 | `firestore.rules`                                          | Security rules for all collections                      |
@@ -313,9 +317,11 @@ also try to uninstall apps before installing
 ## Anchored Summary — Ontology2 + Quota Edge Cases
 
 ### Goal
+
 Replace hardcoded domain templates with a generative ontology engine that produces AI-quality test cases for all 10 domains using entity property definitions.
 
 ### Key Decisions
+
 - **PropertyDef is the core abstraction** — every generator reads property types/examples/constraints rather than switching on domain name.
 - **VariationPool uses seeded Random** for deterministic but varied output.
 - **OntologyScenarioPlanner** iterates entity+action pairs with round-robin category cycling — simpler than old Relationship-graph expansion planner.
@@ -324,11 +330,13 @@ Replace hardcoded domain templates with a generative ontology engine that produc
 - **`callDeepSeek` always returns** (never throws), so every return from it is treated as "AI was attempted" for quota purposes, except `HTTP_4xx` / `CLIENT_ERROR` which are classified as no-cost.
 
 ### Quota Edge Cases (SCENARIO 2.2, 2.3, 4.5)
+
 - **SCENARIO 2.2 (Race → Overdraft):** When DeepSeek was called + ad was watched + quota is exhausted by another request in the same window, the transaction allows one over-limit increment (`!aiFailed` guard on LIMIT_REACHED throw) and returns fallback. Quota is consumed because DeepSeek cost was incurred.
 - **SCENARIO 2.3 (No-cost AI error → free fallback):** `HTTP_4xx` / `CLIENT_ERROR` errors from DeepSeek are classified as `aiNoCost = true`. If ad was watched, the transaction skips counter increment entirely and returns `freeFallback: true`. No quota consumed. Pre-DeepSeek errors (transport, auth) are handled by the existing catch block — they never enter transaction, no quota consumed.
 - **SCENARIO 4.5 (Expired nonce → skip DeepSeek, free fallback):** Before `callDeepSeek`, the nonce timestamp is checked against `processed_requests`. If expired (>5 min), a single-document transaction atomically consumes the nonce and returns `freeFallback: true` without ever calling DeepSeek. No AI cost, no quota consumed.
 
 ### Critical Context
+
 - Version: 1.2.67 (versionCode 23)
 - DeepSeek cloud function: `timeoutSeconds: 60`, fetch abort at 55s, model `deepseek-v4-flash`, `extra_body: { thinking: { type: "disabled" } }`, `response_format: { type: "json_object" }`.
 - `DEEPSEEK_API_KEY` must be set as Firebase secret — missing it causes `HTTP_401` on every API call.
@@ -342,6 +350,7 @@ Replace hardcoded domain templates with a generative ontology engine that produc
 - All 717 engine tests pass (0 failures), 0 analyzer warnings across entire project.
 
 ### Relevant Files
+
 - `lib/engine/ontology2/model/`: entity_def, action_def, state_def, domain_ontology, step_template — core data model
 - `lib/engine/ontology2/registry/domain_index.dart`: master registry with detect() for all 10 domains
 - `lib/engine/ontology2/registry/domains/`: 10 domain data files (identity, commerce, banking, medical, scheduling, integration, ai_ml, social, tech, robotics)
@@ -367,8 +376,25 @@ Replace hardcoded domain templates with a generative ontology engine that produc
 ## Google Review Catch (Fix Later)
 
 ### ANR: `FlutterJNI.nativeSurfaceDestroyed` — main thread blocked during screen transition
+
 - **Symptoms:** ANR on nativeSurfaceDestroyed (engine teardown) — main thread blocked during splash→MainScreen navigation
 - **Likely cause:** `migrateDataToCurrentDb()` called in `_backgroundInit()` after navigation, but synchronous/blocking SQLite operation in `migrateDataToCurrentDb` competes with Flutter engine surface lifecycle
 - **Fix approach:** Move `migrateDataToCurrentDb` to a `compute()` isolate, or schedule it with a post-frame delay (e.g., `Future.delayed(Duration(seconds: 2))`), or skip migration entirely if DB already at current version
 - **Priority:** Low (1 user in 7 days, won't block review)
 
+## Production Launch Checklist
+
+### Before Launch
+- [ ] Verify Privacy/ToS/AI/Ads pages on qagenies.com are up to date
+- [ ] Remove test accounts from Firebase
+- [ ] Set up App Check enforcement
+- [ ] Finalize store listing (screenshots, description, category)
+- [ ] Test all auth flows one last time with the release build
+
+### At Launch
+- [ ] Swap ad unit IDs (test → real) in `lib/features/monetization/ads/ad_units.dart`
+- [ ] Add 2 mediation partners to AdMob bidding (needs live app link first)
+
+### 2 Months Post-Launch
+- [ ] Launch PRO tier ($6.99) — gating already implemented, needs Play product IDs + flip switch
+- [ ] Use feedback to validate pricing before flipping PRO

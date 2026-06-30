@@ -351,6 +351,11 @@ class DatabaseService {
   /// currently active database. Duplicate suites (same moduleName+feature+platform)
   /// are skipped; their test cases are merged under the existing suite.
   static Future<void> migrateDataToCurrentDb(String fromIdentity) async {
+    // Skip if current DB already has data — migration already done.
+    final db = await DatabaseService.db;
+    final existingCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM suites')) ?? 0;
+    if (existingCount > 0) return;
+
     final sanitized = sha256.convert(utf8.encode(fromIdentity)).toString();
     final appDir = await getApplicationSupportDirectory();
     final oldDbPath = '${appDir.path}/data/qa_genie/$sanitized/$_dbName';

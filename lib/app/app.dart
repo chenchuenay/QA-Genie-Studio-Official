@@ -44,6 +44,15 @@ class _QaGenieAppState extends State<QaGenieApp> {
         theme: AppTheme.darkTheme,
         initialRoute: AppRouter.startupRoute,
         onGenerateRoute: AppRouter.generateRoute,
+        builder: (context, child) {
+          final mq = MediaQuery.of(context);
+          return MediaQuery(
+            data: mq.copyWith(
+              textScaleFactor: mq.textScaleFactor.clamp(0.85, 1.2),
+            ),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
       ),
     );
   }

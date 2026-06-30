@@ -3,6 +3,7 @@ import 'package:qa_genie/app/app.dart';
 import 'package:qa_genie/app/theme/app_theme.dart';
 import 'package:qa_genie/core/network/network_guard.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
+import 'package:qa_genie/core/utils/screen_utils.dart';
 import 'package:qa_genie/core/state/generation_state.dart';
 import 'package:qa_genie/shared/dialogs/guidelines_dialog.dart';
 import 'package:qa_genie/shared/widgets/walkthrough_overlay.dart';
@@ -127,6 +128,7 @@ class MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final useRail = ScreenUtils.useNavigationRail(context);
     return ValueListenableBuilder<bool>(
       valueListenable: GenerationState.isGenerating,
       builder: (context, isGenerating, _) {
@@ -242,40 +244,81 @@ class MainScreenState extends State<MainScreen> {
               },
             ),
             Expanded(
-              child: IndexedStack(
-                index: _currentIndex,
+              child: Row(
                 children: [
-                  const HomeScreen(),
-                  SuitesScreen(key: _suitesKey, onGenerate: _switchToGenerate),
+                  if (useRail)
+                    NavigationRail(
+                      backgroundColor: const Color(0xFF0D1018),
+                      selectedIndex: _currentIndex,
+                      onDestinationSelected: (i) {
+                        if (isGenerating) return;
+                        setState(() => _currentIndex = i);
+                        if (i == 1) _suitesKey.currentState?.refresh();
+                      },
+                      labelType: NavigationRailLabelType.all,
+                      selectedIconTheme: const IconThemeData(
+                        color: Color(0xFF3DDCFF),
+                      ),
+                      unselectedIconTheme: const IconThemeData(
+                        color: Color(0xFF6D7485),
+                      ),
+                      selectedLabelTextStyle: const TextStyle(
+                        color: Color(0xFF3DDCFF),
+                      ),
+                      unselectedLabelTextStyle: const TextStyle(
+                        color: Color(0xFF6D7485),
+                      ),
+                      destinations: const [
+                        NavigationRailDestination(
+                          icon: Icon(Icons.bolt),
+                          label: Text('Generate'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.folder),
+                          label: Text('Suites'),
+                        ),
+                      ],
+                    ),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _currentIndex,
+                      children: [
+                        const HomeScreen(),
+                        SuitesScreen(key: _suitesKey, onGenerate: _switchToGenerate),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
-        bottomNavigationBar: AbsorbPointer(
-          absorbing: isGenerating,
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (i) {
-              if (isGenerating) return;
-              setState(() => _currentIndex = i);
-              if (i == 1) _suitesKey.currentState?.refresh();
-            },
-            backgroundColor: const Color(0xFF0D1018),
-            selectedItemColor: const Color(0xFF3DDCFF),
-            unselectedItemColor: const Color(0xFF6D7485),
-            items: [
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.bolt),
-                label: 'Generate',
+        bottomNavigationBar: useRail
+            ? null
+            : AbsorbPointer(
+                absorbing: isGenerating,
+                child: BottomNavigationBar(
+                  currentIndex: _currentIndex,
+                  onTap: (i) {
+                    if (isGenerating) return;
+                    setState(() => _currentIndex = i);
+                    if (i == 1) _suitesKey.currentState?.refresh();
+                  },
+                  backgroundColor: const Color(0xFF0D1018),
+                  selectedItemColor: const Color(0xFF3DDCFF),
+                  unselectedItemColor: const Color(0xFF6D7485),
+                  items: [
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.bolt),
+                      label: 'Generate',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(Icons.folder, key: MainScreen._suitesTabKey),
+                      label: 'Suites',
+                    ),
+                  ],
+                ),
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.folder, key: MainScreen._suitesTabKey),
-                label: 'Suites',
-              ),
-            ],
-            ),
-          ),
         ),
       );
     },
