@@ -34,7 +34,8 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 28
+        versionCode = 30
+        versionName = flutter.versionName
         multiDexEnabled = true
         manifestPlaceholders["appName"] = "QA Genie"
     }

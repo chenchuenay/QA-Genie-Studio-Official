@@ -87,6 +87,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _refreshStatus() async {
+    UsageManager.invalidateCache();
     try {
       final results = await Future.wait([
         UsageManager.isPro(),

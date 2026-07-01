@@ -228,9 +228,14 @@ class _AuthDialogState extends State<AuthDialog> {
           }
         }
       }
+      final metadata = member?.metadata;
+      final isReturning = metadata != null &&
+          metadata.creationTime != null &&
+          metadata.lastSignInTime != null &&
+          metadata.lastSignInTime!.difference(metadata.creationTime!).inSeconds > 5;
       final greeting = displayName.isNotEmpty
-          ? 'Welcome, ${displayName.split(' ').first}!'
-          : 'Welcome!';
+          ? '${isReturning ? "Welcome back" : "Welcome"}, ${displayName.split(' ').first}!'
+          : (isReturning ? 'Welcome back!' : 'Welcome!');
       await showBlurredDialog(
         context,
         barrierDismissible: false,
