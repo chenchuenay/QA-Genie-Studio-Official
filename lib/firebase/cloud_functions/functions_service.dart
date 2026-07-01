@@ -270,6 +270,7 @@ class FunctionsService {
         'deviceId': deviceId,
         if (previousGuestUid != null) 'previousGuestUid': previousGuestUid,
       },
+      throwOnError: true,
     );
   }
 

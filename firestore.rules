@@ -50,6 +50,11 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
     }
+    // App config – readable by all (for update checks), write via Firebase Admin only
+    match /app_config/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
     // (removed: sessions now at memberData/{tier}/{uid}/_session)
   }
 }

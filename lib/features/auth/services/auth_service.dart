@@ -161,18 +161,26 @@ class AuthService {
       await _writeLog('linkWithGoogle | result uid=${member.uid} | isAnonymous=${member.isAnonymous}');
       final deviceId = await DeviceUtils.getUniqueId();
 
-      try {
-        await FunctionsService.linkGoogleAccount(
-          email: member.email ?? googleUser.email,
-          displayName: member.displayName ?? googleUser.displayName ?? '',
-          deviceId: deviceId,
-          previousGuestUid: previousGuestUid,
-        );
-        await _writeLog('linkWithGoogle | linkGoogleAccount cloud function succeeded');
-      } catch (e) {
-        await _writeLog('linkWithGoogle | linkGoogleAccount cloud function FAILED: $e');
-        // Cloud function failure is non-fatal — user is already linked in Firebase Auth.
-        // The session doc will be created on next signed-in action via checkSessionByEmail + registerSession.
+      const maxRetries = 3;
+      const retryDelays = [Duration(seconds: 1), Duration(seconds: 2), Duration(seconds: 4)];
+      for (int attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          await FunctionsService.linkGoogleAccount(
+            email: member.email ?? googleUser.email,
+            displayName: member.displayName ?? googleUser.displayName ?? '',
+            deviceId: deviceId,
+            previousGuestUid: previousGuestUid,
+          );
+          await _writeLog('linkWithGoogle | linkGoogleAccount cloud function succeeded');
+          break;
+        } catch (e) {
+          await _writeLog('linkWithGoogle | linkGoogleAccount attempt ${attempt + 1} FAILED: $e');
+          if (attempt < maxRetries - 1) {
+            await Future.delayed(retryDelays[attempt]);
+          } else {
+            rethrow;
+          }
+        }
       }
 
       await _writeLog('linkWithGoogle COMPLETED');

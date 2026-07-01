@@ -1419,7 +1419,7 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
   }
   const uid = context.auth.uid;
   console.log(`[linkGoogleAccount] CALLED | uid=${uid} | email=${data.email}`);
-  if (!checkRateLimit(`linkGoogle_${uid}`, 3)) {
+  if (!checkRateLimit(`linkGoogle_${uid}`, 10)) {
     console.log(`[linkGoogleAccount] RATE LIMITED`);
     throw new functions.https.HttpsError("resource-exhausted", "Rate limited");
   }
@@ -1471,7 +1471,7 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
     if (existingMemberUsage.exists && existingMemberUsage.data()?.type === "member") {
       // Google account already has member data — just delete the guest, preserve member
       console.log(`[linkGoogleAccount] Google account is already a member | preserving existing data`);
-      await guestRef.delete();
+      try { await guestRef.delete(); } catch (e) { console.warn(`[linkGoogleAccount] failed to delete guest: ${e.message}`); }
       await db.collection("the_qag_registry").doc(uid).delete().catch(() => {});
       await usageRef.delete().catch(() => {});
     } else {
@@ -1481,7 +1481,7 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
 
       if (guestTier === "returning") {
         // Returning guest upgrade → fresh start, reset usage at new email key
-        await memberUsageRef.set({
+        try { await memberUsageRef.set({
           type: "member",
           email,
           uid,
@@ -1491,17 +1491,17 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
             lifetimeGeneratedCases: 0,
             lastReset: today(),
           },
-        });
+        }); } catch (e) { console.warn(`[linkGoogleAccount] failed to create returning guest usage: ${e.message}`); }
       } else {
         // First-time guest upgrade — copy existing usage to email key
         const oldData = await usageRef.get();
         const oldUsage = oldData.exists ? oldData.data() : {};
-        await memberUsageRef.set({
+        try { await memberUsageRef.set({
           ...oldUsage,
           type: "member",
           email,
           uid,
-        });
+        }); } catch (e) { console.warn(`[linkGoogleAccount] failed to migrate first-time guest usage: ${e.message}`); }
       }
 
       // Delete old uid-based usage doc
@@ -1509,7 +1509,7 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
     }
 
     // Delete guest doc
-    await guestRef.delete();
+    try { await guestRef.delete(); } catch (e) { console.warn(`[linkGoogleAccount] failed to delete guest doc: ${e.message}`); }
     console.log(`[linkGoogleAccount] GUEST DELETED`);
   }
 
@@ -1518,10 +1518,10 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
     if (existingUsage.exists) {
       // Returning member — preserve existing metrics, don't nuke quota
       console.log(`[linkGoogleAccount] RETURNING MEMBER | preserving usage metrics`);
-      await memberUsageRef.set({ type: "member", email, uid }, { merge: true });
+      try { await memberUsageRef.set({ type: "member", email, uid }, { merge: true }); } catch (e) { console.warn(`[linkGoogleAccount] failed to update returning member usage: ${e.message}`); }
     } else {
       console.log(`[linkGoogleAccount] FRESH MEMBER | creating usage doc`);
-      await memberUsageRef.set({
+      try { await memberUsageRef.set({
         type: "member",
         email,
         uid,
@@ -1531,13 +1531,13 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
           lifetimeGeneratedCases: 0,
           lastReset: today(),
         },
-      });
+      }); } catch (e) { console.warn(`[linkGoogleAccount] failed to create fresh member usage: ${e.message}`); }
     }
   }
 
   // Ensure registry entry exists for ALL Google accounts (keyed by email for single source of truth)
   const registryId = email || uid;
-  await db.collection("the_qag_registry").doc(registryId).set(
+  try { await db.collection("the_qag_registry").doc(registryId).set(
     {
       type: "member",
       uid,
@@ -1546,7 +1546,7 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },
-  );
+  ); } catch (e) { console.warn(`[linkGoogleAccount] failed to write registry: ${e.message}`); }
   // Clean up old uid-keyed registry entry if it exists (migration from previous format)
   if (email && registryId !== uid) {
     try {
@@ -1585,7 +1585,21 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
       profileData.previousGuestUid = previousGuestUid;
       console.log(`[linkGoogleAccount] storing previousGuestUid=${previousGuestUid} in memberProfiles for suite redirect`);
     }
-    await profileRef.set(profileData, { merge: true });
+    // Critical: retry memberProfiles write once if it fails
+    let profileWritten = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await profileRef.set(profileData, { merge: true });
+        profileWritten = true;
+        break;
+      } catch (e) {
+        console.warn(`[linkGoogleAccount] memberProfiles write attempt ${attempt + 1} failed: ${e.message}`);
+        if (attempt < 1) await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    if (!profileWritten) {
+      throw new functions.https.HttpsError("internal", "Failed to write member profile");
+    }
 
     // Create session doc so multi-device conflict detection works immediately
     try {
