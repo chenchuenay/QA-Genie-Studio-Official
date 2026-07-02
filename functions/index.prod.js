@@ -1296,16 +1296,46 @@ exports.recomputeAnalytics = onCall(async (data, context) => {
     },
   };
 
-  await db.collection("analytics").doc("global").set(globalData, { merge: true });
+  // Active user window queries
+  const now = Date.now();
+  const windows = {
+    active24h: new Date(now - 24 * 60 * 60 * 1000),
+    active7d: new Date(now - 7 * 24 * 60 * 60 * 1000),
+    active30d: new Date(now - 30 * 24 * 60 * 60 * 1000),
+  };
+  const actResults = { combined: {}, members: {}, guestsFirst: {}, guestsReturning: {} };
+  for (const [windowKey, cutoff] of Object.entries(windows)) {
+    try {
+      const snap = await db.collection("usage").where("lastActive", ">", cutoff).get();
+      let combined = 0, members = 0, guestsFirst = 0, guestsReturning = 0;
+      snap.forEach(doc => {
+        const d = doc.data();
+        combined++;
+        if (d.type === "member") members++;
+        else if (d.type === "guest") {
+          if (d.guestTier === "returning") guestsReturning++;
+          else guestsFirst++;
+        }
+      });
+      actResults.combined[windowKey] = combined;
+      actResults.members[windowKey] = members;
+      actResults.guestsFirst[windowKey] = guestsFirst;
+      actResults.guestsReturning[windowKey] = guestsReturning;
+    } catch (e) {
+      actResults.combined[windowKey] = 0;
+      actResults.members[windowKey] = 0;
+      actResults.guestsFirst[windowKey] = 0;
+      actResults.guestsReturning[windowKey] = 0;
+    }
+  }
+  globalData.users = {
+    combined: { all: memberCounter + guestsFirstCounter + guestsReturningCounter, ...actResults.combined },
+    members: { all: memberCounter, ...actResults.members },
+    guestsFirst: { all: guestsFirstCounter, ...actResults.guestsFirst },
+    guestsReturning: { all: guestsReturningCounter, ...actResults.guestsReturning },
+  };
 
-  // Backfill counters/users from source data
-  const totalCombined = memberCounter + guestsFirstCounter + guestsReturningCounter;
-  await db.collection("counters").doc("users").set({
-    combined: { all: totalCombined },
-    members: { all: memberCounter },
-    guestsFirst: { all: guestsFirstCounter },
-    guestsReturning: { all: guestsReturningCounter },
-  }, { merge: true });
+  await db.collection("analytics").doc("global").set(globalData, { merge: true });
 
   return { success: true, data: globalData };
 });
@@ -2601,21 +2631,21 @@ exports.deleteMemberSuite = onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // COUNTER HELPERS — atomic user count tracking via the_qag_registry triggers
 // ------------------------------------------------------------------
-const COUNTER_REF = db.collection("counters").doc("users");
+const ANALYTICS_REF = db.collection("analytics").doc("global");
 
 async function _updateUserCounter(type, guestTier, delta) {
   const update = {};
-  update["combined.all"] = admin.firestore.FieldValue.increment(delta);
+  update["users.combined.all"] = admin.firestore.FieldValue.increment(delta);
   if (type === "member") {
-    update["members.all"] = admin.firestore.FieldValue.increment(delta);
+    update["users.members.all"] = admin.firestore.FieldValue.increment(delta);
   } else if (type === "guest") {
     if (guestTier === "returning") {
-      update["guestsReturning.all"] = admin.firestore.FieldValue.increment(delta);
+      update["users.guestsReturning.all"] = admin.firestore.FieldValue.increment(delta);
     } else {
-      update["guestsFirst.all"] = admin.firestore.FieldValue.increment(delta);
+      update["users.guestsFirst.all"] = admin.firestore.FieldValue.increment(delta);
     }
   }
-  await COUNTER_REF.set(update, { merge: true }).catch(e =>
+  await ANALYTICS_REF.set(update, { merge: true }).catch(e =>
     console.warn("[_updateUserCounter] failed:", e.message)
   );
 }
@@ -2685,19 +2715,19 @@ exports.computeActiveUsers = functions.pubsub.schedule("every 6 hours").onRun(as
     }
   }
 
-  // Read total counts
+  // Read total counts from analytics/global.users
   let totalCombined = 0, totalMembers = 0, totalGuestsFirst = 0, totalGuestsReturning = 0;
   try {
-    const counterDoc = await COUNTER_REF.get();
-    if (counterDoc.exists) {
-      const c = counterDoc.data();
-      totalCombined = c.combined?.all ?? 0;
-      totalMembers = c.members?.all ?? 0;
-      totalGuestsFirst = c.guestsFirst?.all ?? 0;
-      totalGuestsReturning = c.guestsReturning?.all ?? 0;
+    const globalDoc = await ANALYTICS_REF.get();
+    if (globalDoc.exists) {
+      const u = globalDoc.data().users || {};
+      totalCombined = u.combined?.all ?? 0;
+      totalMembers = u.members?.all ?? 0;
+      totalGuestsFirst = u.guestsFirst?.all ?? 0;
+      totalGuestsReturning = u.guestsReturning?.all ?? 0;
     }
   } catch (e) {
-    console.warn("[computeActiveUsers] counter read failed:", e.message);
+    console.warn("[computeActiveUsers] analytics read failed:", e.message);
   }
 
   const analyticsData = {
