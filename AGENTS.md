@@ -2,6 +2,12 @@
 
 ---
 
+## Ponytail
+
+Not using yet. Enay has plans to implement ponytail in the future.
+
+---
+
 ## 1. Quick Reference
 
 ### Device
@@ -51,6 +57,7 @@ adb connect 10.184.222.252:5555
 #### At Launch
 - [ ] Swap ad unit IDs (test → real) in `lib/features/monetization/ads/ad_units.dart`
 - [ ] Add 2 mediation partners (AppLovin + Mintegral) to AdMob bidding (needs live app link first)
+- [ ] Change Google Play third-party app store setting from Option 3 to Option 1 (publish to all stores)
 
 #### 2 Months Post-Launch
 - [ ] Launch PRO tier ($6.99) — gating already implemented, needs Play product IDs + flip switch

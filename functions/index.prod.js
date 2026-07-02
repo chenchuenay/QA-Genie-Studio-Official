@@ -564,6 +564,7 @@ exports.generate = onCall(async (data, context) => {
           t.set(uRef, {
             uid,
             type: "member",
+            lastActive: admin.firestore.FieldValue.serverTimestamp(),
             metrics: {
               ...metrics,
               generations: {
@@ -601,6 +602,7 @@ exports.generate = onCall(async (data, context) => {
           t.set(uRef, {
             uid,
             type: "guest",
+            lastActive: admin.firestore.FieldValue.serverTimestamp(),
             metrics: {
               ...guestMetrics,
               generations: {
@@ -718,6 +720,7 @@ exports.recordExportMetrics = onCall(async (data, context) => {
   }
 
   const usageUpdate = {
+    lastActive: admin.firestore.FieldValue.serverTimestamp(),
     exports: {
       lifetimeExports: admin.firestore.FieldValue.increment(1),
       [`exportTargets.${type}`]: admin.firestore.FieldValue.increment(1),
@@ -846,6 +849,7 @@ exports.getOrCreateGuestToken = onCall(async (data) => {
       reuseBatch.update(db.collection("guests").doc(existingUid), { guestTier: "returning" });
       reuseBatch.set(db.collection("usage").doc(existingUid), {
         type: "guest",
+        guestTier: "returning",
         metrics: { lifetimeGeneratedCases: 0 },
         exports: { lifetimeExports: 0 },
       });
@@ -871,10 +875,10 @@ exports.getOrCreateGuestToken = onCall(async (data) => {
       guestTier: "returning",
     });
     batch.set(db.collection("usage").doc(newUid), {
-      type: "guest", metrics: { lifetimeGeneratedCases: 0 }, exports: { lifetimeExports: 0 },
+      type: "guest", guestTier: "returning", metrics: { lifetimeGeneratedCases: 0 }, exports: { lifetimeExports: 0 },
     });
     batch.set(db.collection("the_qag_registry").doc(newUid), {
-      uid: newUid, type: "guest", displayName, deviceId, createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      uid: newUid, type: "guest", guestTier: "returning", displayName, deviceId, createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     batch.set(db.collection("deviceGuestMapping").doc(deviceDocId), {
       guestUid: newUid, androidId: androidId || null, createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -926,12 +930,14 @@ exports.getOrCreateGuestToken = onCall(async (data) => {
     });
     batch.set(db.collection("usage").doc(guestUid), {
       type: "guest",
+      guestTier,
       metrics: { lifetimeGeneratedCases: 0 },
       exports: { lifetimeExports: 0 },
     });
     batch.set(db.collection("the_qag_registry").doc(guestUid), {
       uid: guestUid,
       type: "guest",
+      guestTier,
       displayName,
       deviceId,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1182,9 +1188,19 @@ exports.recomputeAnalytics = onCall(async (data, context) => {
   const regSnap = await db.collection("the_qag_registry").get();
   let guestCounter = 0;
   let registryCounter = 0;
+  let memberCounter = 0;
+  let guestsFirstCounter = 0;
+  let guestsReturningCounter = 0;
   regSnap.forEach(d => {
     registryCounter++;
-    if (d.data().type === "guest") guestCounter++;
+    const d2 = d.data();
+    if (d2.type === "member") {
+      memberCounter++;
+    } else if (d2.type === "guest") {
+      guestCounter++;
+      if (d2.guestTier === "returning") guestsReturningCounter++;
+      else guestsFirstCounter++;
+    }
   });
 
   // 3. Aggregate from all usage docs
@@ -1281,6 +1297,16 @@ exports.recomputeAnalytics = onCall(async (data, context) => {
   };
 
   await db.collection("analytics").doc("global").set(globalData, { merge: true });
+
+  // Backfill counters/users from source data
+  const totalCombined = memberCounter + guestsFirstCounter + guestsReturningCounter;
+  await db.collection("counters").doc("users").set({
+    combined: { all: totalCombined },
+    members: { all: memberCounter },
+    guestsFirst: { all: guestsFirstCounter },
+    guestsReturning: { all: guestsReturningCounter },
+  }, { merge: true });
+
   return { success: true, data: globalData };
 });
 
@@ -2570,6 +2596,135 @@ exports.deleteMemberSuite = onCall(async (data, context) => {
   } catch (e) {
     return { success: false, error: e.message };
   }
+});
+
+// ------------------------------------------------------------------
+// COUNTER HELPERS — atomic user count tracking via the_qag_registry triggers
+// ------------------------------------------------------------------
+const COUNTER_REF = db.collection("counters").doc("users");
+
+async function _updateUserCounter(type, guestTier, delta) {
+  const update = {};
+  update["combined.all"] = admin.firestore.FieldValue.increment(delta);
+  if (type === "member") {
+    update["members.all"] = admin.firestore.FieldValue.increment(delta);
+  } else if (type === "guest") {
+    if (guestTier === "returning") {
+      update["guestsReturning.all"] = admin.firestore.FieldValue.increment(delta);
+    } else {
+      update["guestsFirst.all"] = admin.firestore.FieldValue.increment(delta);
+    }
+  }
+  await COUNTER_REF.set(update, { merge: true }).catch(e =>
+    console.warn("[_updateUserCounter] failed:", e.message)
+  );
+}
+
+// ------------------------------------------------------------------
+// FIRESTORE TRIGGER: Track total user counts via the_qag_registry
+// ------------------------------------------------------------------
+exports.onRegistryWrite = functions.firestore
+  .document("the_qag_registry/{id}")
+  .onWrite(async (change, context) => {
+    const before = change.before;
+    const after = change.after;
+
+    if (!before.exists && after.exists) {
+      const data = after.data();
+      await _updateUserCounter(data.type, data.guestTier, 1);
+    } else if (before.exists && !after.exists) {
+      const data = before.data();
+      await _updateUserCounter(data.type, data.guestTier, -1);
+    }
+  });
+
+// ------------------------------------------------------------------
+// SCHEDULED FUNCTION: Compute active user counts every 6 hours
+// ------------------------------------------------------------------
+exports.computeActiveUsers = functions.pubsub.schedule("every 6 hours").onRun(async (context) => {
+  const now = Date.now();
+  const windows = {
+    active24h: new Date(now - 24 * 60 * 60 * 1000),
+    active7d: new Date(now - 7 * 24 * 60 * 60 * 1000),
+    active30d: new Date(now - 30 * 24 * 60 * 60 * 1000),
+  };
+
+  const results = { combined: {}, members: {}, guestsFirst: {}, guestsReturning: {} };
+
+  for (const [windowKey, cutoff] of Object.entries(windows)) {
+    try {
+      const snap = await db.collection("usage")
+        .where("lastActive", ">", cutoff)
+        .get();
+
+      let combined = 0, members = 0, guestsFirst = 0, guestsReturning = 0;
+      snap.forEach(doc => {
+        const data = doc.data();
+        combined++;
+        if (data.type === "member") {
+          members++;
+        } else if (data.type === "guest") {
+          if (data.guestTier === "returning") {
+            guestsReturning++;
+          } else {
+            guestsFirst++;
+          }
+        }
+      });
+
+      results.combined[windowKey] = combined;
+      results.members[windowKey] = members;
+      results.guestsFirst[windowKey] = guestsFirst;
+      results.guestsReturning[windowKey] = guestsReturning;
+    } catch (e) {
+      console.warn(`[computeActiveUsers] ${windowKey} query failed:`, e.message);
+      results.combined[windowKey] = 0;
+      results.members[windowKey] = 0;
+      results.guestsFirst[windowKey] = 0;
+      results.guestsReturning[windowKey] = 0;
+    }
+  }
+
+  // Read total counts
+  let totalCombined = 0, totalMembers = 0, totalGuestsFirst = 0, totalGuestsReturning = 0;
+  try {
+    const counterDoc = await COUNTER_REF.get();
+    if (counterDoc.exists) {
+      const c = counterDoc.data();
+      totalCombined = c.combined?.all ?? 0;
+      totalMembers = c.members?.all ?? 0;
+      totalGuestsFirst = c.guestsFirst?.all ?? 0;
+      totalGuestsReturning = c.guestsReturning?.all ?? 0;
+    }
+  } catch (e) {
+    console.warn("[computeActiveUsers] counter read failed:", e.message);
+  }
+
+  const analyticsData = {
+    users: {
+      combined: {
+        all: totalCombined,
+        ...results.combined,
+      },
+      members: {
+        all: totalMembers,
+        ...results.members,
+      },
+      guestsFirst: {
+        all: totalGuestsFirst,
+        ...results.guestsFirst,
+      },
+      guestsReturning: {
+        all: totalGuestsReturning,
+        ...results.guestsReturning,
+      },
+    },
+    lastComputed: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  await db.collection("analytics").doc("global").set(analyticsData);
+  console.log("[computeActiveUsers] analytics/global updated");
+  return null;
 });
 
 function transformTestCases(rawCases, module, feature, platform, limit) {
