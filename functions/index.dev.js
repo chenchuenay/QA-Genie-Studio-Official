@@ -475,16 +475,23 @@ exports.generate = onCall(async (data, context) => {
         }
 
         let isPro = false,
-          isGuest = false;
-        if (memberProfileDoc.exists)
+          isGuest = false,
+          userType = "guest",
+          guestTier = null;
+        if (memberProfileDoc.exists) {
           isPro = memberProfileDoc.data()?.subscription?.planType === "pro";
-        else if (guestDoc.exists) {
+          userType = "member";
+        } else if (guestDoc.exists) {
           isGuest = true;
+          guestTier = guestDoc.data()?.guestTier || "first";
           if (deviceId && guestDoc.data()?.identity?.deviceId &&
               guestDoc.data().identity.deviceId !== deviceId) {
             throw new Error("DEVICE_ID_MISMATCH");
           }
-        } else isGuest = true;
+        } else {
+          isGuest = true;
+          guestTier = "first";
+        }
 
         // Quota check
         let rewardedCount = 0,
@@ -513,7 +520,6 @@ exports.generate = onCall(async (data, context) => {
             : { rewardedGenCount: 0, lastReset: nowStr, uid };
           if (devData.lastReset !== nowStr) devData.rewardedGenCount = 0;
           rewardedCount = devData.rewardedGenCount || 0;
-          const guestTier = guestDoc.data()?.guestTier || "first";
           const guestMax = guestTier === "returning" ? RETURNING_GUEST_BATCHES_PER_DAY : CORE_REWARDED_BATCHES_PER_DAY;
           if (!adPresent) throw new Error("REWARDED_AD_REQUIRED");
           if (!(rewardedCount < guestMax) && !(aiFailed || adPresent))
@@ -547,6 +553,8 @@ exports.generate = onCall(async (data, context) => {
             freeFallback: true,
             usage: responseUsage,
             caseCount,
+            userType,
+            guestTier,
           };
         }
 
@@ -642,6 +650,8 @@ exports.generate = onCall(async (data, context) => {
             fallback: true,
             usage: responseUsage,
             caseCount,
+            userType,
+            guestTier,
           };
         }
 
@@ -663,10 +673,13 @@ exports.generate = onCall(async (data, context) => {
           testCases: responseTestCases,
           usage: responseUsage,
           caseCount,
+          userType,
+          guestTier,
         };
       });
 
       const isFree = generationData.freeFallback === true;
+      _trackActiveUser(uid, generationData.userType, generationData.guestTier).catch(() => {});
       return aiFailed
         ? { success: true, data: { fallback: true, freeFallback: isFree, usage: generationData.usage } }
         : { success: true, data: { testCases: generationData.testCases, usage: generationData.usage } };
@@ -705,6 +718,11 @@ exports.recordExportMetrics = onCall(async (data, context) => {
   const profile = await _getMemberProfileByUid(uid);
   const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
 
+  // Determine user type for active tracking
+  const guestDoc = !profile ? await db.collection("guests").doc(uid).get() : null;
+  const userType = profile ? "member" : (guestDoc?.exists ? "guest" : null);
+  const guestTier = userType === "guest" ? (guestDoc?.data()?.guestTier || "first") : null;
+
   if (!isPro) {
     // Non-pro (core + guest): check daily export limit
     const usageDoc = await uRef.get();
@@ -742,6 +760,7 @@ exports.recordExportMetrics = onCall(async (data, context) => {
     usageUpdate.metrics.lastReset = nowStr;
   }
   await uRef.set(usageUpdate, { merge: true });
+  if (userType) _trackActiveUser(uid, userType, guestTier).catch(() => {});
   return { success: true };
 });
 
@@ -1296,16 +1315,46 @@ exports.recomputeAnalytics = onCall(async (data, context) => {
     },
   };
 
-  await db.collection("analytics").doc("global").set(globalData, { merge: true });
+  // Active user window queries
+  const now = Date.now();
+  const windows = {
+    active24h: new Date(now - 24 * 60 * 60 * 1000),
+    active7d: new Date(now - 7 * 24 * 60 * 60 * 1000),
+    active30d: new Date(now - 30 * 24 * 60 * 60 * 1000),
+  };
+  const actResults = { combined: {}, members: {}, guestsFirst: {}, guestsReturning: {} };
+  for (const [windowKey, cutoff] of Object.entries(windows)) {
+    try {
+      const snap = await db.collection("usage").where("lastActive", ">", cutoff).get();
+      let combined = 0, members = 0, guestsFirst = 0, guestsReturning = 0;
+      snap.forEach(doc => {
+        const d = doc.data();
+        combined++;
+        if (d.type === "member") members++;
+        else if (d.type === "guest") {
+          if (d.guestTier === "returning") guestsReturning++;
+          else guestsFirst++;
+        }
+      });
+      actResults.combined[windowKey] = combined;
+      actResults.members[windowKey] = members;
+      actResults.guestsFirst[windowKey] = guestsFirst;
+      actResults.guestsReturning[windowKey] = guestsReturning;
+    } catch (e) {
+      actResults.combined[windowKey] = 0;
+      actResults.members[windowKey] = 0;
+      actResults.guestsFirst[windowKey] = 0;
+      actResults.guestsReturning[windowKey] = 0;
+    }
+  }
+  globalData.users = {
+    combined: { all: memberCounter + guestsFirstCounter + guestsReturningCounter, ...actResults.combined },
+    members: { all: memberCounter, ...actResults.members },
+    guestsFirst: { all: guestsFirstCounter, ...actResults.guestsFirst },
+    guestsReturning: { all: guestsReturningCounter, ...actResults.guestsReturning },
+  };
 
-  // Backfill counters/users from source data
-  const totalCombined = memberCounter + guestsFirstCounter + guestsReturningCounter;
-  await db.collection("counters").doc("users").set({
-    combined: { all: totalCombined },
-    members: { all: memberCounter },
-    guestsFirst: { all: guestsFirstCounter },
-    guestsReturning: { all: guestsReturningCounter },
-  }, { merge: true });
+  await db.collection("analytics").doc("global").set(globalData, { merge: true });
 
   return { success: true, data: globalData };
 });
@@ -2425,6 +2474,7 @@ function _parseGcsCases(content) {
   try {
     return JSON.parse(raw);
   } catch (_) {
+    // Maybe content is still gzip-compressed despite decompress: true
     try {
       return JSON.parse(zlib.gunzipSync(content).toString());
     } catch (_2) {
@@ -2448,6 +2498,7 @@ exports.getMemberSuites = onCall(async (data, context) => {
     ? Math.min(Math.max(1, data.pageSize), 100)
     : 10;
   const pageToken = data.pageToken || null;
+  const includeCases = data.includeCases === true;
 
   try {
     let effectiveUid = uid;
@@ -2599,23 +2650,69 @@ exports.deleteMemberSuite = onCall(async (data, context) => {
 // ------------------------------------------------------------------
 // COUNTER HELPERS — atomic user count tracking via the_qag_registry triggers
 // ------------------------------------------------------------------
-const COUNTER_REF = db.collection("counters").doc("users");
+const ANALYTICS_REF = db.collection("analytics").doc("global");
 
 async function _updateUserCounter(type, guestTier, delta) {
   const update = {};
-  update["combined.all"] = admin.firestore.FieldValue.increment(delta);
+  update["users.combined.all"] = admin.firestore.FieldValue.increment(delta);
   if (type === "member") {
-    update["members.all"] = admin.firestore.FieldValue.increment(delta);
+    update["users.members.all"] = admin.firestore.FieldValue.increment(delta);
   } else if (type === "guest") {
     if (guestTier === "returning") {
-      update["guestsReturning.all"] = admin.firestore.FieldValue.increment(delta);
+      update["users.guestsReturning.all"] = admin.firestore.FieldValue.increment(delta);
     } else {
-      update["guestsFirst.all"] = admin.firestore.FieldValue.increment(delta);
+      update["users.guestsFirst.all"] = admin.firestore.FieldValue.increment(delta);
     }
   }
-  await COUNTER_REF.set(update, { merge: true }).catch(e =>
+  await ANALYTICS_REF.set(update, { merge: true }).catch(e =>
     console.warn("[_updateUserCounter] failed:", e.message)
   );
+}
+
+// ------------------------------------------------------------------
+// ACTIVE USER TRACKING — real-time window counts on generate/export
+// Uses activeTracking/{uid} markers to prevent double-count within each window.
+// ------------------------------------------------------------------
+async function _trackActiveUser(uid, type, tier) {
+  const now = Date.now();
+  const windowDefs = [
+    { field: "active24h", duration: 24 * 60 * 60 * 1000 },
+    { field: "active7d", duration: 7 * 24 * 60 * 60 * 1000 },
+    { field: "active30d", duration: 30 * 24 * 60 * 60 * 1000 },
+  ];
+  let markerData = {};
+  try {
+    const snap = await db.collection("activeTracking").doc(uid).get();
+    if (snap.exists) markerData = snap.data();
+  } catch (e) {
+    return;
+  }
+  const analyticsUpdates = {};
+  const markerUpdates = {};
+  let needsUpdate = false;
+  for (const { field, duration } of windowDefs) {
+    const lastVal = markerData[field];
+    let lastTime = 0;
+    if (lastVal) {
+      if (typeof lastVal.toDate === "function") lastTime = lastVal.toDate().getTime();
+      else if (lastVal instanceof Date) lastTime = lastVal.getTime();
+      else if (typeof lastVal === "number") lastTime = lastVal;
+      else if (typeof lastVal === "string") lastTime = new Date(lastVal).getTime();
+    }
+    if (!lastVal || (now - lastTime) > duration) {
+      const group = type === "member" ? "members" : (tier === "returning" ? "guestsReturning" : "guestsFirst");
+      analyticsUpdates[`users.${group}.${field}`] = admin.firestore.FieldValue.increment(1);
+      analyticsUpdates[`users.combined.${field}`] = admin.firestore.FieldValue.increment(1);
+      markerUpdates[field] = admin.firestore.FieldValue.serverTimestamp();
+      needsUpdate = true;
+    }
+  }
+  if (needsUpdate) {
+    await Promise.all([
+      ANALYTICS_REF.set(analyticsUpdates, { merge: true }),
+      db.collection("activeTracking").doc(uid).set(markerUpdates, { merge: true }).catch(() => {}),
+    ]);
+  }
 }
 
 // ------------------------------------------------------------------
@@ -2683,19 +2780,19 @@ exports.computeActiveUsers = functions.pubsub.schedule("every 6 hours").onRun(as
     }
   }
 
-  // Read total counts
+  // Read total counts from analytics/global.users
   let totalCombined = 0, totalMembers = 0, totalGuestsFirst = 0, totalGuestsReturning = 0;
   try {
-    const counterDoc = await COUNTER_REF.get();
-    if (counterDoc.exists) {
-      const c = counterDoc.data();
-      totalCombined = c.combined?.all ?? 0;
-      totalMembers = c.members?.all ?? 0;
-      totalGuestsFirst = c.guestsFirst?.all ?? 0;
-      totalGuestsReturning = c.guestsReturning?.all ?? 0;
+    const globalDoc = await ANALYTICS_REF.get();
+    if (globalDoc.exists) {
+      const u = globalDoc.data().users || {};
+      totalCombined = u.combined?.all ?? 0;
+      totalMembers = u.members?.all ?? 0;
+      totalGuestsFirst = u.guestsFirst?.all ?? 0;
+      totalGuestsReturning = u.guestsReturning?.all ?? 0;
     }
   } catch (e) {
-    console.warn("[computeActiveUsers] counter read failed:", e.message);
+    console.warn("[computeActiveUsers] analytics read failed:", e.message);
   }
 
   const analyticsData = {
