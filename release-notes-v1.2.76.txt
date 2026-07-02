@@ -1,0 +1,18 @@
+v1.2.76 — Jul 2, 2026
+
+What's new:
+
+• Auth dialog now shows a clear hint explaining why sign-in buttons
+  are disabled — users know they need to enable the analytics consent
+  checkbox to proceed. No more confusion on first launch.
+
+• Cloud function fault tolerance improvements — all non-critical
+  Firestore writes wrapped in try/catch, auto-retry for transient
+  failures, more resilient generation pipeline.
+
+• Force update mechanism via Firestore — version bumps no longer
+  require an app rebuild. Configure minimum supported version
+  remotely through app_config/version doc.
+
+• Client-side Google Sign-In auto-retry (3 attempts with backoff)
+  for transient network failures.
