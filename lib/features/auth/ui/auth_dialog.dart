@@ -558,7 +558,14 @@ class _AuthDialogState extends State<AuthDialog> {
                   ),
                 ],
                 if (!_consentAlreadyStored) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  const Center(
+                    child: Text(
+                      'Enable the option below to continue',
+                      style: TextStyle(color: AppColors.textHint, fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
