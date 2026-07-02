@@ -475,16 +475,23 @@ exports.generate = onCall(async (data, context) => {
         }
 
         let isPro = false,
-          isGuest = false;
-        if (memberProfileDoc.exists)
+          isGuest = false,
+          userType = "guest",
+          guestTier = null;
+        if (memberProfileDoc.exists) {
           isPro = memberProfileDoc.data()?.subscription?.planType === "pro";
-        else if (guestDoc.exists) {
+          userType = "member";
+        } else if (guestDoc.exists) {
           isGuest = true;
+          guestTier = guestDoc.data()?.guestTier || "first";
           if (deviceId && guestDoc.data()?.identity?.deviceId &&
               guestDoc.data().identity.deviceId !== deviceId) {
             throw new Error("DEVICE_ID_MISMATCH");
           }
-        } else isGuest = true;
+        } else {
+          isGuest = true;
+          guestTier = "first";
+        }
 
         // Quota check
         let rewardedCount = 0,
@@ -513,7 +520,6 @@ exports.generate = onCall(async (data, context) => {
             : { rewardedGenCount: 0, lastReset: nowStr, uid };
           if (devData.lastReset !== nowStr) devData.rewardedGenCount = 0;
           rewardedCount = devData.rewardedGenCount || 0;
-          const guestTier = guestDoc.data()?.guestTier || "first";
           const guestMax = guestTier === "returning" ? RETURNING_GUEST_BATCHES_PER_DAY : CORE_REWARDED_BATCHES_PER_DAY;
           if (!adPresent) throw new Error("REWARDED_AD_REQUIRED");
           if (!(rewardedCount < guestMax) && !(aiFailed || adPresent))
@@ -547,6 +553,8 @@ exports.generate = onCall(async (data, context) => {
             freeFallback: true,
             usage: responseUsage,
             caseCount,
+            userType,
+            guestTier,
           };
         }
 
@@ -642,6 +650,8 @@ exports.generate = onCall(async (data, context) => {
             fallback: true,
             usage: responseUsage,
             caseCount,
+            userType,
+            guestTier,
           };
         }
 
@@ -663,10 +673,13 @@ exports.generate = onCall(async (data, context) => {
           testCases: responseTestCases,
           usage: responseUsage,
           caseCount,
+          userType,
+          guestTier,
         };
       });
 
       const isFree = generationData.freeFallback === true;
+      _trackActiveUser(uid, generationData.userType, generationData.guestTier).catch(() => {});
       return aiFailed
         ? { success: true, data: { fallback: true, freeFallback: isFree, usage: generationData.usage } }
         : { success: true, data: { testCases: generationData.testCases, usage: generationData.usage } };
@@ -705,6 +718,11 @@ exports.recordExportMetrics = onCall(async (data, context) => {
   const profile = await _getMemberProfileByUid(uid);
   const isPro = profile ? profile.data.subscription?.planType === "pro" : false;
 
+  // Determine user type for active tracking
+  const guestDoc = !profile ? await db.collection("guests").doc(uid).get() : null;
+  const userType = profile ? "member" : (guestDoc?.exists ? "guest" : null);
+  const guestTier = userType === "guest" ? (guestDoc?.data()?.guestTier || "first") : null;
+
   if (!isPro) {
     // Non-pro (core + guest): check daily export limit
     const usageDoc = await uRef.get();
@@ -742,6 +760,7 @@ exports.recordExportMetrics = onCall(async (data, context) => {
     usageUpdate.metrics.lastReset = nowStr;
   }
   await uRef.set(usageUpdate, { merge: true });
+  if (userType) _trackActiveUser(uid, userType, guestTier).catch(() => {});
   return { success: true };
 });
 
@@ -2648,6 +2667,52 @@ async function _updateUserCounter(type, guestTier, delta) {
   await ANALYTICS_REF.set(update, { merge: true }).catch(e =>
     console.warn("[_updateUserCounter] failed:", e.message)
   );
+}
+
+// ------------------------------------------------------------------
+// ACTIVE USER TRACKING — real-time window counts on generate/export
+// Uses activeTracking/{uid} markers to prevent double-count within each window.
+// ------------------------------------------------------------------
+async function _trackActiveUser(uid, type, tier) {
+  const now = Date.now();
+  const windowDefs = [
+    { field: "active24h", duration: 24 * 60 * 60 * 1000 },
+    { field: "active7d", duration: 7 * 24 * 60 * 60 * 1000 },
+    { field: "active30d", duration: 30 * 24 * 60 * 60 * 1000 },
+  ];
+  let markerData = {};
+  try {
+    const snap = await db.collection("activeTracking").doc(uid).get();
+    if (snap.exists) markerData = snap.data();
+  } catch (e) {
+    return;
+  }
+  const analyticsUpdates = {};
+  const markerUpdates = {};
+  let needsUpdate = false;
+  for (const { field, duration } of windowDefs) {
+    const lastVal = markerData[field];
+    let lastTime = 0;
+    if (lastVal) {
+      if (typeof lastVal.toDate === "function") lastTime = lastVal.toDate().getTime();
+      else if (lastVal instanceof Date) lastTime = lastVal.getTime();
+      else if (typeof lastVal === "number") lastTime = lastVal;
+      else if (typeof lastVal === "string") lastTime = new Date(lastVal).getTime();
+    }
+    if (!lastVal || (now - lastTime) > duration) {
+      const group = type === "member" ? "members" : (tier === "returning" ? "guestsReturning" : "guestsFirst");
+      analyticsUpdates[`users.${group}.${field}`] = admin.firestore.FieldValue.increment(1);
+      analyticsUpdates[`users.combined.${field}`] = admin.firestore.FieldValue.increment(1);
+      markerUpdates[field] = admin.firestore.FieldValue.serverTimestamp();
+      needsUpdate = true;
+    }
+  }
+  if (needsUpdate) {
+    await Promise.all([
+      ANALYTICS_REF.set(analyticsUpdates, { merge: true }),
+      db.collection("activeTracking").doc(uid).set(markerUpdates, { merge: true }).catch(() => {}),
+    ]);
+  }
 }
 
 // ------------------------------------------------------------------
