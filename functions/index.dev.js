@@ -636,23 +636,24 @@ exports.generate = onCall(async (data, context) => {
 
         if (aiFailed) {
           // Quota consumed but no test cases to return — client will use fallback
-          const responseUsage = {
-            rewardedGenCount: rewardedCount + 1,
-            proFreeGenCount: proFreeCount + (isPro ? 1 : 0),
-            lifetimeGeneratedCases: lifetimeCases,
-            resetTimestamp: getResetISO(),
-          };
-          t.set(reqRef, {
-            uid,
-            processedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          return {
-            fallback: true,
-            usage: responseUsage,
-            caseCount,
-            userType,
-            guestTier,
-          };
+        const responseUsage = {
+          rewardedGenCount: rewardedCount + 1,
+          proFreeGenCount: proFreeCount + (isPro ? 1 : 0),
+          lifetimeGeneratedCases: lifetimeCases,
+          resetTimestamp: getResetISO(),
+        };
+        t.set(reqRef, {
+          uid,
+          processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return {
+          fallback: true,
+          usage: responseUsage,
+          caseCount,
+          userType,
+          guestTier,
+          isPro,
+        };
         }
 
         const responseTestCases = transformTestCases(
@@ -675,11 +676,27 @@ exports.generate = onCall(async (data, context) => {
           caseCount,
           userType,
           guestTier,
+          isPro,
         };
       });
 
       const isFree = generationData.freeFallback === true;
       _trackActiveUser(uid, generationData.userType, generationData.guestTier).catch(() => {});
+      // Real-time global analytics (skip free fallback — no quota consumed)
+      if (generationData.caseCount && !generationData.freeFallback) {
+        const genUpdate = {
+          generation: {
+            totalGenerations: admin.firestore.FieldValue.increment(1),
+            totalTestCaseGenerated: admin.firestore.FieldValue.increment(generationData.caseCount),
+          },
+        };
+        if (generationData.isPro) {
+          genUpdate.generation.proGeneratedCases = admin.firestore.FieldValue.increment(generationData.caseCount);
+        } else {
+          genUpdate.generation.coreGeneratedCases = admin.firestore.FieldValue.increment(generationData.caseCount);
+        }
+        ANALYTICS_REF.set(genUpdate, { merge: true }).catch(() => {});
+      }
       return aiFailed
         ? { success: true, data: { fallback: true, freeFallback: isFree, usage: generationData.usage } }
         : { success: true, data: { testCases: generationData.testCases, usage: generationData.usage } };
@@ -761,6 +778,18 @@ exports.recordExportMetrics = onCall(async (data, context) => {
   }
   await uRef.set(usageUpdate, { merge: true });
   if (userType) _trackActiveUser(uid, userType, guestTier).catch(() => {});
+  // Real-time global export analytics
+  const exportUpdate = {
+    exports: {
+      totalExports: admin.firestore.FieldValue.increment(1),
+      targets: { [type]: admin.firestore.FieldValue.increment(1) },
+      extensions: { [ext]: admin.firestore.FieldValue.increment(1) },
+    },
+  };
+  if (summary) {
+    exportUpdate.exports.totalSummaryExports = admin.firestore.FieldValue.increment(1);
+  }
+  ANALYTICS_REF.set(exportUpdate, { merge: true }).catch(() => {});
   return { success: true };
 });
 
@@ -782,6 +811,12 @@ exports.recordRating = onCall(async (data, context) => {
       },
     },
   }, { merge: true });
+  ANALYTICS_REF.set({
+    ratings: {
+      totalRatings: admin.firestore.FieldValue.increment(1),
+      [`breakdown.${rating}`]: admin.firestore.FieldValue.increment(1),
+    },
+  }, { merge: true }).catch(() => {});
   return { success: true };
 });
 
@@ -1185,6 +1220,9 @@ exports.recordProInterest = onCall(async (data, context) => {
       (interests.proInterestSources[source] || 0) + 1;
     t.set(uRef, { uid, interests }, { merge: true });
   });
+  ANALYTICS_REF.set({
+    pro: { totalProInterest: admin.firestore.FieldValue.increment(1) },
+  }, { merge: true }).catch(() => {});
   return { success: true };
 });
 
