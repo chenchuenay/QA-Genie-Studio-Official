@@ -2701,8 +2701,11 @@ async function _trackActiveUser(uid, type, tier) {
     }
     if (!lastVal || (now - lastTime) > duration) {
       const group = type === "member" ? "members" : (tier === "returning" ? "guestsReturning" : "guestsFirst");
-      analyticsUpdates[`users.${group}.${field}`] = admin.firestore.FieldValue.increment(1);
-      analyticsUpdates[`users.combined.${field}`] = admin.firestore.FieldValue.increment(1);
+      if (!analyticsUpdates.users) analyticsUpdates.users = {};
+      if (!analyticsUpdates.users.combined) analyticsUpdates.users.combined = {};
+      if (!analyticsUpdates.users[group]) analyticsUpdates.users[group] = {};
+      analyticsUpdates.users.combined[field] = admin.firestore.FieldValue.increment(1);
+      analyticsUpdates.users[group][field] = admin.firestore.FieldValue.increment(1);
       markerUpdates[field] = admin.firestore.FieldValue.serverTimestamp();
       needsUpdate = true;
     }
