@@ -1673,7 +1673,16 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
   let recoveredCreatedAt = null;
   if (email) {
     const profileRef = db.collection("memberProfiles").doc(email);
-    const existingProfile = await profileRef.get();
+    let existingProfile = await profileRef.get();
+    // Stale deletion: profile has deletedAt past cleanupAfter → delete, treat as fresh member
+    if (existingProfile.exists && existingProfile.data().deletedAt) {
+      const ca = existingProfile.data().cleanupAfter;
+      const cleanupAfter = ca?.toDate ? ca.toDate() : ca;
+      if (cleanupAfter && cleanupAfter < new Date()) {
+        await profileRef.delete().catch(() => {});
+        existingProfile = await profileRef.get();
+      }
+    }
     const originalUid = existingProfile.exists
       ? (existingProfile.data().deletedAt ? uid : existingProfile.data().uid)
       : uid;
@@ -1764,13 +1773,17 @@ exports.deleteAccount = onCall(async (data, context) => {
         ),
         reason: "account_deleted",
       });
-      // Preserve original data in memberProfiles so re-registration recovers the join date
+      // Keep memberProfiles during 24h cooldown for cooldown enforcement
+      // cleanupAfter marks when the profile can be safely deleted (24h cooldown)
       batch.set(db.collection("memberProfiles").doc(email), {
         uid,
         email,
         type: "member",
         createdAt: profile.data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
         deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        cleanupAfter: admin.firestore.Timestamp.fromDate(
+          new Date(Date.now() + COOLDOWN_HOURS * 60 * 60 * 1000),
+        ),
       }, { merge: true });
     }
   } else {
@@ -1916,6 +1929,20 @@ exports.onMemberProfileDeleted = functions.firestore
       ),
       reason: "manual_console_deletion",
     });
+
+    // 5. Anonymize issue reports for this user
+    try {
+      const reportsSnaps = await Promise.all([
+        db.collection("issue_reports").doc("open").collection(email).get(),
+        db.collection("issue_reports").doc("working").collection(email).get(),
+        db.collection("issue_reports").doc("fixed").collection(email).get(),
+      ]);
+      for (const snap of reportsSnaps) {
+        snap.forEach(doc => batch.update(doc.ref, { uid: "deleted_member" }));
+      }
+    } catch (e) {
+      console.warn(`${logPrefix} failed to anonymize issue reports: ${e.message}`);
+    }
 
     await batch.commit();
     await Promise.all(gcsPromises);
@@ -2910,6 +2937,36 @@ exports.computeActiveUsers = functions.pubsub.schedule("every 6 hours").onRun(as
   if (existingRatings) analyticsData.ratings = existingRatings;
   if (existingPro) analyticsData.pro = existingPro;
   if (existingOther) analyticsData.other = existingOther;
+
+  // Cleanup: delete expired memberProfiles (past cleanupAfter) and emailCooldowns (past expires)
+  try {
+    const now = admin.firestore.Timestamp.now();
+    const cleanupBatch = db.batch();
+    let cleanupCount = 0;
+
+    const expiredProfiles = await db.collection("memberProfiles")
+      .where("cleanupAfter", "<", now)
+      .get();
+    expiredProfiles.forEach(doc => {
+      cleanupBatch.delete(doc.ref);
+      cleanupCount++;
+    });
+
+    const expiredCooldowns = await db.collection("emailCooldown")
+      .where("expires", "<", now)
+      .get();
+    expiredCooldowns.forEach(doc => {
+      cleanupBatch.delete(doc.ref);
+      cleanupCount++;
+    });
+
+    if (cleanupCount > 0) {
+      await cleanupBatch.commit();
+      console.log(`🧹 Cleaned up ${expiredProfiles.size} expired profiles + ${expiredCooldowns.size} expired cooldowns`);
+    }
+  } catch (e) {
+    console.warn("[computeActiveUsers] cleanup failed:", e.message);
+  }
 
   await db.collection("analytics").doc("global").set(analyticsData);
   console.log("[computeActiveUsers] analytics/global updated");

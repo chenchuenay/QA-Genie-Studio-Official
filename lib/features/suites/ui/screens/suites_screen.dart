@@ -35,6 +35,7 @@ class SuitesScreenState extends State<SuitesScreen> {
   bool _isLoadingMore = false;
   bool _isDeleting = false;
   bool _isRenaming = false;
+  bool _isOpeningSuite = false;
   bool _isPro = false;
   String? _nextPageToken;
   final _scrollController = ScrollController();
@@ -388,61 +389,67 @@ class SuitesScreenState extends State<SuitesScreen> {
             },
           ),
           onTap: () async {
-            var canonicalCases = await DatabaseService.getTestCasesForSuite(id);
-            if (canonicalCases.isEmpty) {
-              final cloudId = await DatabaseService.getCloudIdForSuite(id);
-              if (cloudId != null && NetworkGuard.isOnline && !AuthService.isGuest) {
-                canonicalCases = await CloudSyncService.fetchSuiteCases(
-                  cloudId: cloudId,
-                  localSuiteId: id,
-                );
+            if (_isOpeningSuite) return;
+            _isOpeningSuite = true;
+            try {
+              var canonicalCases = await DatabaseService.getTestCasesForSuite(id);
+              if (canonicalCases.isEmpty) {
+                final cloudId = await DatabaseService.getCloudIdForSuite(id);
+                if (cloudId != null && NetworkGuard.isOnline && !AuthService.isGuest) {
+                  canonicalCases = await CloudSyncService.fetchSuiteCases(
+                    cloudId: cloudId,
+                    localSuiteId: id,
+                  );
+                }
               }
-            }
-            if (canonicalCases.isEmpty && mounted) {
-              if (!context.mounted) return;
-              showBlurredDialog(
-                context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: AppColors.surface,
-                  title: const Text(
-                    'No Test Cases',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  content: const Text(
-                    'Could not load test cases for this suite.',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('OK'),
+              if (canonicalCases.isEmpty && mounted) {
+                if (!context.mounted) return;
+                showBlurredDialog(
+                  context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: AppColors.surface,
+                    title: const Text(
+                      'No Test Cases',
+                      style: TextStyle(color: Colors.white),
                     ),
-                  ],
+                    content: const Text(
+                      'Could not load test cases for this suite.',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+                );
+                return;
+              }
+              final session = GenerationSession(
+                traceId:
+                    'HISTORICAL_LOAD_${DateTime.now().millisecondsSinceEpoch}',
+                testCases: canonicalCases,
+                auditReport: const PipelineAuditReport(
+                  traceId: 'HISTORICAL_LOAD',
                 ),
               );
-              return;
-            }
-            final session = GenerationSession(
-              traceId:
-                  'HISTORICAL_LOAD_${DateTime.now().millisecondsSinceEpoch}',
-              testCases: canonicalCases,
-              auditReport: const PipelineAuditReport(
-                traceId: 'HISTORICAL_LOAD',
-              ),
-            );
-            if (!mounted) return;
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SuitePreviewScreen(
-                  session: session,
-                  moduleName: s['moduleName'] ?? 'Unknown',
-                  feature: s['feature'] ?? 'Unknown',
-                  platform: s['platform'] ?? 'Web',
-                  suiteId: id,
+              if (!mounted) return;
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SuitePreviewScreen(
+                    session: session,
+                    moduleName: s['moduleName'] ?? 'Unknown',
+                    feature: s['feature'] ?? 'Unknown',
+                    platform: s['platform'] ?? 'Web',
+                    suiteId: id,
+                  ),
                 ),
-              ),
-            );
+              );
+            } finally {
+              _isOpeningSuite = false;
+            }
           },
         ),
       ),
