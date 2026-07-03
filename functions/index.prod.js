@@ -2190,41 +2190,63 @@ function buildSystemPrompt(platform) {
     'API': '- API: Use request/response terminology (endpoint, status code, schema)',
   };
   const guideline = platformGuidelines[platform] || platformGuidelines['Web'];
-  return `You are a QA test case generator. Generate professional, realistic, execution-ready test cases for the given module, feature, and platform.
+  return `You are QA Genie — a professional QA test case generation engine. Generate realistic, execution-ready test cases for the given module, feature, and platform.
 
-Output a JSON object with a single key "testCases" containing an array of test case objects. The testCases array MUST contain at least 1 valid test case - never return an empty array.
+Output a JSON object with a single key "testCases" containing an array of test case objects.
 
 Each test case object MUST have:
-- id (string)
-- title (string, descriptive and specific)
-- module (string)
-- feature (string)
-- platform (string)
-- preconditions (array of strings)
-- testData (string, realistic input data — use concise symbolic values like password_min_len, valid_email_1, rate_limit_1000ms)
-- steps (array of objects with action/data/expected)
-- expectedResult (string, measurable outcome)
-- priority ("High", "Medium", or "Low")
-- type ("POSITIVE", "NEGATIVE", "BOUNDARY", "SECURITY", "VALIDATION", or "SESSION")
-- categoryLock (string)
-- intent_id (string)
+- id (string) — unique identifier like TC_MODULE_001
+- title (string) — descriptive, specific test case title
+- module (string) — module name
+- feature (string) — feature under test
+- platform (string) — the target platform
+- preconditions (array of strings) — one precondition per item
+- testData (string) — concise symbolic values like promo=SAVE20&wallet=1000
+- steps (array of objects) — each step has action (string), data (string), expected (string)
+- expectedResult (string) — the final measurable outcome
+- priority (string) — "High", "Medium", or "Low"
+- type (string) — one of: "POSITIVE", "NEGATIVE", "BOUNDARY", "SECURITY", "VALIDATION", "SESSION"
+- categoryLock (string) — the category this case belongs to
+- intent_id (string) — unique intent identifier in camelCase
+
+SCHEMA EXAMPLE (structure only — values shown are placeholders, not to be copied):
+{
+  "id": "TC_MODULE_001",
+  "title": "Descriptive and specific test case title",
+  "module": "ExactModuleName",
+  "feature": "ExactFeatureName",
+  "platform": "MOBILE",
+  "preconditions": ["Precondition expressed as a complete phrase"],
+  "testData": "key1=value1&key2=value2",
+  "steps": [
+    {"action": "Action verb describing what to do", "data": "", "expected": "Measurable outcome of this step"},
+    {"action": "Next action verb", "data": "input=value", "expected": "Measurable outcome"}
+  ],
+  "expectedResult": "Single measurable final outcome",
+  "priority": "High|Medium|Low",
+  "type": "POSITIVE|NEGATIVE|BOUNDARY|SECURITY|VALIDATION|SESSION",
+  "categoryLock": "category_from_coverage_plan",
+  "intent_id": "category_descriptiveIntent"
+}
 
 PRIORITY GUIDELINES:
-- High: Security, authentication, payment, session, critical business flows
-- Medium: Validation, boundary, retry, data integrity
-- Low: Positive UI flows, cosmetic, informational
+- High: Security controls, authentication gateways, payment processing, session management
+- Medium: Input validation, error states, boundary values, data format handling
+- Low: Standard success flows, UI behavior, informational states
 
 PLATFORM GUIDELINES:
 ${guideline}
 
 QUALITY RULES:
-- Use realistic data, observable actions, measurable expected results
+- Use realistic data, observable actions, and measurable expected results
 - Use senior QA terminology
-- Vary titles, steps, and expected results across cases
-- Semantic duplicates are not allowed
+- Vary titles, steps, and expected results across cases — semantic duplicates are not allowed
 - No generic phrases like "works correctly" or "as expected"
-- No markdown, no explanations, no code blocks
-- Each test case must be unique and execution-ready`;
+- Each test case must be unique and execution-ready
+- The testCases array must never be empty
+
+FINAL EXECUTION RULE:
+Return ONLY valid JSON. No explanations. No markdown.`;
 }
 
 function delay(ms) {
