@@ -2675,17 +2675,32 @@ exports.deleteMemberSuite = onCall(async (data, context) => {
 const ANALYTICS_REF = db.collection("analytics").doc("global");
 
 async function _updateUserCounter(type, guestTier, delta) {
-  const update = {};
-  update["users.combined.all"] = admin.firestore.FieldValue.increment(delta);
-  if (type === "member") {
-    update["users.members.all"] = admin.firestore.FieldValue.increment(delta);
-  } else if (type === "guest") {
-    if (guestTier === "returning") {
-      update["users.guestsReturning.all"] = admin.firestore.FieldValue.increment(delta);
-    } else {
-      update["users.guestsFirst.all"] = admin.firestore.FieldValue.increment(delta);
+  if (delta < 0) {
+    try {
+      const snap = await ANALYTICS_REF.get();
+      if (snap.exists) {
+        const u = snap.data().users || {};
+        const current = u.combined?.all ?? 0;
+        if (current + delta < 0) delta = -current;
+      }
+    } catch (e) {
+      console.warn("[_updateUserCounter] read failed:", e.message);
     }
   }
+
+  const update = {
+    users: {
+      combined: { all: admin.firestore.FieldValue.increment(delta) },
+    },
+  };
+
+  if (type === "member") {
+    update.users.members = { all: admin.firestore.FieldValue.increment(delta) };
+  } else if (type === "guest") {
+    const key = guestTier === "returning" ? "guestsReturning" : "guestsFirst";
+    update.users[key] = { all: admin.firestore.FieldValue.increment(delta) };
+  }
+
   await ANALYTICS_REF.set(update, { merge: true }).catch(e =>
     console.warn("[_updateUserCounter] failed:", e.message)
   );
