@@ -1674,7 +1674,9 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
   if (email) {
     const profileRef = db.collection("memberProfiles").doc(email);
     const existingProfile = await profileRef.get();
-    const originalUid = existingProfile.exists ? existingProfile.data().uid : uid;
+    const originalUid = existingProfile.exists
+      ? (existingProfile.data().deletedAt ? uid : existingProfile.data().uid)
+      : uid;
     if (existingProfile.exists && existingProfile.data().createdAt) {
       recoveredCreatedAt = existingProfile.data().createdAt;
     }
