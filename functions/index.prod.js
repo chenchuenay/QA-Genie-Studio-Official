@@ -2820,16 +2820,23 @@ exports.computeActiveUsers = functions.pubsub.schedule("every 6 hours").onRun(as
     }
   }
 
-  // Read total counts from analytics/global.users
+  // Read existing analytics to preserve non-user metrics
   let totalCombined = 0, totalMembers = 0, totalGuestsFirst = 0, totalGuestsReturning = 0;
+  let existingGeneration, existingExports, existingRatings, existingPro, existingOther;
   try {
     const globalDoc = await ANALYTICS_REF.get();
     if (globalDoc.exists) {
-      const u = globalDoc.data().users || {};
+      const gd = globalDoc.data();
+      const u = gd.users || {};
       totalCombined = u.combined?.all ?? 0;
       totalMembers = u.members?.all ?? 0;
       totalGuestsFirst = u.guestsFirst?.all ?? 0;
       totalGuestsReturning = u.guestsReturning?.all ?? 0;
+      existingGeneration = gd.generation;
+      existingExports = gd.exports;
+      existingRatings = gd.ratings;
+      existingPro = gd.pro;
+      existingOther = gd.other;
     }
   } catch (e) {
     console.warn("[computeActiveUsers] analytics read failed:", e.message);
@@ -2856,6 +2863,13 @@ exports.computeActiveUsers = functions.pubsub.schedule("every 6 hours").onRun(as
     },
     lastComputed: admin.firestore.FieldValue.serverTimestamp(),
   };
+
+  // Carry forward metrics from recomputeAnalytics if present
+  if (existingGeneration) analyticsData.generation = existingGeneration;
+  if (existingExports) analyticsData.exports = existingExports;
+  if (existingRatings) analyticsData.ratings = existingRatings;
+  if (existingPro) analyticsData.pro = existingPro;
+  if (existingOther) analyticsData.other = existingOther;
 
   await db.collection("analytics").doc("global").set(analyticsData);
   console.log("[computeActiveUsers] analytics/global updated");
