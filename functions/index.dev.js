@@ -758,14 +758,14 @@ exports.recordExportMetrics = onCall(async (data, context) => {
     lastActive: admin.firestore.FieldValue.serverTimestamp(),
     exports: {
       lifetimeExports: admin.firestore.FieldValue.increment(1),
-      [`exportTargets.${type}`]: admin.firestore.FieldValue.increment(1),
-      [`fileExtensions.${ext}`]: admin.firestore.FieldValue.increment(1),
+      exportTargets: { [type]: admin.firestore.FieldValue.increment(1) },
+      fileExtensions: { [ext]: admin.firestore.FieldValue.increment(1) },
     },
     metrics: {
       exports: {
         total: admin.firestore.FieldValue.increment(1),
-        [`targets.${type}`]: admin.firestore.FieldValue.increment(1),
-        [`extensions.${ext}`]: admin.firestore.FieldValue.increment(1),
+        targets: { [type]: admin.firestore.FieldValue.increment(1) },
+        extensions: { [ext]: admin.firestore.FieldValue.increment(1) },
       },
     },
   };
@@ -807,14 +807,14 @@ exports.recordRating = onCall(async (data, context) => {
     metrics: {
       ratings: {
         total: admin.firestore.FieldValue.increment(1),
-        [`breakdown.${rating}`]: admin.firestore.FieldValue.increment(1),
+        breakdown: { [rating]: admin.firestore.FieldValue.increment(1) },
       },
     },
   }, { merge: true });
   ANALYTICS_REF.set({
     ratings: {
       totalRatings: admin.firestore.FieldValue.increment(1),
-      [`breakdown.${rating}`]: admin.firestore.FieldValue.increment(1),
+      breakdown: { [rating]: admin.firestore.FieldValue.increment(1) },
     },
   }, { merge: true }).catch(() => {});
   return { success: true };
