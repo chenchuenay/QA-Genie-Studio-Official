@@ -2,7 +2,7 @@ import 'package:qa_genie/data/dto/generation_dto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:qa_genie/engine/models/pipeline_models.dart';
 import 'package:qa_genie/engine/prompts/prompt_composer.dart';
-import 'package:qa_genie/engine/planners/prompt_planner.dart';
+import 'package:qa_genie/engine/planners/coverage_planner.dart';
 import 'package:qa_genie/engine/planners/prompt_domain_detector.dart';
 import 'package:qa_genie/engine/forensics/pipeline_observer.dart';
 import 'package:qa_genie/engine/orchestration/pipeline_orchestrator.dart';
@@ -29,21 +29,28 @@ class GenerateTestCasesUseCase {
         constraints: dto.constraints,
       );
       onStageChange?.call('analyzing');
-      final planner = PromptPlanner(
-        module: dto.module,
-        feature: dto.feature,
-        platform: dto.platform,
+      final coverage = CoveragePlanner(
         mode: dto.mode,
-        count: dto.count,
-        domain: domain,
+        totalCount: dto.count,
         constraints: dto.constraints,
-      );
-      final skeletons = planner.generateSkeletons();
+        domain: domain,
+        seed: '${dto.module}|${dto.feature}|${dto.platform}|$domain|${dto.constraints}',
+      ).plan();
+
+      final planItems = coverage.categoryCounts.entries.expand((entry) {
+        final priority = _priorityForCategory(entry.key);
+        return List.generate(entry.value, (i) => <String, dynamic>{
+          'intent_id': '${entry.key}_${i + 1}',
+          'category': entry.key,
+          'priority': priority,
+        });
+      }).toList();
+
       final prompt = PromptComposer.compose(
         module: dto.module,
         feature: dto.feature,
         platform: dto.platform,
-        skeletons: skeletons,
+        categoryCounts: coverage.categoryCounts,
         constraints: dto.constraints,
         domain: domain,
       );
@@ -74,7 +81,7 @@ class GenerateTestCasesUseCase {
         requestedCaseCount: dto.count,
         constraints: dto.constraints,
         domain: domain,
-        plan: skeletons,
+        plan: planItems,
         traceId: dto.traceId,
         adToken: dto.adToken,
         deviceId: dto.deviceId,
@@ -194,6 +201,20 @@ class GenerateTestCasesUseCase {
       }
       
       return session;
+    }
+  }
+
+  static String _priorityForCategory(String category) {
+    switch (category) {
+      case 'security':
+      case 'session':
+        return 'High';
+      case 'negative':
+      case 'validation':
+      case 'boundary':
+        return 'Medium';
+      default:
+        return 'Low';
     }
   }
 }
