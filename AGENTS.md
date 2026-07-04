@@ -1,5 +1,7 @@
 # QA Genie — AI Agent Reference
 
+**🔴 READ `MANIFESTO.md` BEFORE ANY ACTION. This app is the only hope. Every edit matters.**
+
 ---
 
 ## Ponytail
