@@ -41,9 +41,19 @@
         footer a { color: var(--text-tertiary); text-decoration: none; font-size: 13px; transition: color 0.2s; }
         footer a:hover { color: var(--accent); }
         footer p { color: var(--text-tertiary); font-size: 13px; margin-bottom: 0; }
+        .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; background: none; border: none; padding: 4px; }
+        .hamburger span { display: block; width: 22px; height: 2px; background: var(--text); border-radius: 2px; transition: 0.3s; }
+        .hamburger.active span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+        .hamburger.active span:nth-child(2) { opacity: 0; }
+        .hamburger.active span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+        .mobile-menu { display: none; position: fixed; top: 64px; left: 0; right: 0; bottom: 0; background: rgba(5, 6, 10, 0.98); z-index: 99; padding: 24px; flex-direction: column; gap: 8px; overflow-y: auto; }
+        .mobile-menu a { color: var(--text-secondary); text-decoration: none; font-size: 16px; font-weight: 500; padding: 12px 16px; border-radius: 12px; transition: 0.2s; }
+        .mobile-menu a:hover { background: var(--surface); color: var(--accent); }
         @media (max-width: 768px) {
             nav .container { height: 56px; }
             .nav-links a { display: none; }
+            .hamburger { display: flex; }
+            .mobile-menu.open { display: flex; }
             .page { padding: 100px 0 40px; }
             h1 { font-size: 26px; }
             footer .container { flex-direction: column; text-align: center; }
@@ -65,13 +75,26 @@
                 <a href="ads-monetization.html">Ads Policy</a>
                 <a href="delete-account.html">Delete Account</a>
             </div>
+            <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
         </div>
     </nav>
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="/" onclick="toggleMenu()">Home</a>
+        <a href="privacy.html" onclick="toggleMenu()">Privacy</a>
+        <a href="terms.html" onclick="toggleMenu()">Terms</a>
+        <a href="ai-disclaimer.html" onclick="toggleMenu()">AI Disclaimer</a>
+        <a href="ads-monetization.html" onclick="toggleMenu()">Ads Policy</a>
+        <a href="delete-account.html" onclick="toggleMenu()">Delete Account</a>
+    </div>
 
     <div class="page">
         <div class="container">
             <h1>Privacy Policy</h1>
-            <p class="date">Last updated: June 22, 2026</p>
+            <p class="date">Last updated: July 4, 2026</p>
 
             <h2>1. Introduction</h2>
             <p>I provide QA Genie, a hybrid-powered test case generation tool for quality assurance professionals. I collect only what is necessary to deliver the service. This policy explains what data I collect and how it is handled.</p>
@@ -88,7 +111,7 @@
             <p>I track generation and export counts to enforce daily quotas and improve the service. This includes basic metadata such as feature interactions and export format preferences. No test case content is included in usage tracking.</p>
 
             <h3>Usage Analytics</h3>
-            <p>Firebase Analytics tracks app opens, screen views, generation events (started/completed/failed), exports, rewarded ad completions, upgrade interest, and bug report submissions. Parameters include platform, mode, counts, durations, and categories. This data is anonymized and used to improve the app experience.</p>
+            <p>Firebase Analytics tracks app opens, screen views, generation events (started/completed/failed), exports, rewarded ad completions, upgrade interest, and bug report submissions. Parameters include platform, mode, counts, durations, and categories. This data is anonymized and used to improve the app experience. See <a href="analytics-data.html">Analytics Data</a> for a full breakdown.</p>
 
             <h3>Device Information</h3>
             <p>Device model, app version, and platform (Android) are collected only when you submit an issue report. A device identifier (Firebase Installation ID) is used for guest identity and quota enforcement.</p>
@@ -113,9 +136,13 @@
             <p>All communications use HTTPS/TLS encryption. Data stored on my servers is encrypted at rest. Firebase App Check verifies app integrity. Access to your data is restricted by security rules — only you and my backend functions can access your information.</p>
 
             <h2>6. Data Retention & Deletion</h2>
-            <p>You can delete your account at any time through the app settings (Account → Delete Account). This removes your profile, usage data, synced test cases, and authentication credentials from my servers. A 24-hour cooldown prevents immediate re-registration of the same Google account.</p>
+            <p>You can delete your account at any time through the app settings (Account → Delete Account):</p>
+            <ul>
+                <li><strong>Immediate:</strong> Your authentication credentials, usage data, and synced test cases are instantly removed.</li>
+                <li><strong>24-hour retention:</strong> Your profile identifier (email) is kept for 24 hours to prevent immediate re-registration of the same Google account (fraud prevention). After this cooldown, it is automatically and permanently deleted by my backend systems.</li>
+                <li><strong>Local data:</strong> Data stored on your device (SQLite database) must be cleared by uninstalling the app or clearing app data through Android settings.</li>
+            </ul>
             <p>To request account deletion from the web (for example, if you have uninstalled the app), send an email to <a href="mailto:wipe@qagenies.com">wipe@qagenies.com</a> from your registered email address. Include your account details and reason for deletion. Your account will be completely deleted within 24–48 hours. <strong>No take backs:</strong> once you send this email, deletion is irreversible and all your data will be permanently removed.</p>
-            <p>Local data on your device (SQLite database) must be cleared by uninstalling the app or clearing app data through Android settings.</p>
 
             <h2>7. Your Rights</h2>
             <ul>
@@ -153,5 +180,8 @@
             </div>
         </div>
     </footer>
+<script>
+function toggleMenu() { document.getElementById('mobileMenu').classList.toggle('open'); document.querySelector('.hamburger').classList.toggle('active'); }
+</script>
 </body>
 </html>

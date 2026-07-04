@@ -8,7 +8,7 @@ admin.initializeApp();
 const _cleanup = require("./cleanup");
 exports.migrate = _cleanup.migrate;
 const db = admin.firestore();
-const TEST_CASES_BUCKET = (functions.config().test_cases && functions.config().test_cases.bucket) || "qa-genie-ai-test-cases";
+const TEST_CASES_BUCKET = (functions.config().test_cases && functions.config().test_cases.bucket) || "qa-genie-ai-dev-test-cases";
 const bucket = admin.storage().bucket(TEST_CASES_BUCKET);
 
 // ============================================================
@@ -290,6 +290,15 @@ async function _getMemberTier(uid) {
   return profile.data.subscription?.planType === "pro" ? "pro" : "core";
 }
 
+// ------------------------------------------------------------------
+// Check if current UTC hour is within DeepSeek peak pricing window
+// Peak: UTC 01:00-04:00 and 06:00-10:00 (2x multiplier)
+// ------------------------------------------------------------------
+function _isDeepSeekPeak() {
+  const h = new Date().getUTCHours();
+  return (h >= 1 && h < 4) || (h >= 6 && h < 10);
+}
+
 // Normalise email to lowercase + trimmed to prevent case-bypass of cooldown (SCENARIO F10)
 function _normaliseEmail(email) {
   if (!email) return email;
@@ -382,6 +391,35 @@ exports.generate = onCall(async (data, context) => {
 
       const sanitizedPrompt = sanitisePrompt(prompt);
       const aiResult = await callDeepSeek(sanitizedPrompt, platform);
+
+      // --- begin DeepSeek cost counter ---
+      let deepSeekCostIncurred = false;
+      let deepSeekUsage = null;
+      if (aiResult.success) {
+        deepSeekCostIncurred = true;
+        deepSeekUsage = aiResult.data.usage || null;
+      } else if (aiResult.error?.code === "TRUNCATED") {
+        deepSeekCostIncurred = true;
+        deepSeekUsage = aiResult.error.usage || null;
+      } else if (aiResult.error?.code === "TIMEOUT") {
+        deepSeekCostIncurred = true;
+      } else if (aiResult.error?.code === "EMPTY_CHOICES" || aiResult.error?.code === "EMPTY_RESPONSE") {
+        deepSeekCostIncurred = true;
+      }
+      if (deepSeekCostIncurred) {
+        const isPeak = _isDeepSeekPeak();
+        const dCounter = db.collection("metrics").doc(`deepseek_${today()}`);
+        const dUpdate = {
+          calls: admin.firestore.FieldValue.increment(1),
+          peakCalls: admin.firestore.FieldValue.increment(isPeak ? 1 : 0),
+          offPeakCalls: admin.firestore.FieldValue.increment(isPeak ? 0 : 1),
+          lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        if (deepSeekUsage?.prompt_tokens) dUpdate.inputTokens = admin.firestore.FieldValue.increment(deepSeekUsage.prompt_tokens);
+        if (deepSeekUsage?.completion_tokens) dUpdate.outputTokens = admin.firestore.FieldValue.increment(deepSeekUsage.completion_tokens);
+        dCounter.set(dUpdate, { merge: true }).catch(() => {});
+      }
+      // --- end cost counter ---
 
       // Whether AI succeeded or failed, DeepSeek was called (cost may have been incurred).
       // We set aiFailed flag for return type, but still enter the quota transaction.
@@ -636,24 +674,24 @@ exports.generate = onCall(async (data, context) => {
 
         if (aiFailed) {
           // Quota consumed but no test cases to return — client will use fallback
-          const responseUsage = {
-            rewardedGenCount: rewardedCount + 1,
-            proFreeGenCount: proFreeCount + (isPro ? 1 : 0),
-            lifetimeGeneratedCases: lifetimeCases,
-            resetTimestamp: getResetISO(),
-          };
-          t.set(reqRef, {
-            uid,
-            processedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          return {
-            fallback: true,
-            usage: responseUsage,
-            caseCount,
-            userType,
-            guestTier,
-            isPro,
-          };
+        const responseUsage = {
+          rewardedGenCount: rewardedCount + 1,
+          proFreeGenCount: proFreeCount + (isPro ? 1 : 0),
+          lifetimeGeneratedCases: lifetimeCases,
+          resetTimestamp: getResetISO(),
+        };
+        t.set(reqRef, {
+          uid,
+          processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return {
+          fallback: true,
+          usage: responseUsage,
+          caseCount,
+          userType,
+          guestTier,
+          isPro,
+        };
         }
 
         const responseTestCases = transformTestCases(
@@ -1704,6 +1742,12 @@ exports.linkGoogleAccount = onCall(async (data, context) => {
       createdAt: recoveredCreatedAt || admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: now,
     };
+    // If profile still has deletedAt (re-registration before cleanup expired), clear the flags
+    // so subsequent generate calls don't reject with ACCOUNT_DELETED
+    if (existingProfile.exists && existingProfile.data().deletedAt) {
+      profileData.deletedAt = admin.firestore.FieldValue.delete();
+      profileData.cleanupAfter = admin.firestore.FieldValue.delete();
+    }
     // Store previousGuestUid so getMemberSuites can redirect and find orphaned suites
     if (previousGuestUid && previousGuestUid !== uid) {
       profileData.previousGuestUid = previousGuestUid;
@@ -2369,15 +2413,18 @@ async function callDeepSeek(prompt, platform = 'Web') {
       if (!content || content.trim().length === 0)
         return { success: false, error: { code: "EMPTY_RESPONSE" } };
 
-      if (choice.finish_reason === "length")
-        return { success: false, error: { code: "TRUNCATED" } };
+      if (choice.finish_reason === "length") {
+        const usage = json.usage || {};
+        return { success: false, error: { code: "TRUNCATED", usage } };
+      }
 
-      return { success: true, data: { text: content } };
+      const usage = json.usage || {};
+      return { success: true, data: { text: content, usage } };
     } catch (err) {
       clearTimeout(timeoutId);
       if (err.name === "AbortError") {
         // Timeout: DeepSeek already received & processed tokens → DO NOT RETRY (double bill)
-        return { success: false, error: { code: "TIMEOUT" } };
+        return { success: false, error: { code: "TIMEOUT", costIncurred: true } };
       }
       return { success: false, error: { code: "CLIENT_ERROR" } };
     }
@@ -2390,6 +2437,7 @@ async function callDeepSeek(prompt, platform = 'Web') {
 // Cases go to GCS (best-effort), metadata always persists to Firestore.
 // --------------------------------------------------------------
 exports.pushMemberSuite = onCall(async (data, context) => {
+  log("info", `pushMemberSuite AUTH: context.auth=${JSON.stringify(context?.auth)}, uid=${context?.auth?.uid}, app=${JSON.stringify(context?.app)}, rawRequest headers=${JSON.stringify(context?.rawRequest?.headers)}`);
   if (!context.auth)
     throw new functions.https.HttpsError("unauthenticated", "Auth required");
   const uid = context.auth.uid;
@@ -2970,6 +3018,262 @@ exports.computeActiveUsers = functions.pubsub.schedule("every 6 hours").onRun(as
 
   await db.collection("analytics").doc("global").set(analyticsData);
   console.log("[computeActiveUsers] analytics/global updated");
+  return null;
+});
+
+// ------------------------------------------------------------------
+// DeepSeek pricing config (fallback defaults, overridable via config/pricing doc)
+// ------------------------------------------------------------------
+const _DEFAULT_PRICING = {
+  inputPerM: 0.14,
+  outputPerM: 0.28,
+  cacheHitInputPerM: 0.0028,
+  peakMultiplier: 2,
+  peakHoursUTC: ["01:00-04:00", "06:00-10:00"],
+};
+
+// ------------------------------------------------------------------
+// Build a freeTier metric sub-object with read/write/storage or single metric
+// ------------------------------------------------------------------
+function _buildFreeTierFirestore(reads, readsLimit, writes, writesLimit, bytes, bytesLimit) {
+  const readsPct = readsLimit > 0 ? Math.round((reads / readsLimit) * 10000) / 100 : 0;
+  const writesPct = writesLimit > 0 ? Math.round((writes / writesLimit) * 10000) / 100 : 0;
+  const storageGiB = bytes / 1073741824;
+  const storageLimitGiB = bytesLimit / 1073741824;
+  const storagePct = bytesLimit > 0 ? Math.round((bytes / bytesLimit) * 10000) / 100 : 0;
+  const limitingPct = Math.max(readsPct, writesPct, storagePct);
+  const limiting = limitingPct === readsPct ? "read" : limitingPct === writesPct ? "write" : "storage";
+  const _s = (p) => p < 60 ? "good" : p < 85 ? "warning" : "critical";
+  return {
+    read: { today: reads, limit: readsLimit, percent: readsPct, remaining: Math.max(0, readsLimit - reads), status: _s(readsPct) },
+    write: { today: writes, limit: writesLimit, percent: writesPct, remaining: Math.max(0, writesLimit - writes), status: _s(writesPct) },
+    storage: { bytes, gib: Math.round(storageGiB * 1000) / 1000, limitGib: Math.round(storageLimitGiB * 1000) / 1000, percent: storagePct, remainingGib: Math.round(Math.max(0, storageLimitGiB - storageGiB) * 1000) / 1000, status: _s(storagePct) },
+    percentUsed: limitingPct,
+    remaining: `${100 - limitingPct}%`,
+    limitingSubMetric: limiting,
+    status: _s(limitingPct),
+  };
+}
+
+// ------------------------------------------------------------------
+// SCHEDULED FUNCTION: Compute AI metrics every 60 seconds
+// Aggregates DeepSeek usage, Monitoring API data, GCS metadata, and flagged users
+// into admin_metrics/live for the Firebase Console dashboard.
+// ------------------------------------------------------------------
+exports.computeAIMetrics = functions.pubsub.schedule("every 1 minutes").onRun(async (context) => {
+  const now = Date.now();
+  const todayStr = today();
+  const monthStart = new Date(now);
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const nowSec = Math.floor(now / 1000);
+  const todayStartSec = Math.floor(new Date(todayStr + "T00:00:00Z").getTime() / 1000);
+  const monthStartSec = Math.floor(monthStart.getTime() / 1000);
+
+  const result = {
+    deepSeek: { callsToday: 0, peakCalls: 0, offPeakCalls: 0, inputTokens: 0, outputTokens: 0, estimatedCost: 0, pricingConfig: _DEFAULT_PRICING },
+    freeTier: { firestore: _buildFreeTierFirestore(0, 50000, 0, 20000, 0, 1073741824), gcs: {}, functions: {}, auth: {}, status: "all_good" },
+    estimatedCosts: { today: 0, thisMonth: 0 },
+    topUsers: [],
+    flaggedUids: [],
+    lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  // 1. DeepSeek daily counter
+  try {
+    const dsSnap = await db.collection("metrics").doc(`deepseek_${todayStr}`).get();
+    if (dsSnap.exists) {
+      const d = dsSnap.data();
+      result.deepSeek.callsToday = d.calls || 0;
+      result.deepSeek.peakCalls = d.peakCalls || 0;
+      result.deepSeek.offPeakCalls = d.offPeakCalls || 0;
+      result.deepSeek.inputTokens = d.inputTokens || 0;
+      result.deepSeek.outputTokens = d.outputTokens || 0;
+      const totalCalls = result.deepSeek.callsToday || 1;
+      const peakRatio = result.deepSeek.peakCalls / totalCalls;
+      const offPeakRatio = result.deepSeek.offPeakCalls / totalCalls;
+      const blendedMult = peakRatio * _DEFAULT_PRICING.peakMultiplier + offPeakRatio;
+      const cost = (
+        result.deepSeek.inputTokens * (_DEFAULT_PRICING.inputPerM / 1000000) * blendedMult +
+        result.deepSeek.outputTokens * (_DEFAULT_PRICING.outputPerM / 1000000) * blendedMult
+      );
+      result.deepSeek.estimatedCost = Math.round(cost * 100) / 100;
+    }
+  } catch (e) {
+    console.warn("[computeAIMetrics] deepSeek counter:", e.message);
+  }
+
+  // 2. Monitoring API — Firestore reads, writes, storage
+  try {
+    const monitoring = require('@google-cloud/monitoring');
+    const client = new monitoring.v3.MetricServiceClient();
+    const projectName = client.projectPath(process.env.GCLOUD_PROJECT || 'qa-genie-ai');
+    const tInterval = { startTime: { seconds: todayStartSec }, endTime: { seconds: nowSec } };
+
+    async function qMetric(filter) {
+      try {
+        const [ts] = await client.listTimeSeries({
+          name: projectName, filter,
+          interval: tInterval,
+          view: 'FULL',
+          aggregation: { alignmentPeriod: { seconds: 60 }, perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM' },
+        });
+        if (ts.length > 0) return (ts[0].points || []).reduce((s, p) => s + (parseInt(p.value?.int64Value || 0)), 0);
+      } catch (e) { console.warn("[computeAIMetrics] qMetric:", filter, e.message); }
+      return 0;
+    }
+
+    const fReads = await qMetric('metric.type="firestore.googleapis.com/document/read_count"');
+    const fWrites = await qMetric('metric.type="firestore.googleapis.com/document/write_count"');
+    let fBytes = 0;
+    try {
+      const [fsTs] = await client.listTimeSeries({
+        name: projectName,
+        filter: 'metric.type="firestore.googleapis.com/document/storage_size"',
+        interval: tInterval,
+        view: 'FULL',
+        aggregation: { alignmentPeriod: { seconds: 86400 }, perSeriesAligner: 'ALIGN_LAST', crossSeriesReducer: 'REDUCE_MEAN' },
+      });
+      if (fsTs.length > 0) {
+        const pts = fsTs[0].points || [];
+        if (pts.length > 0) fBytes = parseInt(pts[pts.length - 1]?.value?.int64Value || 0);
+      }
+    } catch (e) { console.warn("[computeAIMetrics] fs storage:", e.message); }
+
+    result.freeTier.firestore = _buildFreeTierFirestore(fReads, 50000, fWrites, 20000, fBytes, 1073741824);
+
+    // Functions invocations (monthly)
+    const mInterval = { startTime: { seconds: monthStartSec }, endTime: { seconds: nowSec } };
+    let funcInvocations = 0;
+    try {
+      const [fnTs] = await client.listTimeSeries({
+        name: projectName,
+        filter: 'metric.type="cloudfunctions.googleapis.com/function/execution_count"',
+        interval: mInterval,
+        view: 'FULL',
+        aggregation: { alignmentPeriod: { seconds: 3600 }, perSeriesAligner: 'ALIGN_SUM', crossSeriesReducer: 'REDUCE_SUM' },
+      });
+      if (fnTs.length > 0) funcInvocations = (fnTs[0].points || []).reduce((s, p) => s + (parseInt(p.value?.int64Value || 0)), 0);
+    } catch (e) { console.warn("[computeAIMetrics] functions:", e.message); }
+    const fPct = Math.round((funcInvocations / 2000000) * 10000) / 100;
+    result.freeTier.functions = {
+      invocations: { month: funcInvocations, limit: 2000000, percent: fPct, remaining: Math.max(0, 2000000 - funcInvocations), status: fPct < 60 ? "good" : fPct < 85 ? "warning" : "critical" },
+      percentUsed: fPct,
+      remaining: `${100 - fPct}%`,
+      limitingSubMetric: "invocations",
+      status: fPct < 60 ? "good" : fPct < 85 ? "warning" : "critical",
+    };
+  } catch (e) {
+    console.warn("[computeAIMetrics] monitoring API:", e.message);
+  }
+
+  // 3. GCS bucket metadata
+  try {
+    const [meta] = await bucket.getMetadata();
+    const gcsBytes = parseInt(meta.size || '0');
+    const gcsGb = gcsBytes / 1073741824;
+    const gcsObjects = parseInt(meta.numStorageObjects || '0');
+    const gPct = Math.round((gcsGb / 5) * 10000) / 100;
+    const gStatus = gPct < 60 ? "good" : gPct < 85 ? "warning" : "critical";
+    result.freeTier.gcs = {
+      storage: { objects: gcsObjects, bytes: gcsBytes, gb: Math.round(gcsGb * 1000) / 1000, limitGb: 5, percent: gPct, remainingGb: Math.round(Math.max(0, 5 - gcsGb) * 1000) / 1000, status: gStatus },
+      percentUsed: gPct,
+      remaining: `${100 - gPct}%`,
+      limitingSubMetric: "storage",
+      status: gStatus,
+    };
+  } catch (e) {
+    console.warn("[computeAIMetrics] gcs metadata:", e.message);
+    result.freeTier.gcs = {
+      storage: { objects: 0, bytes: 0, gb: 0, limitGb: 5, percent: 0, remainingGb: 5, status: "good" },
+      percentUsed: 0, remaining: "100%", limitingSubMetric: "storage", status: "good",
+    };
+  }
+
+  // 4. Top 10 users
+  try {
+    const topSnap = await db.collection("usage")
+      .orderBy("metrics.generations.total", "desc")
+      .limit(10)
+      .get();
+    result.topUsers = [];
+    topSnap.forEach(doc => {
+      const d = doc.data();
+      const gens = d.metrics?.generations?.total || 0;
+      const exps = d.metrics?.exportCount || 0;
+      result.topUsers.push({
+        uid: d.uid || doc.id,
+        email: doc.id,
+        generations: gens,
+        exports: exps,
+        exportPercent: gens > 0 ? Math.round((exps / gens) * 10000) / 100 : 0,
+        estimatedCost: 0,
+      });
+    });
+    // Distribute deepSeek cost proportionally by generations
+    if (result.deepSeek.estimatedCost > 0) {
+      const totalGens = result.topUsers.reduce((s, u) => s + u.generations, 0);
+      if (totalGens > 0) {
+        result.topUsers.forEach(u => {
+          u.estimatedCost = Math.round((u.generations / totalGens) * result.deepSeek.estimatedCost * 100) / 100;
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("[computeAIMetrics] topUsers:", e.message);
+  }
+
+  // 5. Flagged UIDs
+  result.flaggedUids = result.topUsers
+    .filter(u => u.generations > 5 && u.exportPercent < 5)
+    .map(u => ({
+      uid: u.uid,
+      reasons: ["high_no_export"],
+      requestCount: u.generations,
+      exportCount: u.exports,
+      estimatedCost: u.estimatedCost,
+    }));
+
+  // 6. Auth MAU from analytics/global
+  try {
+    const aSnap = await ANALYTICS_REF.get();
+    if (aSnap.exists) {
+      const a = aSnap.data();
+      const mau = a.users?.combined?.active30d || 0;
+      const mPct = Math.round((mau / 50000) * 10000) / 100;
+      const mStatus = mPct < 60 ? "good" : mPct < 85 ? "warning" : "critical";
+      result.freeTier.auth = {
+        mau: { month: mau, limit: 50000, percent: mPct, remaining: Math.max(0, 50000 - mau), status: mStatus },
+        percentUsed: mPct,
+        remaining: `${100 - mPct}%`,
+        limitingSubMetric: "mau",
+        status: mStatus,
+      };
+    }
+  } catch (e) {
+    console.warn("[computeAIMetrics] auth:", e.message);
+    result.freeTier.auth = {
+      mau: { month: 0, limit: 50000, percent: 0, remaining: 50000, status: "good" },
+      percentUsed: 0, remaining: "100%", limitingSubMetric: "mau", status: "good",
+    };
+  }
+
+  // 7. Overall status
+  const allSvcs = [result.freeTier.firestore, result.freeTier.gcs, result.freeTier.functions, result.freeTier.auth];
+  let worst = "all_good";
+  for (const s of allSvcs) {
+    if (!s) continue;
+    if (s.status === "critical") { worst = "critical"; break; }
+    if (s.status === "warning") worst = "warning";
+  }
+  result.freeTier.status = worst;
+
+  // Estimated costs
+  result.estimatedCosts.today = result.deepSeek.estimatedCost || 0;
+  result.estimatedCosts.thisMonth = Math.round((result.estimatedCosts.today || 0) * 30 * 100) / 100;
+
+  await db.collection("admin_metrics").doc("live").set(result);
+  console.log("[computeAIMetrics] admin_metrics/live updated");
   return null;
 });
 

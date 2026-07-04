@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qa_genie/engine/forensics/error_capture_utils.dart';
 
 class FunctionsService {
@@ -63,6 +64,11 @@ class FunctionsService {
         functionName,
         options: HttpsCallableOptions(timeout: timeout),
       );
+
+      // Force refresh ID token to avoid stale token issues between calls
+      try {
+        await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      } catch (_) {}
 
       final result = await callable.call(payload ?? {});
       final latencyMs = DateTime.now().difference(startTime).inMilliseconds;

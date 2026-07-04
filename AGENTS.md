@@ -40,11 +40,21 @@ adb connect 10.184.222.252:5555
 
 ## 2. Current Phase: Pre-Launch
 
-### Prod JS Freeze (20+ days from Jun 30)
-- **DO NOT** modify `functions/index.prod.js` for any reason.
-- **DO NOT** run `npm run deploy:prod`.
-- All dev work goes in `functions/index.dev.js` only.
-- Prod changes only after: (a) closed testing completes, (b) app is live, (c) you explicitly approve.
+### Prod JS Freeze — LIFTED (Jul 4, 2026)
+- ⚠️ **Freeze was overridden by Enay on Jul 4, 2026.** Prod functions deployed with current dev code.
+- `functions/index.prod.js` is now identical to `functions/index.dev.js`.
+- All future changes: edit `index.dev.js`, then deploy both dev + prod.
+- **New admin function:** `computeAIMetrics` — deployed to both projects.
+- **Default rule is still FREEZE.** No prod deploys or `index.prod.js` edits unless Enay explicitly says so.
+
+### Dev/Prod Isolation (ABSOLUTE RULE)
+- **No connecting strings between dev and prod projects. EVER.** The only shared identifier is `com.enaykumar.qagenie` (package name).
+- No dev GCS bucket names (`qa-genie-ai-dev-test-cases`) in prod code.
+- No dev project IDs (`qa-genie-ai-dev`) in prod deploy configs.
+- No dev Firebase configs leaking into prod APK builds.
+- Flutter: `IS_DEV=true` determines Firebase init at compile time. Prod build must never reference dev project options.
+- Cloud functions: `functions.config()` or env vars for per-environment values. Never hardcode dev bucket/project in a file deployed to both.
+- Before any prod deploy: grep for `dev`, `qa-genie-ai-dev`, `qa-genie-ai-dev-test-cases` in the deployed file. If found, STOP.
 
 ### Production Launch Checklist
 #### Before Launch

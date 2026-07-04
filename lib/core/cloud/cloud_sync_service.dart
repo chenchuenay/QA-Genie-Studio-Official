@@ -50,13 +50,24 @@ class CloudSyncService {
   static DateTime? get lastPullTime => _lastPullTime;
 
   static Future<int> pushPendingSuites() async {
-    if (!_canSync) return 0;
-    if (_isPushing) return 0;
+    debugPrint('🔁 SYNC: pushPendingSuites called, member=${AuthService.currentMember?.uid}, isGuest=${AuthService.isGuest}');
+    if (!_canSync) {
+      debugPrint('🔁 SYNC: GUARD FAIL - _canSync false (member=${AuthService.currentMember?.uid}, isGuest=${AuthService.isGuest})');
+      return 0;
+    }
+    if (_isPushing) {
+      debugPrint('🔁 SYNC: GUARD FAIL - _isPushing true');
+      return 0;
+    }
 
     _isPushing = true;
     try {
       final pending = await DatabaseService.getPendingSyncSuites();
-      if (pending.isEmpty) return 0;
+      debugPrint('🔁 SYNC: pending suites count=${pending.length}');
+      if (pending.isEmpty) {
+        debugPrint('🔁 SYNC: GUARD FAIL - no pending suites');
+        return 0;
+      }
 
       int uploaded = 0;
       for (final suite in pending) {
