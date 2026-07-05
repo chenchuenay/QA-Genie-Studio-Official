@@ -1,5 +1,5 @@
 #!/bin/bash
-# QA Genie production build
+# QA Genie Studio production build
 # Usage: ./build_prod.sh [apk|appbundle]
 
 set -e

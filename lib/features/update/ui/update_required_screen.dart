@@ -110,7 +110,7 @@ class _UpdateRequiredScreenState extends State<UpdateRequiredScreen> {
                 const SizedBox(height: 14),
                 Text(
                   _check.blocked
-                      ? 'This version is no longer supported.\nPlease update to continue using QA Genie.'
+                      ? 'This version is no longer supported.\nPlease update to continue using QA Genie Studio.'
                       : 'A new version (${_check.latestVersion}) is available.\nUpdate for the latest features and improvements.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(

@@ -9,7 +9,7 @@ void main() {
     ));
     await tester.pump();
     expect(find.text('About'), findsOneWidget);
-    expect(find.text('QA Genie'), findsOneWidget);
+    expect(find.text('QA Genie Studio'), findsOneWidget);
     expect(find.text('AI-Powered Test Flow Engine'), findsOneWidget);
   });
 }

@@ -471,7 +471,7 @@ class _AccountScreenState extends State<AccountScreen> {
           _menuItem(
             icon: Icons.support_agent,
             title: 'Report an Issue',
-            subtitle: 'Help improve QA Genie',
+            subtitle: 'Help improve QA Genie Studio',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ReportIssueScreen()),
@@ -480,7 +480,7 @@ class _AccountScreenState extends State<AccountScreen> {
           _divider(),
           _menuItem(
             icon: Icons.stars,
-            title: 'QA Genie Pro',
+            title: 'QA Genie Studio Pro',
             subtitle: 'Coming soon',
             onTap: () => Navigator.push(
               context,
@@ -521,7 +521,7 @@ class _AccountScreenState extends State<AccountScreen> {
           _divider(),
           _menuItem(
             icon: Icons.info_outline,
-            title: 'About QA Genie',
+            title: 'About QA Genie Studio',
             subtitle: 'Version $_appVersion',
             onTap: () => Navigator.push(
               context,

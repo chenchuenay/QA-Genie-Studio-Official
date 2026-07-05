@@ -1,7 +1,7 @@
 # Ads & Monetization Policy
 **Last updated: June 2026**
 
-QA Genie operates on a freemium model to ensure our AI generation services remain sustainable.
+QA Genie Studio operates on a freemium model to ensure our AI generation services remain sustainable.
 
 ## 1. Rewarded Advertising
 Core tier users may unlock additional generation and export capacity by choosing to engage with rewarded video advertisements delivered through the Google AdMob network.

@@ -59,6 +59,7 @@ class _AuthDialogState extends State<AuthDialog> {
   bool _forceGoogleOnly = false;
   bool _consentAlreadyStored = false;
   bool _analyticsConsented = false;
+  bool _consentError = false;
   String? _errorMessage;
   String? _progressMessage;
   Timer? _dotTimer;
@@ -105,6 +106,10 @@ class _AuthDialogState extends State<AuthDialog> {
     unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: ENTER'));
     if (_isLoading) {
       unawaited(AnalyticsService.logDebug(message: 'handleContinueWithGoogle: SKIP already loading'));
+      return;
+    }
+    if (!_consentAlreadyStored && !_analyticsConsented) {
+      setState(() => _consentError = true);
       return;
     }
     if (!mounted) return;
@@ -345,6 +350,10 @@ class _AuthDialogState extends State<AuthDialog> {
       unawaited(AnalyticsService.logDebug(message: 'handleContinueAsGuest: SKIP already loading'));
       return;
     }
+    if (!_consentAlreadyStored && !_analyticsConsented) {
+      setState(() => _consentError = true);
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _isGuestLoading = true;
@@ -377,7 +386,7 @@ class _AuthDialogState extends State<AuthDialog> {
     final displayName = member?.displayName ?? '';
     final welcomeText = !isNewMember && displayName.isNotEmpty
         ? 'Welcome back, ${displayName.split(' ').first}'
-        : (isNewMember ? 'Welcome to QA Genie' : 'Welcome back to QA Genie');
+        : (isNewMember ? 'Welcome to QA Genie Studio' : 'Welcome back to QA Genie Studio');
 
     return PopScope(
       canPop: false,
@@ -450,7 +459,7 @@ class _AuthDialogState extends State<AuthDialog> {
                   width: double.infinity,
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: _isLoading || _isGuestLoading || (!_consentAlreadyStored && !_analyticsConsented) ? null : _handleContinueWithGoogle,
+                      onPressed: _isLoading || _isGuestLoading ? null : _handleContinueWithGoogle,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isLoading
                           ? AppColors.accent.withOpacity(0.7)
@@ -533,7 +542,7 @@ class _AuthDialogState extends State<AuthDialog> {
                     width: double.infinity,
                     height: 50,
                     child: TextButton(
-                      onPressed: _isLoading || _isGuestLoading || (!_consentAlreadyStored && !_analyticsConsented) ? null : _handleContinueAsGuest,
+                      onPressed: _isLoading || _isGuestLoading ? null : _handleContinueAsGuest,
                       child: const Text(
                               'Continue as Guest',
                               style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
@@ -558,20 +567,25 @@ class _AuthDialogState extends State<AuthDialog> {
                   ),
                 ],
                 if (!_consentAlreadyStored) ...[
-                  const SizedBox(height: 12),
-                  const Center(
-                    child: Text(
-                      'Enable the option below to continue',
-                      style: TextStyle(color: AppColors.textHint, fontSize: 12),
+                  if (_consentError) ...[
+                    const SizedBox(height: 12),
+                    const Center(
+                      child: Text(
+                        'Enable the option below to continue',
+                        style: TextStyle(color: Colors.red, fontSize: 12),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
+                  ],
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       GestureDetector(
                         onTap: () {
-                          setState(() => _analyticsConsented = !_analyticsConsented);
+                          setState(() {
+                            _analyticsConsented = !_analyticsConsented;
+                            _consentError = false;
+                          });
                           if (_analyticsConsented) {
                             FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
                             SharedPreferences.getInstance().then(
@@ -587,7 +601,7 @@ class _AuthDialogState extends State<AuthDialog> {
                             color: _analyticsConsented ? AppColors.accent : Colors.transparent,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: _analyticsConsented ? AppColors.accent : AppColors.textHint,
+                              color: _consentError ? Colors.red : (_analyticsConsented ? AppColors.accent : AppColors.textHint),
                               width: 2,
                             ),
                           ),
@@ -601,7 +615,7 @@ class _AuthDialogState extends State<AuthDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Help improve QA Genie with anonymous usage data',
+                              'Help improve QA Genie Studio with anonymous usage data',
                               style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
                             ),
                             const SizedBox(height: 4),

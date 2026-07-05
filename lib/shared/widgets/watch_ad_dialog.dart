@@ -74,7 +74,7 @@ class _WatchAdDialogState extends State<WatchAdDialog> {
               Flexible(
                 child: SingleChildScrollView(
                   child: Text(
-                    '${widget.featureName} is supported by a short ad to help keep QA Genie free and growing.',
+                    '${widget.featureName} is supported by a short ad to help keep QA Genie Studio free and growing.',
                     style: AppText.body.copyWith(
                       color: AppColors.textSecondary,
                       height: 1.4,

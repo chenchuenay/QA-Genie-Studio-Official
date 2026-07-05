@@ -36,7 +36,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         title: const Text(
-          "QA Genie Pro",
+          "QA Genie Studio Pro",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
@@ -63,7 +63,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       children: [
         _compactHero(
           "PRO ACTIVE",
-          "You're enjoying the full QA Genie experience (${AppConfig.proMonthlyPrice}/mo value).",
+          "You're enjoying the full QA Genie Studio experience (${AppConfig.proMonthlyPrice}/mo value).",
         ),
         const SizedBox(height: AppSpacing.md),
         _benefitsGrid(),

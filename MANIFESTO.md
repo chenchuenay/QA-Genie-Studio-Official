@@ -1,4 +1,4 @@
-# QA Genie — Manifesto
+# QA Genie Studio — Manifesto
 
 ## Why This App Exists
 

@@ -1,6 +1,6 @@
 {
   "name": "qa-genie-functions",
-  "description": "Cloud Functions for QA Genie",
+  "description": "Cloud Functions for QA Genie Studio",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",

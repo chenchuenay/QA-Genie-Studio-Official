@@ -12,7 +12,7 @@ void main() {
     ));
     await tester.tap(find.text('show'));
     await tester.pumpAndSettle();
-    expect(find.text('Enjoying QA Genie?'), findsOneWidget);
+    expect(find.text('Enjoying QA Genie Studio?'), findsOneWidget);
     expect(find.text('Not Now'), findsOneWidget);
     expect(find.text('Rate Now'), findsOneWidget);
   });

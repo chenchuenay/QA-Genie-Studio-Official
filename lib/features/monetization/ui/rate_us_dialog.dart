@@ -32,7 +32,7 @@ class _RateUsDialogContent extends StatelessWidget {
             const Icon(Icons.star_border, color: AppColors.accent, size: 48),
             const SizedBox(height: 16),
             const Text(
-              "Enjoying QA Genie?",
+              "Enjoying QA Genie Studio?",
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 20,

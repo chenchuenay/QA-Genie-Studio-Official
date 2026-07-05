@@ -1,6 +1,6 @@
 rules_version = '2';
 service firebase.storage {
-  // QA Genie - Storage security rules
+  // QA Genie Studio - Storage security rules
   // Only cloud functions have write access to the test cases bucket.
   // No client-side access to any storage bucket.
 

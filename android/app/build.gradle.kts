@@ -34,10 +34,10 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 33
+        versionCode = 35
         versionName = flutter.versionName
         multiDexEnabled = true
-        manifestPlaceholders["appName"] = "QA Genie"
+        manifestPlaceholders["appName"] = "QAG Studio"
     }
 
     compileOptions {
@@ -83,7 +83,7 @@ android {
             doLast {
                 val dir = file("${project.buildDir}/outputs/bundle/release")
                 val src = dir.resolve("app-release.aab")
-                val dst = dir.resolve("QA-Genie_release-v${flutter.versionName}.aab")
+                val dst = dir.resolve("QA-Genie-Studio_release-v${flutter.versionName}.aab")
                 if (src.exists()) { src.renameTo(dst) }
             }
         }
@@ -91,7 +91,7 @@ android {
             doLast {
                 val dir = file("${project.buildDir}/outputs/flutter-apk")
                 val src = dir.resolve("app-release.apk")
-                val dst = dir.resolve("QA-Genie_release-v${flutter.versionName}.apk")
+                val dst = dir.resolve("QA-Genie-Studio_release-v${flutter.versionName}.apk")
                 if (src.exists()) { src.renameTo(dst) }
             }
         }

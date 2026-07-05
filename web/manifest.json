@@ -1,11 +1,11 @@
 {
-    "name": "qa_genie",
-    "short_name": "qa_genie",
+    "name": "QA Genie Studio",
+    "short_name": "QAG Studio",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "QA Genie Studio - AI-Powered Test Flow Engine",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

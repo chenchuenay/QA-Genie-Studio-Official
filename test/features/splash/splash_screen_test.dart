@@ -7,7 +7,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: const SplashScreen(),
     ));
-    expect(find.text('QA Genie'), findsOneWidget);
+    expect(find.text('QA Genie Studio'), findsOneWidget);
     // Drain pending timeout timers from _init() background work
     await tester.pump(const Duration(seconds: 5));
   });

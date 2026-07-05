@@ -1,6 +1,6 @@
-# QA Genie Architecture Overview
+# QA Genie Studio Architecture Overview
 
-QA Genie is a modular, AI-powered test case generation application. This document serves as the single source of truth for the project's architecture, business logic, and data flows.
+QA Genie Studio is a modular, AI-powered test case generation application. This document serves as the single source of truth for the project's architecture, business logic, and data flows.
 
 ## 1. High-Level Directory Structure
 - `lib/app/`: Configuration, routing, dependency injection (`app_dependencies.dart`), and themes.

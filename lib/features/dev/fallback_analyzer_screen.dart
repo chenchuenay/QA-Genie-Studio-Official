@@ -256,7 +256,7 @@ class _FallbackAnalyzerScreenState extends State<FallbackAnalyzerScreen> {
 
     return {
       'analysis_metadata': {
-        'tool': 'QA Genie Fallback Analyzer',
+        'tool': 'QA Genie Studio Fallback Analyzer',
         'generated_at': DateTime.now().toIso8601String(),
         'total_scenarios': _scenarioCount,
         'engine': 'DeterministicEngineV2 (Ontology2)',

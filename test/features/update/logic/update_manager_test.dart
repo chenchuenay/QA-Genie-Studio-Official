@@ -42,7 +42,7 @@ void main() {
       (MethodCall methodCall) async {
         if (methodCall.method == 'getAll') {
           return {
-            'app_name': 'QA Genie',
+            'app_name': 'QAG Studio',
             'package_name': 'com.enaykumar.qagenie',
             'version': '1.2.305',
             'build_number': '305',

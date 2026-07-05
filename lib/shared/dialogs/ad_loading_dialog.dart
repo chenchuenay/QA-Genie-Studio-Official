@@ -13,7 +13,7 @@ class AdLoadingDialog extends StatelessWidget {
     required this.onRetry,
     this.title = 'Ad Not Ready',
     this.message =
-        'Ads help keep QA Genie free. Please disable any ad blocker or VPN and tap Retry.',
+        'Ads help keep QA Genie Studio free. Please disable any ad blocker or VPN and tap Retry.',
   });
 
   @override

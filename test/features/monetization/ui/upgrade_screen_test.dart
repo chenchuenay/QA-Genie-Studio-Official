@@ -12,6 +12,6 @@ void main() {
     ));
     await tester.pump();
     await tester.pump(const Duration(seconds: 6));
-    expect(find.text('QA Genie Pro'), findsOneWidget);
+    expect(find.text('QA Genie Studio Pro'), findsOneWidget);
   });
 }

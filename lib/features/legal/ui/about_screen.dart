@@ -29,7 +29,7 @@ class _AboutScreenState extends State<AboutScreen> {
     final uri = Uri(
       scheme: 'mailto',
       path: 'chenchuenay@qagenies.com',
-      queryParameters: {'subject': 'QA Genie Feedback'},
+      queryParameters: {'subject': 'QA Genie Studio Feedback'},
     );
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
@@ -56,7 +56,7 @@ class _AboutScreenState extends State<AboutScreen> {
               Image.asset('assets/logo.png', width: 72, height: 72),
               const SizedBox(height: 12),
               const Text(
-                'QA Genie',
+                'QA Genie Studio',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -88,10 +88,10 @@ class _AboutScreenState extends State<AboutScreen> {
               const SizedBox(height: 28),
               _sectionCard(
                 children: [
-                  _sectionHeader('About QA Genie'),
+                  _sectionHeader('About QA Genie Studio'),
                   const SizedBox(height: 10),
                   const Text(
-                    'QA Genie is a mobile-first QA companion that generates professional '
+                    'QA Genie Studio is a mobile-first QA companion that generates professional '
                     'test cases from natural-language prompts. Built for QA engineers, '
                     'developers, and test managers who need high-quality test documentation '
                     'in seconds — not hours.',
@@ -206,7 +206,7 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
               const SizedBox(height: 28),
               const Text(
-                '© 2026 QA Genie • Enay Kumar • All rights reserved',
+                '© 2026 QA Genie Studio • Enay Kumar • All rights reserved',
                 style: TextStyle(fontSize: 12, color: AppColors.textHint),
               ),
               const SizedBox(height: 32),

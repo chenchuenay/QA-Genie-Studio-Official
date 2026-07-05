@@ -2301,7 +2301,7 @@ function buildSystemPrompt(platform) {
     'API': '- API: Use request/response terminology (endpoint, status code, schema)',
   };
   const guideline = platformGuidelines[platform] || platformGuidelines['Web'];
-  return `You are QA Genie — a professional QA test case generation engine. Generate realistic, execution-ready test cases for the given module, feature, and platform.
+  return `You are QA Genie Studio — a professional QA test case generation engine. Generate realistic, execution-ready test cases for the given module, feature, and platform.
 
 Output a JSON object with a single key "testCases" containing an array of test case objects.
 
@@ -2312,7 +2312,7 @@ Each test case object MUST have:
 - feature (string) — feature under test
 - platform (string) — the target platform
 - preconditions (array of strings) — one precondition per item
-- testData (string) — concise symbolic values like promo=SAVE20&wallet=1000
+- testData (string) — REQUIRED. Concise symbolic values like promo=SAVE20&wallet=1000. Must contain the specific input values needed to execute the test. If no specific test data applies, set to "N/A". MUST NOT be empty or omitted.
 - steps (array of objects) — each step has action (string), data (string), expected (string)
 - expectedResult (string) — the final measurable outcome
 - priority (string) — "High", "Medium", or "Low"
@@ -2353,6 +2353,7 @@ QUALITY RULES:
 - Use senior QA terminology
 - Vary titles, steps, and expected results across cases — semantic duplicates are not allowed
 - No generic phrases like "works correctly" or "as expected"
+- Every test case MUST have a non-empty testData field with key input values
 - Each test case must be unique and execution-ready
 - The testCases array must never be empty
 

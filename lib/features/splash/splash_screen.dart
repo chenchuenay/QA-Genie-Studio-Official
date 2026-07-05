@@ -15,7 +15,6 @@ import 'package:qa_genie/core/utils/device_utils.dart';
 import 'package:qa_genie/core/utils/dialog_utils.dart';
 import 'package:qa_genie/core/cloud/cloud_sync_service.dart';
 import 'package:qa_genie/firebase/cloud_functions/functions_service.dart';
-import 'package:qa_genie/engine/prompts/prompt_cache_manager.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -178,7 +177,6 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // All network / async init work fires in the background after navigation.
     unawaited(UsageManager.getDashboardData());
-    unawaited(PromptCacheManager.warmup().catchError((_) {}));
     unawaited(NetworkGuard.initialize().catchError((_) {}));
     unawaited(AdManager().loadRewardedAd().catchError((_) {}));
     unawaited(_backgroundInit());
@@ -216,7 +214,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Image.asset('assets/logo.png', width: ScreenUtils.width(context) < 600 ? 100 : 144, height: ScreenUtils.width(context) < 600 ? 100 : 144),
             const SizedBox(height: 16),
             const Text(
-              'QA Genie',
+              'QA Genie Studio',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 24,

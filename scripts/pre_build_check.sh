@@ -43,7 +43,7 @@ warn() {
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  QA Genie — Pre-Build System Check${NC}"
+echo -e "${CYAN}  QA Genie Studio — Pre-Build System Check${NC}"
 echo -e "${CYAN}  Project: $PROJECT_ROOT${NC}"
 echo -e "${CYAN}  Date:    $(date -u)${NC}"
 echo -e "${CYAN}══════════════════════════════════════════════════════════════${NC}"

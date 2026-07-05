@@ -29,7 +29,7 @@ class FeedbackDialog extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               isGuest
-                  ? 'Sign in with Google to share your feedback.\nYour input helps make QA Genie better.'
+                  ? 'Sign in with Google to share your feedback.\nYour input helps make QA Genie Studio better.'
                   : 'Care to share feedback?\nWould you like to report the issue?',
               style: const TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
