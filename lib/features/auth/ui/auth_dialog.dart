@@ -205,7 +205,64 @@ class _AuthDialogState extends State<AuthDialog> {
 
       // Step 4: Full Google link (pass pre-signed-in account)
       setState(() => _progressMessage = 'Verifying account…');
-      await AuthService.linkWithGoogle(preSignedInAccount: googleAccount);
+      final isReturningGuest = (await SharedPreferences.getInstance()).getBool('is_returning_guest') ?? false;
+      try {
+        await AuthService.linkWithGoogle(
+          preSignedInAccount: googleAccount,
+          isReturningGuest: isReturningGuest,
+        );
+      } on CredentialAlreadyInUseException catch (conflict) {
+        if (!mounted) return;
+        final choice = await showBlurredDialog<String>(
+          context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text(
+              'Google Account Already Linked',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              'This Google account is already linked to another QA Genie account. '
+              'If you proceed, your current guest data will be deleted and you\'ll '
+              'sign into the existing account.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 'cancel'),
+                child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, 'proceed'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Proceed'),
+              ),
+            ],
+          ),
+        );
+
+        if (choice == 'cancel') {
+          await _googleSignIn.signOut();
+          if (mounted) setState(() {
+            _isLoading = false;
+            _progressMessage = null;
+          });
+          return;
+        }
+
+        setState(() => _progressMessage = 'Switching to your account…');
+        await AuthService.forceSignInWithExistingAccount(
+          googleAuth: conflict.googleAuth,
+          googleAccount: conflict.googleAccount,
+          previousGuestUid: conflict.previousGuestUid,
+        );
+      }
 
       // Step 5: Register session
       setState(() => _progressMessage = 'Registering device…');

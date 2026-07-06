@@ -14,6 +14,17 @@ import 'package:qa_genie/firebase/analytics/analytics_service.dart';
 import 'package:qa_genie/features/monetization/logic/usage_manager.dart';
 import 'package:qa_genie/features/auth/services/session_monitor.dart';
 
+class CredentialAlreadyInUseException implements Exception {
+  final GoogleSignInAuthentication googleAuth;
+  final GoogleSignInAccount googleAccount;
+  final String? previousGuestUid;
+  CredentialAlreadyInUseException({
+    required this.googleAuth,
+    required this.googleAccount,
+    this.previousGuestUid,
+  });
+}
+
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -110,7 +121,7 @@ class AuthService {
   // Link existing guest to Google account (upgrade)
   // Accept an optional preSignedInAccount to avoid double Google sign-in
   // when the caller already obtained the account for session checking.
-  static Future<UserCredential> linkWithGoogle({GoogleSignInAccount? preSignedInAccount}) async {
+  static Future<UserCredential> linkWithGoogle({GoogleSignInAccount? preSignedInAccount, bool isReturningGuest = false}) async {
     _googleAuthInProgress = true;
     await AnalyticsService.logDebug(message: 'linkWithGoogle: ENTER');
     await _writeLog('linkWithGoogle CALLED');
@@ -146,8 +157,17 @@ class AuthService {
           await _writeLog('linkWithGoogle | link error: ${e.code}');
           if (e.code == 'credential-already-in-use' ||
               e.code == 'provider-already-linked') {
-            await _writeLog('linkWithGoogle | switching to signInWithCredential');
-            result = await _auth.signInWithCredential(credential);
+            if (isReturningGuest) {
+              await _writeLog('linkWithGoogle | returning guest — silent signInWithCredential');
+              result = await _auth.signInWithCredential(credential);
+            } else {
+              await _writeLog('linkWithGoogle | first-time guest — throwing CredentialAlreadyInUseException');
+              throw CredentialAlreadyInUseException(
+                googleAuth: googleAuth,
+                googleAccount: googleUser,
+                previousGuestUid: previousGuestUid,
+              );
+            }
           } else {
             rethrow;
           }
@@ -188,7 +208,68 @@ class AuthService {
     } catch (e) {
       await _writeLog('linkWithGoogle FAILED: $e');
       _googleAuthInProgress = false;
+      if (e is CredentialAlreadyInUseException) rethrow;
       throw Exception('Authentication failed: $e');
+    } finally {
+      _googleAuthInProgress = false;
+    }
+  }
+
+  /// Force sign-in with an existing Google account (credential-already-in-use).
+  /// Wipes local guest data before switching.
+  static Future<UserCredential> forceSignInWithExistingAccount({
+    required GoogleSignInAuthentication googleAuth,
+    required GoogleSignInAccount googleAccount,
+    String? previousGuestUid,
+  }) async {
+    await _writeLog('forceSignInWithExistingAccount CALLED');
+    _googleAuthInProgress = true;
+    try {
+      await DatabaseService.clearAll();
+      DatabaseService.invalidateSuitesCache();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('guest_display_name');
+      await prefs.remove('is_returning_guest');
+      await prefs.remove('stats_generations');
+      await prefs.remove('stats_exports');
+      await prefs.remove('stats_last_sync');
+      await prefs.remove('is_pro');
+      await prefs.setBool('pending_guest_creation', false);
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      final result = await _auth.signInWithCredential(credential);
+      final member = result.user!;
+      await _writeLog('forceSignInWithExistingAccount | signed in as ${member.uid}');
+
+      final deviceId = await DeviceUtils.getUniqueId();
+      const maxRetries = 3;
+      const retryDelays = [Duration(seconds: 1), Duration(seconds: 2), Duration(seconds: 4)];
+      for (int attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          await FunctionsService.linkGoogleAccount(
+            email: member.email ?? googleAccount.email,
+            displayName: member.displayName ?? googleAccount.displayName ?? '',
+            deviceId: deviceId,
+            previousGuestUid: previousGuestUid,
+          );
+          await _writeLog('forceSignInWithExistingAccount | linkGoogleAccount succeeded');
+          break;
+        } catch (e) {
+          await _writeLog('forceSignInWithExistingAccount | linkGoogleAccount attempt ${attempt + 1} FAILED: $e');
+          if (attempt < maxRetries - 1) {
+            await Future.delayed(retryDelays[attempt]);
+          } else {
+            rethrow;
+          }
+        }
+      }
+      return result;
+    } catch (e) {
+      await _writeLog('forceSignInWithExistingAccount FAILED: $e');
+      rethrow;
     } finally {
       _googleAuthInProgress = false;
     }

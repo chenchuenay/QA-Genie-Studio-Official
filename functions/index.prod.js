@@ -2356,6 +2356,7 @@ QUALITY RULES:
 - Every test case MUST have a non-empty testData field with key input values
 - Each test case must be unique and execution-ready
 - The testCases array must never be empty
+- For BOUNDARY type: testData values must show length as a placeholder suffix (e.g. password_128Chars, user__256Chars\@example.com), not the actual long string nor a prose description
 
 FINAL EXECUTION RULE:
 Return ONLY valid JSON. No explanations. No markdown.`;
@@ -2701,10 +2702,10 @@ exports.getSuiteCases = onCall(async (data, context) => {
   }
   const [date, serial] = parts;
 
+  let effectiveUid = uid;
+  let tier = "core";
   try {
-    let effectiveUid = uid;
-    const initialTier = await _getMemberTier(effectiveUid);
-    let tier = initialTier;
+    tier = await _getMemberTier(effectiveUid);
 
     // Check memberProfiles redirect
     const email = context.auth.token?.email;
@@ -2714,9 +2715,6 @@ exports.getSuiteCases = onCall(async (data, context) => {
         const profileData = profileDoc.data();
         if (profileData.uid && profileData.uid !== uid) {
           effectiveUid = profileData.uid;
-          tier = await _getMemberTier(effectiveUid);
-        } else if (profileData.previousGuestUid && profileData.previousGuestUid !== effectiveUid) {
-          effectiveUid = profileData.previousGuestUid;
           tier = await _getMemberTier(effectiveUid);
         }
       }

@@ -34,7 +34,7 @@ android {
         applicationId = "com.enaykumar.qagenie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 35
+        versionCode = 36
         versionName = flutter.versionName
         multiDexEnabled = true
         manifestPlaceholders["appName"] = "QAG Studio"
